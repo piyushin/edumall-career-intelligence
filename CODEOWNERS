@@ -1,0 +1,11 @@
+# Template pending business and CTO approval.
+# Replace placeholders with GitHub handles before enforcing branch protection.
+
+* @piyushin
+
+/docs/ @piyushin
+/apps/api/ @piyushin
+/apps/web/ @piyushin
+/apps/worker/ @piyushin
+/packages/ @piyushin
+/infrastructure/ @piyushin

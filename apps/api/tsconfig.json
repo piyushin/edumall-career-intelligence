@@ -1,0 +1,13 @@
+{
+  "extends": "../../packages/typescript-config/nest.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "outDir": "dist",
+    "paths": {
+      "@edumall/config": ["packages/config/src/index.ts"],
+      "@edumall/database": ["packages/database/src/index.ts"],
+      "@edumall/shared-types": ["packages/shared-types/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

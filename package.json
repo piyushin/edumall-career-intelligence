@@ -1,0 +1,54 @@
+{
+  "name": "edumall-career-intelligence",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Phase 0 monorepo foundation for The EduMall Career Intelligence Platform.",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "db:migrate:local": "pnpm --filter @edumall/database db:migrate:local",
+    "dev": "turbo run dev --parallel",
+    "dev:api": "pnpm --filter @edumall/api dev",
+    "dev:web": "pnpm --filter @edumall/web dev",
+    "dev:worker": "pnpm --filter @edumall/worker dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "turbo run lint",
+    "lint-staged": "lint-staged",
+    "prepare": "husky",
+    "prisma:generate": "pnpm --filter @edumall/database prisma:generate",
+    "security:audit": "pnpm audit --audit-level moderate",
+    "services:down": "docker compose -f infrastructure/docker/docker-compose.yml down",
+    "services:up": "docker compose -f infrastructure/docker/docker-compose.yml up -d postgres redis",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "test:unit": "turbo run test:unit",
+    "type-check": "turbo run type-check"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,md,css,yml,yaml}": [
+      "prettier --check"
+    ],
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --max-warnings=0"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.33.0",
+    "@types/node": "^24.2.0",
+    "eslint": "^9.33.0",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.5",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.4",
+    "turbo": "^2.5.6",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.39.1",
+    "vitest": "^3.2.4"
+  }
+}

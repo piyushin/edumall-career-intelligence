@@ -1,0 +1,11 @@
+.next
+coverage
+.turbo
+dist
+node_modules
+pnpm-lock.yaml
+packages/database/prisma/generated
+docs/ARCHITECTURE.md
+docs/DECISION_LOG.md
+docs/OPEN_QUESTIONS.md
+docs/SRS.md

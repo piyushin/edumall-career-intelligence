@@ -1,0 +1,12 @@
+{
+  "extends": "./packages/typescript-config/base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@edumall/config": ["packages/config/src/index.ts"],
+      "@edumall/database": ["packages/database/src/index.ts"],
+      "@edumall/shared-types": ["packages/shared-types/src/index.ts"],
+      "@edumall/ui": ["packages/ui/src/index.ts"]
+    }
+  }
+}

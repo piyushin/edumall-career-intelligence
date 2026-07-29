@@ -1,0 +1,27 @@
+{
+  "name": "@edumall/worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BullMQ-ready worker foundation for the EduMall platform.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx watch src/main.ts",
+    "lint": "eslint . --max-warnings=0",
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@edumall/config": "workspace:*",
+    "bullmq": "^5.58.0",
+    "dotenv": "^17.2.1",
+    "ioredis": "^5.7.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

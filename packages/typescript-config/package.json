@@ -1,0 +1,19 @@
+{
+  "name": "@edumall/typescript-config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared TypeScript configuration for the EduMall monorepo.",
+  "files": [
+    "base.json",
+    "nextjs.json",
+    "nest.json",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "node -e \"console.log('typescript-config has no build step')\"",
+    "lint": "node -e \"console.log('typescript-config has no lint step')\"",
+    "test": "node -e \"console.log('typescript-config has no tests')\"",
+    "test:unit": "node -e \"console.log('typescript-config has no unit tests')\"",
+    "type-check": "node -e \"console.log('typescript-config has no type-check step')\""
+  }
+}
