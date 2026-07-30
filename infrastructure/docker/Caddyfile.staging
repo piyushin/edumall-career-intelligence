@@ -1,0 +1,42 @@
+{
+	email {$CADDY_EMAIL}
+	admin off
+}
+
+{$STAGING_DOMAIN} {
+	encode zstd gzip
+
+	request_body {
+		max_size 10MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	handle /.well-known/health {
+		respond "ok" 200
+	}
+
+	handle_path /api/* {
+		request_body {
+			max_size 5MB
+		}
+		reverse_proxy api:3001 {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000 {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+		}
+	}
+}
