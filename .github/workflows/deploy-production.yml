@@ -1,10 +1,10 @@
-name: Deploy Staging
+name: Deploy Production
 
 on:
   workflow_dispatch:
     inputs:
       commit_sha:
-        description: "Approved 40-character commit SHA to deploy to Hostinger staging"
+        description: "Approved 40-character commit SHA to deploy to Hostinger production"
         required: true
         type: string
 
@@ -12,14 +12,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: hostinger-staging-deployment
+  group: hostinger-production-deployment
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy approved commit to Hostinger staging
+    name: Deploy approved commit to Hostinger production
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    environment: production
 
     steps:
       - name: Validate requested commit SHA
@@ -39,8 +40,8 @@ jobs:
           set -Eeuo pipefail
           mkdir -p "${HOME}/.ssh"
           chmod 700 "${HOME}/.ssh"
-          printf '%s\n' "${HOSTINGER_VPS_SSH_KEY}" > "${HOME}/.ssh/hostinger_staging"
-          chmod 600 "${HOME}/.ssh/hostinger_staging"
+          printf '%s\n' "${HOSTINGER_VPS_SSH_KEY}" > "${HOME}/.ssh/hostinger_production"
+          chmod 600 "${HOME}/.ssh/hostinger_production"
 
       - name: Register Hostinger host key
         env:
@@ -50,7 +51,7 @@ jobs:
           set -Eeuo pipefail
           ssh-keyscan -p "${HOSTINGER_VPS_SSH_PORT}" "${HOSTINGER_VPS_HOST}" >> "${HOME}/.ssh/known_hosts"
 
-      - name: Run server-side staging deployment
+      - name: Run server-side production deployment
         env:
           COMMIT_SHA: ${{ inputs.commit_sha }}
           HOSTINGER_VPS_HOST: ${{ secrets.HOSTINGER_VPS_HOST }}
@@ -59,9 +60,9 @@ jobs:
         run: |
           set -Eeuo pipefail
           ssh \
-            -i "${HOME}/.ssh/hostinger_staging" \
+            -i "${HOME}/.ssh/hostinger_production" \
             -p "${HOSTINGER_VPS_SSH_PORT}" \
             -o BatchMode=yes \
             -o IdentitiesOnly=yes \
             "${HOSTINGER_VPS_USER}@${HOSTINGER_VPS_HOST}" \
-            "cd /opt/edumall-career/repo && ./scripts/deploy-staging.sh '${COMMIT_SHA}'"
+            "cd /opt/edumall-career/repo && ./scripts/deploy-production.sh '${COMMIT_SHA}'"

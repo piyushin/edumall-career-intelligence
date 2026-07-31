@@ -1,4 +1,4 @@
-name: edumall-career-staging
+name: edumall-career-production
 
 x-app-env: &app-env
   NODE_ENV: ${NODE_ENV:?NODE_ENV is required}
@@ -9,6 +9,10 @@ x-app-env: &app-env
   DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
   REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
   SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+  PILOT_MODE: ${PILOT_MODE:?PILOT_MODE is required}
+  PUBLIC_REGISTRATION_ENABLED: ${PUBLIC_REGISTRATION_ENABLED:?PUBLIC_REGISTRATION_ENABLED is required}
+  ASSESSMENT_DELIVERY_ENABLED: ${ASSESSMENT_DELIVERY_ENABLED:?ASSESSMENT_DELIVERY_ENABLED is required}
+  REPORT_WORKER_CONCURRENCY: ${REPORT_WORKER_CONCURRENCY:?REPORT_WORKER_CONCURRENCY is required}
 
 x-defaults: &service-defaults
   restart: unless-stopped
@@ -23,43 +27,6 @@ x-defaults: &service-defaults
       max-file: "5"
 
 services:
-  caddy:
-    <<: *service-defaults
-    image: caddy:2.10-alpine
-    depends_on:
-      api:
-        condition: service_healthy
-      web:
-        condition: service_healthy
-    environment:
-      CADDY_EMAIL: ${CADDY_EMAIL:?CADDY_EMAIL is required}
-      STAGING_DOMAIN: ${STAGING_DOMAIN:?STAGING_DOMAIN is required}
-    ports:
-      - "80:80"
-      - "443:443"
-    read_only: true
-    tmpfs:
-      - /tmp:size=64m,mode=1777
-    volumes:
-      - ./Caddyfile.staging:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    networks:
-      - edge
-      - private
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          'wget -qO- --header="Host: $${STAGING_DOMAIN}" http://127.0.0.1/.well-known/health >/dev/null || exit 1',
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    mem_limit: 256m
-    cpus: 0.50
-
   web:
     <<: *service-defaults
     build:
@@ -70,8 +37,11 @@ services:
       NEXT_PUBLIC_APP_ENV: ${APP_ENV:?APP_ENV is required}
       NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
       NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:?PUBLIC_API_URL is required}
-    expose:
-      - "3000"
+      NEXT_PUBLIC_PILOT_MODE: ${PILOT_MODE:?PILOT_MODE is required}
+      NEXT_PUBLIC_REGISTRATION_ENABLED: ${PUBLIC_REGISTRATION_ENABLED:?PUBLIC_REGISTRATION_ENABLED is required}
+      NEXT_PUBLIC_ASSESSMENT_DELIVERY_ENABLED: ${ASSESSMENT_DELIVERY_ENABLED:?ASSESSMENT_DELIVERY_ENABLED is required}
+    ports:
+      - "127.0.0.1:3100:3000"
     read_only: true
     tmpfs:
       - /tmp:size=128m,mode=1777
@@ -106,8 +76,8 @@ services:
       <<: *app-env
       SERVICE_NAME: api
       PORT: 3001
-    expose:
-      - "3001"
+    ports:
+      - "127.0.0.1:3101:3001"
     read_only: true
     tmpfs:
       - /tmp:size=128m,mode=1777
@@ -166,7 +136,7 @@ services:
     expose:
       - "5432"
     volumes:
-      - postgres-staging-data:/var/lib/postgresql/data
+      - postgres-production-data:/var/lib/postgresql/data
     networks:
       - private
     healthcheck:
@@ -185,7 +155,7 @@ services:
     expose:
       - "6379"
     volumes:
-      - redis-staging-data:/data
+      - redis-production-data:/data
     networks:
       - private
     healthcheck:
@@ -198,12 +168,8 @@ services:
     cpus: 0.50
 
 networks:
-  edge:
   private:
-    internal: true
 
 volumes:
-  caddy-config:
-  caddy-data:
-  postgres-staging-data:
-  redis-staging-data:
+  postgres-production-data:
+  redis-production-data:
