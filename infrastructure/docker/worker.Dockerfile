@@ -12,4 +12,4 @@ RUN pnpm --filter @edumall/worker build
 
 USER node
 
-CMD ["pnpm", "--filter", "@edumall/worker", "start"]
+CMD ["./node_modules/.bin/tsx", "--tsconfig", "apps/worker/tsconfig.json", "apps/worker/src/main.ts"]

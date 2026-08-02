@@ -13,4 +13,4 @@ RUN pnpm --filter @edumall/api build
 
 USER node
 
-CMD ["pnpm", "--filter", "@edumall/api", "start"]
+CMD ["./node_modules/.bin/tsx", "--tsconfig", "apps/api/tsconfig.json", "apps/api/src/main.ts"]
