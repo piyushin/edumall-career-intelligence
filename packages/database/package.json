@@ -12,8 +12,8 @@
     "db:migrate:local": "prisma migrate dev --schema prisma/schema.prisma",
     "lint": "eslint . --max-warnings=0",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
-    "test": "vitest run",
-    "test:unit": "vitest run",
+    "test": "pnpm prisma:generate && vitest run",
+    "test:unit": "pnpm prisma:generate && vitest run",
     "type-check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
