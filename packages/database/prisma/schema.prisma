@@ -73,6 +73,18 @@ enum AssessmentItemType {
   TEXT
 }
 
+enum AssessmentAssignmentStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+enum AssessmentAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  ABANDONED
+}
+
 /// Technical metadata only. This is not a business-domain model.
 model SystemMetadata {
   id        String   @id @default(uuid()) @db.Uuid
@@ -97,6 +109,7 @@ model Organization {
   sessions    Session[]
   auditLogs   AuditLog[]               @relation("OrganizationAuditLogs")
   assessmentDefinitions AssessmentDefinition[]
+  assessmentAssignments AssessmentAssignment[]
 
   @@index([status])
   @@index([type, status])
@@ -126,6 +139,8 @@ model User {
   createdAssessmentDefinitions AssessmentDefinition[] @relation("AssessmentDefinitionCreatedBy")
   createdAssessmentVersions AssessmentVersion[] @relation("AssessmentVersionCreatedBy")
   publishedAssessmentVersions AssessmentVersion[] @relation("AssessmentVersionPublishedBy")
+  assignedAssessments AssessmentAssignment[] @relation("AssessmentAssignmentCandidate")
+  createdAssessmentAssignments AssessmentAssignment[] @relation("AssessmentAssignmentAssignedBy")
 
   @@index([status])
   @@index([status, lockedUntil])
@@ -251,6 +266,7 @@ model AssessmentVersion {
   publishedByUser        User?                   @relation("AssessmentVersionPublishedBy", fields: [publishedByUserId], references: [id], onDelete: Restrict)
   constructs             AssessmentConstruct[]
   items                  AssessmentItem[]
+  assignments            AssessmentAssignment[]
 
   @@unique([assessmentDefinitionId, versionNumber])
   @@index([assessmentDefinitionId, status])
@@ -296,6 +312,7 @@ model AssessmentItem {
   assessmentVersion     AssessmentVersion         @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
   options               AssessmentItemOption[]
   constructLinks        AssessmentItemConstruct[]
+  responses             AssessmentResponse[]
 
   @@unique([assessmentVersionId, code])
   @@unique([assessmentVersionId, orderIndex])
@@ -315,6 +332,7 @@ model AssessmentItemOption {
   updatedAt             DateTime                @updatedAt @map("updated_at")
   assessmentItem        AssessmentItem          @relation(fields: [assessmentItemId], references: [id], onDelete: Restrict)
   scores                AssessmentOptionScore[]
+  responseSelections    AssessmentResponseOption[]
 
   @@unique([assessmentItemId, code])
   @@unique([assessmentItemId, orderIndex])
@@ -349,6 +367,87 @@ model AssessmentOptionScore {
   @@id([assessmentItemOptionId, assessmentConstructId])
   @@index([assessmentConstructId])
   @@map("assessment_option_scores")
+}
+
+
+/// Assignment of one immutable assessment version to one candidate/user.
+model AssessmentAssignment {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  organizationId      String                     @map("organization_id") @db.Uuid
+  assessmentVersionId String                     @map("assessment_version_id") @db.Uuid
+  userId              String                     @map("user_id") @db.Uuid
+  assignedByUserId    String?                    @map("assigned_by_user_id") @db.Uuid
+  status              AssessmentAssignmentStatus @default(ACTIVE)
+  maxAttempts         Int                        @default(1) @map("max_attempts")
+  availableFrom       DateTime?                  @map("available_from")
+  expiresAt           DateTime?                  @map("expires_at")
+  assignedAt          DateTime                   @default(now()) @map("assigned_at")
+  cancelledAt         DateTime?                  @map("cancelled_at")
+  metadata            Json?                      @db.JsonB
+  organization        Organization               @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  assessmentVersion   AssessmentVersion          @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  user                User                       @relation("AssessmentAssignmentCandidate", fields: [userId], references: [id], onDelete: Restrict)
+  assignedByUser      User?                      @relation("AssessmentAssignmentAssignedBy", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+  attempts            AssessmentAttempt[]
+
+  @@index([organizationId, status])
+  @@index([userId, status])
+  @@index([assessmentVersionId, status])
+  @@index([expiresAt])
+  @@map("assessment_assignments")
+}
+
+/// One actual sitting/attempt under an assignment.
+model AssessmentAttempt {
+  id             String                  @id @default(uuid()) @db.Uuid
+  assignmentId   String                  @map("assignment_id") @db.Uuid
+  attemptNumber  Int                     @map("attempt_number")
+  status         AssessmentAttemptStatus @default(IN_PROGRESS)
+  startedAt      DateTime                @default(now()) @map("started_at")
+  lastActivityAt DateTime                @default(now()) @map("last_activity_at")
+  submittedAt    DateTime?               @map("submitted_at")
+  abandonedAt    DateTime?               @map("abandoned_at")
+  metadata       Json?                   @db.JsonB
+  assignment     AssessmentAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  responses      AssessmentResponse[]
+
+  @@unique([assignmentId, attemptNumber])
+  @@index([assignmentId, status])
+  @@index([status, startedAt])
+  @@map("assessment_attempts")
+}
+
+/// Candidate response to one item during one attempt.
+model AssessmentResponse {
+  id            String                     @id @default(uuid()) @db.Uuid
+  attemptId     String                     @map("attempt_id") @db.Uuid
+  itemId        String                     @map("item_id") @db.Uuid
+  textValue     String?                    @map("text_value") @db.Text
+  numericValue  Decimal?                   @map("numeric_value") @db.Decimal(18, 6)
+  booleanValue  Boolean?                   @map("boolean_value")
+  answeredAt    DateTime                   @default(now()) @map("answered_at")
+  updatedAt     DateTime                   @updatedAt @map("updated_at")
+  attempt       AssessmentAttempt          @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  item          AssessmentItem             @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  selections    AssessmentResponseOption[]
+
+  @@unique([attemptId, itemId])
+  @@index([attemptId])
+  @@index([itemId])
+  @@map("assessment_responses")
+}
+
+/// Selected response option(s), supporting both single and multiple choice.
+model AssessmentResponseOption {
+  responseId String               @map("response_id") @db.Uuid
+  optionId   String               @map("option_id") @db.Uuid
+  selectedAt DateTime             @default(now()) @map("selected_at")
+  response   AssessmentResponse   @relation(fields: [responseId], references: [id], onDelete: Restrict)
+  option     AssessmentItemOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  @@id([responseId, optionId])
+  @@index([optionId])
+  @@map("assessment_response_options")
 }
 
 model AuditLog {
