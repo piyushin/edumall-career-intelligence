@@ -1,5 +1,11 @@
 import { readFileSync } from "node:fs";
-import { MembershipRole, MembershipStatus, type PrismaClient, type Session } from "@prisma/client";
+import {
+  MembershipRole,
+  MembershipStatus,
+  SessionScope,
+  type PrismaClient,
+  type Session,
+} from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import {
   createAuditLog,
@@ -19,6 +25,7 @@ function session(overrides: Partial<Session> = {}): Session {
     id: "11111111-1111-4111-8111-111111111111",
     userId: "22222222-2222-4222-8222-222222222222",
     organizationId: "33333333-3333-4333-8333-333333333333",
+    scope: SessionScope.ORGANIZATION,
     tokenHash: hashOpaqueToken(rawSessionToken),
     expiresAt: new Date(now.getTime() + 60_000),
     revokedAt: null,
