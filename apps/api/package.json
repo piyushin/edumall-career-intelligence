@@ -1,0 +1,42 @@
+{
+  "name": "@edumall/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NestJS API foundation for the EduMall platform.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx watch src/main.ts",
+    "lint": "eslint . --max-warnings=0",
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "test:integration": "vitest run src/readiness.integration.spec.ts --passWithNoTests",
+    "test:unit": "vitest run",
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@edumall/config": "workspace:*",
+    "@edumall/database": "workspace:*",
+    "@edumall/shared-types": "workspace:*",
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.6",
+    "@opentelemetry/api": "^1.9.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "dotenv": "^17.2.1",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.7.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.1.6",
+    "@types/express": "^5.0.3",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

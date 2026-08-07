@@ -1,0 +1,175 @@
+name: edumall-career-production
+
+x-app-env: &app-env
+  NODE_ENV: ${NODE_ENV:?NODE_ENV is required}
+  APP_ENV: ${APP_ENV:?APP_ENV is required}
+  APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
+  LOG_LEVEL: ${LOG_LEVEL:?LOG_LEVEL is required}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required}
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+  REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+  PILOT_MODE: ${PILOT_MODE:?PILOT_MODE is required}
+  PUBLIC_REGISTRATION_ENABLED: ${PUBLIC_REGISTRATION_ENABLED:?PUBLIC_REGISTRATION_ENABLED is required}
+  ASSESSMENT_DELIVERY_ENABLED: ${ASSESSMENT_DELIVERY_ENABLED:?ASSESSMENT_DELIVERY_ENABLED is required}
+  REPORT_WORKER_CONCURRENCY: ${REPORT_WORKER_CONCURRENCY:?REPORT_WORKER_CONCURRENCY is required}
+
+x-defaults: &service-defaults
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 30s
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  web:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/web.Dockerfile
+    environment:
+      NODE_ENV: ${NODE_ENV:?NODE_ENV is required}
+      NEXT_PUBLIC_APP_ENV: ${APP_ENV:?APP_ENV is required}
+      NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
+      NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:?PUBLIC_API_URL is required}
+      NEXT_PUBLIC_PILOT_MODE: ${PILOT_MODE:?PILOT_MODE is required}
+      NEXT_PUBLIC_REGISTRATION_ENABLED: ${PUBLIC_REGISTRATION_ENABLED:?PUBLIC_REGISTRATION_ENABLED is required}
+      NEXT_PUBLIC_ASSESSMENT_DELIVERY_ENABLED: ${ASSESSMENT_DELIVERY_ENABLED:?ASSESSMENT_DELIVERY_ENABLED is required}
+    ports:
+      - "127.0.0.1:3100:3000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    networks:
+      - private
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/status').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    mem_limit: 512m
+    cpus: 1.00
+
+  api:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/api.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+      SERVICE_NAME: api
+      PORT: 3001
+    ports:
+      - "127.0.0.1:3101:3001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    networks:
+      - private
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 60s
+    mem_limit: 768m
+    cpus: 1.00
+
+  worker:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker
+      PORT: 3002
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD-SHELL", "test -r /proc/1/comm && grep -q node /proc/1/comm"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    mem_limit: 512m
+    cpus: 0.75
+
+  postgres:
+    <<: *service-defaults
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+    expose:
+      - "5432"
+    volumes:
+      - postgres-production-data:/var/lib/postgresql/data
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    mem_limit: 1g
+    cpus: 1.00
+
+  redis:
+    <<: *service-defaults
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    expose:
+      - "6379"
+    volumes:
+      - redis-production-data:/data
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 256m
+    cpus: 0.50
+
+networks:
+  private:
+
+volumes:
+  postgres-production-data:
+  redis-production-data:

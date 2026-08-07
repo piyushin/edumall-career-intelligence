@@ -1,0 +1,27 @@
+{
+  "name": "@edumall/database",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prisma database foundation for the EduMall platform.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "db:migrate:local": "prisma migrate dev --schema prisma/schema.prisma",
+    "lint": "eslint . --max-warnings=0",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.14.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.14.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
