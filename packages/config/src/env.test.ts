@@ -34,11 +34,40 @@ describe("loadConfig", () => {
         {
           ...validEnv,
           APP_ENV: "production",
+          AUTH_CSRF_SECRET: "production-csrf-secret-with-at-least-32-characters",
           CORS_ALLOWED_ORIGINS: "*",
           NODE_ENV: "production",
         },
         { serviceName: "api" },
       ),
     ).toThrow(/wildcard/);
+  });
+
+  it("rejects the development CSRF secret when either environment is production", () => {
+    expect(() =>
+      loadConfig(
+        {
+          ...validEnv,
+          APP_ENV: "production",
+          NODE_ENV: "production",
+        },
+        { serviceName: "api" },
+      ),
+    ).toThrow(/AUTH_CSRF_SECRET/);
+  });
+
+  it("requires secure authentication cookies in production", () => {
+    expect(() =>
+      loadConfig(
+        {
+          ...validEnv,
+          APP_ENV: "production",
+          AUTH_COOKIE_SECURE: "false",
+          AUTH_CSRF_SECRET: "production-csrf-secret-with-at-least-32-characters",
+          NODE_ENV: "production",
+        },
+        { serviceName: "api" },
+      ),
+    ).toThrow(/AUTH_COOKIE_SECURE/);
   });
 });

@@ -1,6 +1,8 @@
 import type { INestApplication } from "@nestjs/common";
 import { ValidationPipe } from "@nestjs/common";
 import type { AppConfig, StructuredLogger } from "@edumall/config";
+import cookieParser from "cookie-parser";
+import type { Express } from "express";
 import helmet from "helmet";
 import { StandardExceptionFilter } from "./common/filters/standard-exception.filter";
 import { requestContextMiddleware } from "./common/middleware/request-context.middleware";
@@ -10,6 +12,10 @@ export function configureApi(
   config: AppConfig,
   logger: StructuredLogger,
 ): void {
+  const express = app.getHttpAdapter().getInstance() as Express;
+  express.set("trust proxy", "loopback");
+
+  app.use(cookieParser());
   app.use(helmet());
   app.use(requestContextMiddleware);
 

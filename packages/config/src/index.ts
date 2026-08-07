@@ -1,5 +1,6 @@
 export {
   ConfigValidationError,
+  DEVELOPMENT_CSRF_SECRET,
   loadConfig,
   type AppConfig,
   type AppEnvironment,
