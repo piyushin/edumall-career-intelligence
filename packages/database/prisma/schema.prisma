@@ -489,6 +489,7 @@ model AssessmentConstructScore {
   contributionCount      Int                     @map("contribution_count")
   scoringRun             AssessmentScoringRun    @relation(fields: [scoringRunId], references: [id], onDelete: Restrict)
   assessmentConstruct    AssessmentConstruct     @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+  normApplications       AssessmentNormApplication[]
 
   @@id([scoringRunId, assessmentConstructId])
   @@index([assessmentConstructId])
@@ -513,6 +514,7 @@ model AssessmentNormSet {
   updatedAt           DateTime                @updatedAt @map("updated_at")
   assessmentVersion   AssessmentVersion       @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
   groups              AssessmentNormGroup[]
+  applications        AssessmentNormApplication[]
 
   @@unique([assessmentVersionId, normVersion])
   @@index([assessmentVersionId, status])
@@ -535,6 +537,7 @@ model AssessmentNormGroup {
   updatedAt        DateTime                       @updatedAt @map("updated_at")
   normSet          AssessmentNormSet              @relation(fields: [normSetId], references: [id], onDelete: Restrict)
   constructTables  AssessmentConstructNormTable[]
+  applications     AssessmentNormApplication[]
 
   @@unique([normSetId, code])
   @@index([normSetId])
@@ -552,6 +555,7 @@ model AssessmentConstructNormTable {
   normGroup             AssessmentNormGroup       @relation(fields: [normGroupId], references: [id], onDelete: Restrict)
   assessmentConstruct   AssessmentConstruct       @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
   rows                  AssessmentNormLookupRow[]
+  applications          AssessmentNormApplication[]
 
   @@unique([normGroupId, assessmentConstructId])
   @@index([assessmentConstructId])
@@ -570,10 +574,43 @@ model AssessmentNormLookupRow {
   metadata              Json?                        @db.JsonB
   createdAt             DateTime                     @default(now()) @map("created_at")
   constructNormTable    AssessmentConstructNormTable @relation(fields: [constructNormTableId], references: [id], onDelete: Restrict)
+  applications          AssessmentNormApplication[]
 
   @@unique([constructNormTableId, rawScoreMin, rawScoreMax])
   @@index([constructNormTableId, rawScoreMin, rawScoreMax])
   @@map("assessment_norm_lookup_rows")
+}
+
+
+/// Immutable record of applying one published norm group/table to one raw construct score.
+/// No interpretation or recommendation is stored here.
+model AssessmentNormApplication {
+  id                    String                       @id @default(uuid()) @db.Uuid
+  scoringRunId          String                       @map("scoring_run_id") @db.Uuid
+  assessmentConstructId String                       @map("assessment_construct_id") @db.Uuid
+  normSetId             String                       @map("norm_set_id") @db.Uuid
+  normGroupId           String                       @map("norm_group_id") @db.Uuid
+  constructNormTableId  String                       @map("construct_norm_table_id") @db.Uuid
+  normLookupRowId       String                       @map("norm_lookup_row_id") @db.Uuid
+  rawScore              Decimal                      @map("raw_score") @db.Decimal(20, 8)
+  standardizedScore     Decimal?                     @map("standardized_score") @db.Decimal(20, 8)
+  percentile            Decimal?                     @db.Decimal(8, 4)
+  appliedAt             DateTime                     @default(now()) @map("applied_at")
+  metadata              Json?                        @db.JsonB
+
+  constructScore        AssessmentConstructScore     @relation(fields: [scoringRunId, assessmentConstructId], references: [scoringRunId, assessmentConstructId], onDelete: Restrict)
+  normSet               AssessmentNormSet            @relation(fields: [normSetId], references: [id], onDelete: Restrict)
+  normGroup             AssessmentNormGroup          @relation(fields: [normGroupId], references: [id], onDelete: Restrict)
+  constructNormTable    AssessmentConstructNormTable @relation(fields: [constructNormTableId], references: [id], onDelete: Restrict)
+  normLookupRow         AssessmentNormLookupRow      @relation(fields: [normLookupRowId], references: [id], onDelete: Restrict)
+
+  @@unique([scoringRunId, assessmentConstructId, normGroupId])
+  @@index([normSetId])
+  @@index([normGroupId])
+  @@index([constructNormTableId])
+  @@index([normLookupRowId])
+  @@index([appliedAt])
+  @@map("assessment_norm_applications")
 }
 
 model AuditLog {
