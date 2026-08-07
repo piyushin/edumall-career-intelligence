@@ -221,6 +221,12 @@ model AssessmentVersion {
   versionNumber          Int                     @map("version_number")
   status                 AssessmentVersionStatus @default(DRAFT)
   title                  String                  @db.VarChar(200)
+  edition                String                  @db.VarChar(60)
+  form                   String                  @db.VarChar(60)
+  language               String                  @db.VarChar(20)
+  scoringVersion         String                  @map("scoring_version") @db.VarChar(60)
+  normVersion            String                  @map("norm_version") @db.VarChar(60)
+  reportVersion          String                  @map("report_version") @db.VarChar(60)
   description            String?                 @db.Text
   instructions           String?                 @db.Text
   deliveryConfig         Json?                   @map("delivery_config") @db.JsonB
