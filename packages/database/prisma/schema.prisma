@@ -64,6 +64,15 @@ enum AssessmentVersionStatus {
   RETIRED
 }
 
+enum AssessmentItemType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  LIKERT
+  BOOLEAN
+  NUMERIC
+  TEXT
+}
+
 /// Technical metadata only. This is not a business-domain model.
 model SystemMetadata {
   id        String   @id @default(uuid()) @db.Uuid
@@ -240,11 +249,106 @@ model AssessmentVersion {
   assessmentDefinition   AssessmentDefinition    @relation(fields: [assessmentDefinitionId], references: [id], onDelete: Restrict)
   createdByUser          User?                   @relation("AssessmentVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   publishedByUser        User?                   @relation("AssessmentVersionPublishedBy", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  constructs             AssessmentConstruct[]
+  items                  AssessmentItem[]
 
   @@unique([assessmentDefinitionId, versionNumber])
   @@index([assessmentDefinitionId, status])
   @@index([status, publishedAt])
   @@map("assessment_versions")
+}
+
+
+/// A scored or interpreted dimension inside one immutable assessment version.
+model AssessmentConstruct {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  assessmentVersionId   String                    @map("assessment_version_id") @db.Uuid
+  code                  String                    @db.VarChar(120)
+  name                  String                    @db.VarChar(200)
+  description           String?                   @db.Text
+  orderIndex            Int                       @map("order_index")
+  metadata              Json?                     @db.JsonB
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  assessmentVersion     AssessmentVersion         @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  itemLinks             AssessmentItemConstruct[]
+  optionScores          AssessmentOptionScore[]
+
+  @@unique([assessmentVersionId, code])
+  @@unique([assessmentVersionId, orderIndex])
+  @@index([assessmentVersionId])
+  @@map("assessment_constructs")
+}
+
+/// One administered item/question belonging to exactly one assessment version.
+model AssessmentItem {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  assessmentVersionId   String                    @map("assessment_version_id") @db.Uuid
+  code                  String                    @db.VarChar(120)
+  type                  AssessmentItemType
+  prompt                String                    @db.Text
+  helpText              String?                   @map("help_text") @db.Text
+  orderIndex            Int                       @map("order_index")
+  required              Boolean                   @default(true)
+  metadata              Json?                     @db.JsonB
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  assessmentVersion     AssessmentVersion         @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  options               AssessmentItemOption[]
+  constructLinks        AssessmentItemConstruct[]
+
+  @@unique([assessmentVersionId, code])
+  @@unique([assessmentVersionId, orderIndex])
+  @@index([assessmentVersionId, type])
+  @@map("assessment_items")
+}
+
+/// Ordered response choice for an item.
+model AssessmentItemOption {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  assessmentItemId      String                  @map("assessment_item_id") @db.Uuid
+  code                  String                  @db.VarChar(120)
+  label                 String                  @db.Text
+  orderIndex            Int                     @map("order_index")
+  metadata              Json?                   @db.JsonB
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+  assessmentItem        AssessmentItem          @relation(fields: [assessmentItemId], references: [id], onDelete: Restrict)
+  scores                AssessmentOptionScore[]
+
+  @@unique([assessmentItemId, code])
+  @@unique([assessmentItemId, orderIndex])
+  @@index([assessmentItemId])
+  @@map("assessment_item_options")
+}
+
+/// Declares which construct(s) an item contributes to.
+/// Weight supports differential contribution; reverseScored supports keyed direction.
+model AssessmentItemConstruct {
+  assessmentItemId      String               @map("assessment_item_id") @db.Uuid
+  assessmentConstructId String               @map("assessment_construct_id") @db.Uuid
+  weight                Decimal              @default(1) @db.Decimal(10, 4)
+  reverseScored         Boolean              @default(false) @map("reverse_scored")
+  assessmentItem        AssessmentItem       @relation(fields: [assessmentItemId], references: [id], onDelete: Restrict)
+  assessmentConstruct   AssessmentConstruct  @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+
+  @@id([assessmentItemId, assessmentConstructId])
+  @@index([assessmentConstructId])
+  @@map("assessment_item_constructs")
+}
+
+/// Explicit scoring key for a response option against a construct.
+/// This supports aptitude keys, Likert scoring, multidimensional items, and weighted responses.
+model AssessmentOptionScore {
+  assessmentItemOptionId String                  @map("assessment_item_option_id") @db.Uuid
+  assessmentConstructId  String                  @map("assessment_construct_id") @db.Uuid
+  score                  Decimal                 @db.Decimal(12, 4)
+  assessmentItemOption   AssessmentItemOption    @relation(fields: [assessmentItemOptionId], references: [id], onDelete: Restrict)
+  assessmentConstruct    AssessmentConstruct     @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+
+  @@id([assessmentItemOptionId, assessmentConstructId])
+  @@index([assessmentConstructId])
+  @@map("assessment_option_scores")
 }
 
 model AuditLog {
