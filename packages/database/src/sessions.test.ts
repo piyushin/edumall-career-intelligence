@@ -235,8 +235,8 @@ describe("session validation", () => {
     vi.mocked(prisma.session.findUnique).mockRejectedValue(new Error("database details"));
 
     await expect(validateSessionToken(prisma, rawToken, { now })).rejects.toMatchObject({
-      code: AuthenticationErrorCode.INVALID_SESSION,
-      message: "Invalid session.",
+      code: AuthenticationErrorCode.AUTHENTICATION_SERVICE_ERROR,
+      message: "Authentication is temporarily unavailable.",
     });
   });
 });

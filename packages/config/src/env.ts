@@ -4,6 +4,8 @@ export type AppEnvironment = "local" | "test" | "staging" | "production";
 export type NodeEnvironment = "development" | "test" | "production";
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
+export const DEVELOPMENT_CSRF_SECRET = "local-development-csrf-secret-change-me";
+
 export interface AppConfig {
   appEnv: AppEnvironment;
   corsAllowedOrigins: string[];
@@ -15,6 +17,13 @@ export interface AppConfig {
   redisUrl: string;
   serviceName: string;
   version: string;
+  authCookieName: string;
+  authSessionTtlSeconds: number;
+  authCookieSecure: boolean;
+  authLoginRateLimit: number;
+  authLoginRateWindowSeconds: number;
+  authCsrfSecret: string;
+  authCsrfCookieName: string;
 }
 
 export interface LoadConfigOptions {
@@ -43,6 +52,19 @@ const rawEnvSchema = z
     PORT: z.coerce.number().int().positive().optional(),
     REDIS_URL: z.string().url(),
     SERVICE_NAME: z.string().min(1).optional(),
+    AUTH_COOKIE_NAME: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]+$/, "must contain only cookie-safe characters")
+      .default("edumall_session"),
+    AUTH_SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(28800),
+    AUTH_COOKIE_SECURE: z.enum(["true", "false"]).optional(),
+    AUTH_LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(5),
+    AUTH_LOGIN_RATE_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+    AUTH_CSRF_SECRET: z.string().min(32).default(DEVELOPMENT_CSRF_SECRET),
+    AUTH_CSRF_COOKIE_NAME: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]+$/, "must contain only cookie-safe characters")
+      .default("edumall_csrf"),
   })
   .superRefine((value, context) => {
     const origins = parseCorsOrigins(value.CORS_ALLOWED_ORIGINS);
@@ -52,6 +74,24 @@ const rawEnvSchema = z
         code: z.ZodIssueCode.custom,
         message: "CORS_ALLOWED_ORIGINS must not include wildcard origins in production",
         path: ["CORS_ALLOWED_ORIGINS"],
+      });
+    }
+
+    const isProduction = value.APP_ENV === "production" || value.NODE_ENV === "production";
+
+    if (isProduction && value.AUTH_CSRF_SECRET === DEVELOPMENT_CSRF_SECRET) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "AUTH_CSRF_SECRET must be explicitly configured with a secure production value",
+        path: ["AUTH_CSRF_SECRET"],
+      });
+    }
+
+    if (isProduction && value.AUTH_COOKIE_SECURE === "false") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "AUTH_COOKIE_SECURE must not be disabled in production",
+        path: ["AUTH_COOKIE_SECURE"],
       });
     }
   });
@@ -85,6 +125,16 @@ export function loadConfig(source: NodeJS.ProcessEnv, options: LoadConfigOptions
     redisUrl: value.REDIS_URL,
     serviceName: value.SERVICE_NAME ?? options.serviceName,
     version: value.APP_VERSION,
+    authCookieName: value.AUTH_COOKIE_NAME,
+    authSessionTtlSeconds: value.AUTH_SESSION_TTL_SECONDS,
+    authCookieSecure:
+      value.AUTH_COOKIE_SECURE === undefined
+        ? value.APP_ENV === "production" || value.NODE_ENV === "production"
+        : value.AUTH_COOKIE_SECURE === "true",
+    authLoginRateLimit: value.AUTH_LOGIN_RATE_LIMIT,
+    authLoginRateWindowSeconds: value.AUTH_LOGIN_RATE_WINDOW_SECONDS,
+    authCsrfSecret: value.AUTH_CSRF_SECRET,
+    authCsrfCookieName: value.AUTH_CSRF_COOKIE_NAME,
   };
 }
 

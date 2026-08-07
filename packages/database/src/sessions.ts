@@ -68,7 +68,7 @@ export async function validateSessionToken(
       sessionId: session.id,
     };
   } catch (error) {
-    throw asAuthenticationError(error, AuthenticationErrorCode.INVALID_SESSION);
+    throw asAuthenticationError(error);
   }
 }
 

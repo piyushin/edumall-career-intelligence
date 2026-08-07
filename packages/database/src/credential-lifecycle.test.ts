@@ -71,6 +71,7 @@ function resetToken(
 
 function transactionalPrisma(transaction: object): PrismaClient {
   return {
+    auditLog: { create: vi.fn().mockResolvedValue({}) },
     $transaction: vi.fn(async (callback: (value: object) => Promise<unknown>) =>
       callback(transaction),
     ),
@@ -99,7 +100,7 @@ describe("invitation acceptance", () => {
     };
   }
 
-  it("atomically consumes the hashed token, sets a password, activates the user, and audits", async () => {
+  it("atomically consumes the hashed token and activates the user before auditing", async () => {
     const tx = transaction();
     const prisma = transactionalPrisma(tx);
 
@@ -124,7 +125,7 @@ describe("invitation acceptance", () => {
         lockedUntil: null,
       },
     });
-    expect(tx.auditLog.create).toHaveBeenCalledWith({
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
       data: {
         actorUserId: userId,
         action: "invitation.accepted",
@@ -135,6 +136,17 @@ describe("invitation acceptance", () => {
     });
     expect(JSON.stringify(tx)).not.toContain(rawToken);
     expect(hashPassword).toHaveBeenCalledWith(password);
+  });
+
+  it("does not roll back acceptance when the audit write fails", async () => {
+    const tx = transaction();
+    const prisma = transactionalPrisma(tx);
+    vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(new Error("audit unavailable"));
+
+    await expect(acceptInvitation(prisma, rawToken, password, { now })).resolves.toEqual({
+      userId,
+    });
+    expect(tx.user.update).toHaveBeenCalled();
   });
 
   it("rejects an expired invitation token", async () => {
@@ -192,12 +204,13 @@ describe("password reset consumption", () => {
     };
   }
 
-  it("atomically consumes the token, updates credentials, revokes sessions, and audits", async () => {
+  it("atomically updates credentials and revokes sessions before auditing", async () => {
     const tx = transaction();
+    const prisma = transactionalPrisma(tx);
 
-    await expect(
-      consumePasswordResetToken(transactionalPrisma(tx), rawToken, password, { now }),
-    ).resolves.toEqual({ userId });
+    await expect(consumePasswordResetToken(prisma, rawToken, password, { now })).resolves.toEqual({
+      userId,
+    });
 
     expect(tx.passwordResetToken.updateMany).toHaveBeenCalledWith({
       where: { id: tokenId, usedAt: null, expiresAt: { gt: now } },
@@ -207,7 +220,7 @@ describe("password reset consumption", () => {
       where: { userId, revokedAt: null },
       data: { revokedAt: now },
     });
-    expect(tx.auditLog.create).toHaveBeenCalledWith({
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
       data: {
         actorUserId: userId,
         action: "password_reset.consumed",
@@ -216,6 +229,17 @@ describe("password reset consumption", () => {
         ipAddress: null,
       },
     });
+  });
+
+  it("does not roll back a password reset when the audit write fails", async () => {
+    const tx = transaction();
+    const prisma = transactionalPrisma(tx);
+    vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(new Error("audit unavailable"));
+
+    await expect(consumePasswordResetToken(prisma, rawToken, password, { now })).resolves.toEqual({
+      userId,
+    });
+    expect(tx.session.updateMany).toHaveBeenCalled();
   });
 
   it("rejects an expired reset token", async () => {

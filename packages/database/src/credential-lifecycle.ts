@@ -95,7 +95,7 @@ export async function acceptInvitation(
     const passwordHash = await hashPassword(password);
     const tokenHash = hashOpaqueToken(rawToken);
 
-    return await prisma.$transaction(async (transaction) => {
+    const result = await prisma.$transaction(async (transaction) => {
       const token = assertInvitationTokenUsable(
         await transaction.invitationToken.findUnique({ where: { tokenHash } }),
         now,
@@ -119,20 +119,26 @@ export async function acceptInvitation(
         },
       });
 
-      await transaction.auditLog.create({
+      return { userId: user.id };
+    });
+
+    try {
+      await prisma.auditLog.create({
         data: {
-          actorUserId: user.id,
+          actorUserId: result.userId,
           action: "invitation.accepted",
           entityType: "User",
-          entityId: user.id,
+          entityId: result.userId,
           ipAddress: options.ipAddress ?? null,
         },
       });
+    } catch {
+      // Credential lifecycle success must not depend on audit storage availability.
+    }
 
-      return { userId: user.id };
-    });
+    return result;
   } catch (error) {
-    throw asAuthenticationError(error, AuthenticationErrorCode.INVALID_INVITATION);
+    throw asAuthenticationError(error);
   }
 }
 
@@ -147,7 +153,7 @@ export async function consumePasswordResetToken(
     const passwordHash = await hashPassword(newPassword);
     const tokenHash = hashOpaqueToken(rawToken);
 
-    return await prisma.$transaction(async (transaction) => {
+    const result = await prisma.$transaction(async (transaction) => {
       const token = assertResetTokenUsable(
         await transaction.passwordResetToken.findUnique({ where: { tokenHash } }),
         now,
@@ -172,19 +178,25 @@ export async function consumePasswordResetToken(
         where: { userId: user.id, revokedAt: null },
         data: { revokedAt: now },
       });
-      await transaction.auditLog.create({
+      return { userId: user.id };
+    });
+
+    try {
+      await prisma.auditLog.create({
         data: {
-          actorUserId: user.id,
+          actorUserId: result.userId,
           action: "password_reset.consumed",
           entityType: "User",
-          entityId: user.id,
+          entityId: result.userId,
           ipAddress: options.ipAddress ?? null,
         },
       });
+    } catch {
+      // Credential lifecycle success must not depend on audit storage availability.
+    }
 
-      return { userId: user.id };
-    });
+    return result;
   } catch (error) {
-    throw asAuthenticationError(error, AuthenticationErrorCode.INVALID_RESET_TOKEN);
+    throw asAuthenticationError(error);
   }
 }
