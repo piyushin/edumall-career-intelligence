@@ -289,6 +289,7 @@ model AssessmentConstruct {
   assessmentVersion     AssessmentVersion         @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
   itemLinks             AssessmentItemConstruct[]
   optionScores          AssessmentOptionScore[]
+  rawScores             AssessmentConstructScore[]
 
   @@unique([assessmentVersionId, code])
   @@unique([assessmentVersionId, orderIndex])
@@ -410,6 +411,7 @@ model AssessmentAttempt {
   metadata       Json?                   @db.JsonB
   assignment     AssessmentAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   responses      AssessmentResponse[]
+  scoringRuns    AssessmentScoringRun[]
 
   @@unique([assignmentId, attemptNumber])
   @@index([assignmentId, status])
@@ -448,6 +450,41 @@ model AssessmentResponseOption {
   @@id([responseId, optionId])
   @@index([optionId])
   @@map("assessment_response_options")
+}
+
+
+/// Immutable record of one deterministic scoring execution.
+/// This stores raw-score provenance only; norms and interpretation are separate layers.
+model AssessmentScoringRun {
+  id                     String                     @id @default(uuid()) @db.Uuid
+  attemptId              String                     @map("attempt_id") @db.Uuid
+  scoringVersion         String                     @map("scoring_version") @db.VarChar(60)
+  algorithmVersion       String                     @map("algorithm_version") @db.VarChar(60)
+  inputHash              String                     @map("input_hash") @db.Char(64)
+  calculatedAt           DateTime                   @default(now()) @map("calculated_at")
+  metadata               Json?                      @db.JsonB
+  attempt                AssessmentAttempt          @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  constructScores        AssessmentConstructScore[]
+
+  @@unique([attemptId, scoringVersion, algorithmVersion, inputHash])
+  @@index([attemptId, calculatedAt])
+  @@index([scoringVersion, algorithmVersion])
+  @@map("assessment_scoring_runs")
+}
+
+/// Raw score for one construct produced by one immutable scoring run.
+model AssessmentConstructScore {
+  scoringRunId           String                  @map("scoring_run_id") @db.Uuid
+  assessmentConstructId  String                  @map("assessment_construct_id") @db.Uuid
+  rawScore               Decimal                 @map("raw_score") @db.Decimal(20, 8)
+  answeredItemCount      Int                     @map("answered_item_count")
+  contributionCount      Int                     @map("contribution_count")
+  scoringRun             AssessmentScoringRun    @relation(fields: [scoringRunId], references: [id], onDelete: Restrict)
+  assessmentConstruct    AssessmentConstruct     @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+
+  @@id([scoringRunId, assessmentConstructId])
+  @@index([assessmentConstructId])
+  @@map("assessment_construct_scores")
 }
 
 model AuditLog {
