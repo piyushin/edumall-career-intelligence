@@ -53,6 +53,17 @@ enum SessionScope {
   PLATFORM
 }
 
+enum AssessmentDefinitionStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum AssessmentVersionStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
 /// Technical metadata only. This is not a business-domain model.
 model SystemMetadata {
   id        String   @id @default(uuid()) @db.Uuid
@@ -76,6 +87,7 @@ model Organization {
   memberships OrganizationMembership[]
   sessions    Session[]
   auditLogs   AuditLog[]               @relation("OrganizationAuditLogs")
+  assessmentDefinitions AssessmentDefinition[]
 
   @@index([status])
   @@index([type, status])
@@ -102,6 +114,9 @@ model User {
   passwordResetTokens PasswordResetToken[]
   invitationTokens    InvitationToken[]
   auditLogs           AuditLog[]               @relation("ActorAuditLogs")
+  createdAssessmentDefinitions AssessmentDefinition[] @relation("AssessmentDefinitionCreatedBy")
+  createdAssessmentVersions AssessmentVersion[] @relation("AssessmentVersionCreatedBy")
+  publishedAssessmentVersions AssessmentVersion[] @relation("AssessmentVersionPublishedBy")
 
   @@index([status])
   @@index([status, lockedUntil])
@@ -175,6 +190,55 @@ model InvitationToken {
   @@index([expiresAt])
   @@index([userId, expiresAt])
   @@map("invitation_tokens")
+}
+
+
+/// Stable identity for an assessment across all versions.
+/// A null organizationId means platform-owned; otherwise the assessment is tenant-owned.
+model AssessmentDefinition {
+  id              String                     @id @default(uuid()) @db.Uuid
+  organizationId  String?                    @map("organization_id") @db.Uuid
+  code            String                     @unique @db.VarChar(120)
+  status          AssessmentDefinitionStatus @default(ACTIVE)
+  createdByUserId String?                    @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                   @default(now()) @map("created_at")
+  updatedAt       DateTime                   @updatedAt @map("updated_at")
+  archivedAt      DateTime?                  @map("archived_at")
+  organization    Organization?              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdByUser   User?                      @relation("AssessmentDefinitionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  versions        AssessmentVersion[]
+
+  @@index([organizationId, status])
+  @@index([status])
+  @@map("assessment_definitions")
+}
+
+/// Versioned assessment specification.
+/// Published/retired versions are protected from content mutation by the database migration.
+model AssessmentVersion {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  assessmentDefinitionId String                  @map("assessment_definition_id") @db.Uuid
+  versionNumber          Int                     @map("version_number")
+  status                 AssessmentVersionStatus @default(DRAFT)
+  title                  String                  @db.VarChar(200)
+  description            String?                 @db.Text
+  instructions           String?                 @db.Text
+  deliveryConfig         Json?                   @map("delivery_config") @db.JsonB
+  scoringConfig          Json?                   @map("scoring_config") @db.JsonB
+  createdByUserId        String?                 @map("created_by_user_id") @db.Uuid
+  publishedByUserId      String?                 @map("published_by_user_id") @db.Uuid
+  createdAt              DateTime                @default(now()) @map("created_at")
+  updatedAt              DateTime                @updatedAt @map("updated_at")
+  publishedAt            DateTime?               @map("published_at")
+  retiredAt              DateTime?               @map("retired_at")
+  assessmentDefinition   AssessmentDefinition    @relation(fields: [assessmentDefinitionId], references: [id], onDelete: Restrict)
+  createdByUser          User?                   @relation("AssessmentVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  publishedByUser        User?                   @relation("AssessmentVersionPublishedBy", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([assessmentDefinitionId, versionNumber])
+  @@index([assessmentDefinitionId, status])
+  @@index([status, publishedAt])
+  @@map("assessment_versions")
 }
 
 model AuditLog {
