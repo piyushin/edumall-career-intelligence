@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   type AuditLog,
   type OrganizationMembership,
@@ -7,13 +6,10 @@ import {
   PrismaClient,
   type Session,
 } from "@prisma/client";
+import { hashOpaqueToken } from "./tokens";
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
-}
-
-export function hashOpaqueToken(token: string): string {
-  return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
 export function createPrismaClient(databaseUrl?: string): PrismaClient {
@@ -87,3 +83,10 @@ export function createAuditLog(
 ): Promise<AuditLog> {
   return prisma.auditLog.create({ data: input });
 }
+
+export * from "./auth-errors";
+export * from "./authorization";
+export * from "./credential-lifecycle";
+export * from "./password";
+export * from "./sessions";
+export { hashOpaqueToken } from "./tokens";
