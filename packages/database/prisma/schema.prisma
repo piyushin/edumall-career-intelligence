@@ -85,6 +85,12 @@ enum AssessmentAttemptStatus {
   ABANDONED
 }
 
+enum AssessmentNormSetStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
 /// Technical metadata only. This is not a business-domain model.
 model SystemMetadata {
   id        String   @id @default(uuid()) @db.Uuid
@@ -267,6 +273,7 @@ model AssessmentVersion {
   constructs             AssessmentConstruct[]
   items                  AssessmentItem[]
   assignments            AssessmentAssignment[]
+  normSets               AssessmentNormSet[]
 
   @@unique([assessmentDefinitionId, versionNumber])
   @@index([assessmentDefinitionId, status])
@@ -290,6 +297,7 @@ model AssessmentConstruct {
   itemLinks             AssessmentItemConstruct[]
   optionScores          AssessmentOptionScore[]
   rawScores             AssessmentConstructScore[]
+  normTables            AssessmentConstructNormTable[]
 
   @@unique([assessmentVersionId, code])
   @@unique([assessmentVersionId, orderIndex])
@@ -485,6 +493,87 @@ model AssessmentConstructScore {
   @@id([scoringRunId, assessmentConstructId])
   @@index([assessmentConstructId])
   @@map("assessment_construct_scores")
+}
+
+
+/// Versioned normative data package for one immutable assessment version.
+/// Actual norm values must come from validated psychometric source data.
+model AssessmentNormSet {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  assessmentVersionId String                  @map("assessment_version_id") @db.Uuid
+  normVersion         String                  @map("norm_version") @db.VarChar(60)
+  name                String                  @db.VarChar(200)
+  description         String?                 @db.Text
+  sourceReference     String?                 @map("source_reference") @db.Text
+  populationMetadata  Json?                   @map("population_metadata") @db.JsonB
+  status              AssessmentNormSetStatus @default(DRAFT)
+  publishedAt         DateTime?               @map("published_at")
+  retiredAt           DateTime?               @map("retired_at")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  assessmentVersion   AssessmentVersion       @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  groups              AssessmentNormGroup[]
+
+  @@unique([assessmentVersionId, normVersion])
+  @@index([assessmentVersionId, status])
+  @@index([status, publishedAt])
+  @@map("assessment_norm_sets")
+}
+
+/// One defined norm population/subgroup inside a norm set.
+/// criteria stores documented inclusion criteria only; it is not executable scoring logic.
+model AssessmentNormGroup {
+  id               String                         @id @default(uuid()) @db.Uuid
+  normSetId        String                         @map("norm_set_id") @db.Uuid
+  code             String                         @db.VarChar(120)
+  name             String                         @db.VarChar(200)
+  description      String?                        @db.Text
+  criteria         Json?                          @db.JsonB
+  sampleSize       Int?                           @map("sample_size")
+  metadata         Json?                          @db.JsonB
+  createdAt        DateTime                       @default(now()) @map("created_at")
+  updatedAt        DateTime                       @updatedAt @map("updated_at")
+  normSet          AssessmentNormSet              @relation(fields: [normSetId], references: [id], onDelete: Restrict)
+  constructTables  AssessmentConstructNormTable[]
+
+  @@unique([normSetId, code])
+  @@index([normSetId])
+  @@map("assessment_norm_groups")
+}
+
+/// Norm lookup table for one construct within one norm group.
+model AssessmentConstructNormTable {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  normGroupId           String                    @map("norm_group_id") @db.Uuid
+  assessmentConstructId String                    @map("assessment_construct_id") @db.Uuid
+  metadata              Json?                     @db.JsonB
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  normGroup             AssessmentNormGroup       @relation(fields: [normGroupId], references: [id], onDelete: Restrict)
+  assessmentConstruct   AssessmentConstruct       @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+  rows                  AssessmentNormLookupRow[]
+
+  @@unique([normGroupId, assessmentConstructId])
+  @@index([assessmentConstructId])
+  @@map("assessment_construct_norm_tables")
+}
+
+/// One validated raw-score lookup interval.
+/// Standardized values remain nullable until supported by validated norm data.
+model AssessmentNormLookupRow {
+  id                    String                       @id @default(uuid()) @db.Uuid
+  constructNormTableId  String                       @map("construct_norm_table_id") @db.Uuid
+  rawScoreMin           Decimal                      @map("raw_score_min") @db.Decimal(20, 8)
+  rawScoreMax           Decimal                      @map("raw_score_max") @db.Decimal(20, 8)
+  standardizedScore     Decimal?                     @map("standardized_score") @db.Decimal(20, 8)
+  percentile            Decimal?                     @db.Decimal(8, 4)
+  metadata              Json?                        @db.JsonB
+  createdAt             DateTime                     @default(now()) @map("created_at")
+  constructNormTable    AssessmentConstructNormTable @relation(fields: [constructNormTableId], references: [id], onDelete: Restrict)
+
+  @@unique([constructNormTableId, rawScoreMin, rawScoreMax])
+  @@index([constructNormTableId, rawScoreMin, rawScoreMax])
+  @@map("assessment_norm_lookup_rows")
 }
 
 model AuditLog {
