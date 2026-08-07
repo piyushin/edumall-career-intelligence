@@ -91,6 +91,18 @@ enum AssessmentNormSetStatus {
   RETIRED
 }
 
+enum AssessmentInterpretationSetStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+enum AssessmentInterpretationMetric {
+  RAW_SCORE
+  STANDARDIZED_SCORE
+  PERCENTILE
+}
+
 /// Technical metadata only. This is not a business-domain model.
 model SystemMetadata {
   id        String   @id @default(uuid()) @db.Uuid
@@ -274,6 +286,8 @@ model AssessmentVersion {
   items                  AssessmentItem[]
   assignments            AssessmentAssignment[]
   normSets               AssessmentNormSet[]
+  interpretationSets     AssessmentInterpretationSet[]
+  reportDataSnapshots    AssessmentReportDataSnapshot[]
 
   @@unique([assessmentDefinitionId, versionNumber])
   @@index([assessmentDefinitionId, status])
@@ -298,6 +312,7 @@ model AssessmentConstruct {
   optionScores          AssessmentOptionScore[]
   rawScores             AssessmentConstructScore[]
   normTables            AssessmentConstructNormTable[]
+  interpretationRules  AssessmentInterpretationRule[]
 
   @@unique([assessmentVersionId, code])
   @@unique([assessmentVersionId, orderIndex])
@@ -473,6 +488,7 @@ model AssessmentScoringRun {
   metadata               Json?                      @db.JsonB
   attempt                AssessmentAttempt          @relation(fields: [attemptId], references: [id], onDelete: Restrict)
   constructScores        AssessmentConstructScore[]
+  reportDataSnapshots    AssessmentReportDataSnapshot[]
 
   @@unique([attemptId, scoringVersion, algorithmVersion, inputHash])
   @@index([attemptId, calculatedAt])
@@ -603,6 +619,7 @@ model AssessmentNormApplication {
   normGroup             AssessmentNormGroup          @relation(fields: [normGroupId], references: [id], onDelete: Restrict)
   constructNormTable    AssessmentConstructNormTable @relation(fields: [constructNormTableId], references: [id], onDelete: Restrict)
   normLookupRow         AssessmentNormLookupRow      @relation(fields: [normLookupRowId], references: [id], onDelete: Restrict)
+  interpretationApplications AssessmentInterpretationApplication[]
 
   @@unique([scoringRunId, assessmentConstructId, normGroupId])
   @@index([normSetId])
@@ -611,6 +628,101 @@ model AssessmentNormApplication {
   @@index([normLookupRowId])
   @@index([appliedAt])
   @@map("assessment_norm_applications")
+}
+
+
+/// Versioned interpretation-rule package for one assessment version.
+/// Rules must be supported by validated psychometric documentation before publication.
+model AssessmentInterpretationSet {
+  id                  String                            @id @default(uuid()) @db.Uuid
+  assessmentVersionId String                            @map("assessment_version_id") @db.Uuid
+  version             String                            @db.VarChar(60)
+  name                String                            @db.VarChar(200)
+  description         String?                           @db.Text
+  sourceReference     String?                           @map("source_reference") @db.Text
+  methodology         Json?                             @db.JsonB
+  status              AssessmentInterpretationSetStatus @default(DRAFT)
+  publishedAt         DateTime?                         @map("published_at")
+  retiredAt           DateTime?                         @map("retired_at")
+  createdAt           DateTime                          @default(now()) @map("created_at")
+  updatedAt           DateTime                          @updatedAt @map("updated_at")
+  assessmentVersion   AssessmentVersion                 @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  rules               AssessmentInterpretationRule[]
+  reportDataSnapshots AssessmentReportDataSnapshot[]
+
+  @@unique([assessmentVersionId, version])
+  @@index([assessmentVersionId, status])
+  @@index([status, publishedAt])
+  @@map("assessment_interpretation_sets")
+}
+
+/// One versioned interpretation rule for a construct.
+/// outputData is intentionally generic; no interpretation content is seeded by migration.
+model AssessmentInterpretationRule {
+  id                    String                         @id @default(uuid()) @db.Uuid
+  interpretationSetId   String                         @map("interpretation_set_id") @db.Uuid
+  assessmentConstructId String                         @map("assessment_construct_id") @db.Uuid
+  code                  String                         @db.VarChar(120)
+  metric                AssessmentInterpretationMetric
+  lowerBound            Decimal?                       @map("lower_bound") @db.Decimal(20, 8)
+  upperBound            Decimal?                       @map("upper_bound") @db.Decimal(20, 8)
+  lowerInclusive        Boolean                        @default(true) @map("lower_inclusive")
+  upperInclusive        Boolean                        @default(true) @map("upper_inclusive")
+  priority              Int                            @default(0)
+  outputData            Json?                          @map("output_data") @db.JsonB
+  metadata              Json?                          @db.JsonB
+  createdAt             DateTime                       @default(now()) @map("created_at")
+  updatedAt             DateTime                       @updatedAt @map("updated_at")
+  interpretationSet     AssessmentInterpretationSet    @relation(fields: [interpretationSetId], references: [id], onDelete: Restrict)
+  assessmentConstruct   AssessmentConstruct            @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+  applications          AssessmentInterpretationApplication[]
+
+  @@unique([interpretationSetId, code])
+  @@index([interpretationSetId, assessmentConstructId])
+  @@index([assessmentConstructId, metric])
+  @@map("assessment_interpretation_rules")
+}
+
+/// Immutable record showing exactly which interpretation rule was applied
+/// to one normalized construct result.
+model AssessmentInterpretationApplication {
+  id                    String                       @id @default(uuid()) @db.Uuid
+  normApplicationId     String                       @map("norm_application_id") @db.Uuid
+  interpretationRuleId  String                       @map("interpretation_rule_id") @db.Uuid
+  metricValue           Decimal                      @map("metric_value") @db.Decimal(20, 8)
+  outputData            Json?                        @map("output_data") @db.JsonB
+  appliedAt             DateTime                     @default(now()) @map("applied_at")
+  metadata              Json?                        @db.JsonB
+  normApplication       AssessmentNormApplication    @relation(fields: [normApplicationId], references: [id], onDelete: Restrict)
+  interpretationRule    AssessmentInterpretationRule @relation(fields: [interpretationRuleId], references: [id], onDelete: Restrict)
+
+  @@unique([normApplicationId, interpretationRuleId])
+  @@index([interpretationRuleId])
+  @@index([appliedAt])
+  @@map("assessment_interpretation_applications")
+}
+
+/// Immutable structured data snapshot used as the input to a later report renderer.
+/// This is report-data provenance, not a rendered PDF/HTML report.
+model AssessmentReportDataSnapshot {
+  id                    String                      @id @default(uuid()) @db.Uuid
+  scoringRunId          String                      @map("scoring_run_id") @db.Uuid
+  assessmentVersionId   String                      @map("assessment_version_id") @db.Uuid
+  interpretationSetId   String?                     @map("interpretation_set_id") @db.Uuid
+  reportVersion         String                      @map("report_version") @db.VarChar(60)
+  inputHash             String                      @map("input_hash") @db.Char(64)
+  payload               Json                        @db.JsonB
+  generatedAt           DateTime                    @default(now()) @map("generated_at")
+  metadata              Json?                       @db.JsonB
+  scoringRun            AssessmentScoringRun        @relation(fields: [scoringRunId], references: [id], onDelete: Restrict)
+  assessmentVersion     AssessmentVersion           @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  interpretationSet     AssessmentInterpretationSet? @relation(fields: [interpretationSetId], references: [id], onDelete: Restrict)
+
+  @@unique([scoringRunId, reportVersion, inputHash])
+  @@index([assessmentVersionId, reportVersion])
+  @@index([interpretationSetId])
+  @@index([generatedAt])
+  @@map("assessment_report_data_snapshots")
 }
 
 model AuditLog {
