@@ -206,4 +206,71 @@ describe("AssessmentReportDataService", () => {
       service.createSnapshot(scoringRunId, normGroupId, interpretationSetId),
     ).rejects.toBeInstanceOf(ConflictException);
   });
+
+  it("rejects duplicate interpretation provenance that leaves another norm result uninterpreted", async () => {
+    const secondNormApplicationId = "abababab-abab-4bab-8bab-abababababab";
+    const secondConstructId = "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd";
+
+    prisma.assessmentNormApplication.findMany.mockResolvedValue([
+      {
+        id: normApplicationId,
+        assessmentConstructId: constructId,
+        normSetId: "99999999-9999-4999-8999-999999999999",
+        normGroupId,
+        constructNormTableId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        normLookupRowId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        rawScore: decimal("12"),
+        standardizedScore: decimal("55"),
+        percentile: decimal("72.5"),
+        appliedAt: new Date("2026-08-08T08:01:00.000Z"),
+      },
+      {
+        id: secondNormApplicationId,
+        assessmentConstructId: secondConstructId,
+        normSetId: "99999999-9999-4999-8999-999999999999",
+        normGroupId,
+        constructNormTableId: "dededede-dede-4ede-8ede-dededededede",
+        normLookupRowId: "efefefef-efef-4fef-8fef-efefefefefef",
+        rawScore: decimal("8"),
+        standardizedScore: decimal("48"),
+        percentile: decimal("44"),
+        appliedAt: new Date("2026-08-08T08:01:00.000Z"),
+      },
+    ]);
+
+    prisma.assessmentInterpretationApplication.findMany.mockResolvedValue([
+      {
+        id: "10101010-1010-4010-8010-101010101010",
+        normApplicationId,
+        interpretationRuleId,
+        metricValue: decimal("72.5"),
+        outputData: { band: "documented-band" },
+        appliedAt: new Date("2026-08-08T08:02:00.000Z"),
+        interpretationRule: {
+          code: "rule-1",
+          metric: "PERCENTILE",
+          priority: 10,
+          assessmentConstructId: constructId,
+        },
+      },
+      {
+        id: "20202020-2020-4020-8020-202020202020",
+        normApplicationId,
+        interpretationRuleId: "30303030-3030-4030-8030-303030303030",
+        metricValue: decimal("72.5"),
+        outputData: { band: "duplicate-band" },
+        appliedAt: new Date("2026-08-08T08:02:01.000Z"),
+        interpretationRule: {
+          code: "rule-2",
+          metric: "PERCENTILE",
+          priority: 5,
+          assessmentConstructId: constructId,
+        },
+      },
+    ]);
+
+    await expect(
+      service.createSnapshot(scoringRunId, normGroupId, interpretationSetId),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
 });

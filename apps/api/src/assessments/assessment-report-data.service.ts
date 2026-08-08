@@ -187,11 +187,22 @@ export class AssessmentReportDataService {
         },
       });
 
-      if (interpretationApplications.length !== normApplications.length) {
+      const normApplicationIds = new Set(normApplications.map((application) => application.id));
+      const interpretedNormApplicationIds = new Set(
+        interpretationApplications.map((application) => application.normApplicationId),
+      );
+
+      if (
+        interpretationApplications.length !== normApplications.length ||
+        interpretedNormApplicationIds.size !== normApplicationIds.size ||
+        [...normApplicationIds].some(
+          (normApplicationId) => !interpretedNormApplicationIds.has(normApplicationId),
+        )
+      ) {
         throw new ConflictException({
           code: "ASSESSMENT_REPORT_INTERPRETATION_DATA_INCOMPLETE",
           message:
-            "Every normalized construct result must have an interpretation application before report data is generated.",
+            "Every normalized construct result must have exactly one interpretation application before report data is generated.",
         });
       }
 
