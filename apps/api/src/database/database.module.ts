@@ -9,7 +9,7 @@ import { DATABASE_PRISMA } from "./database.tokens";
 export class DatabaseModule {
   public static register(config: AppConfig): DynamicModule {
     return {
-      exports: [DATABASE_PRISMA],
+      exports: [APP_CONFIG, DATABASE_PRISMA],
       global: true,
       module: DatabaseModule,
       providers: [
