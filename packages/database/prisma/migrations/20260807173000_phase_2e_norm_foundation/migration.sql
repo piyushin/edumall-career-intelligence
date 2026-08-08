@@ -144,7 +144,7 @@ ON "assessment_norm_lookup_rows"(
 );
 
 CREATE INDEX
-    "assessment_norm_lookup_rows_construct_norm_table_id_raw_score_min_raw_score_max_idx"
+    "assessment_norm_lookup_rows_lookup_idx"
 ON "assessment_norm_lookup_rows"(
     "construct_norm_table_id",
     "raw_score_min",

@@ -115,17 +115,17 @@ model SystemMetadata {
 }
 
 model Organization {
-  id          String                   @id @default(uuid()) @db.Uuid
-  name        String                   @db.VarChar(200)
-  slug        String                   @unique @db.VarChar(120)
-  status      OrganizationStatus       @default(ACTIVE)
-  type        OrganizationType
-  createdAt   DateTime                 @default(now()) @map("created_at")
-  updatedAt   DateTime                 @updatedAt @map("updated_at")
-  deletedAt   DateTime?                @map("deleted_at")
-  memberships OrganizationMembership[]
-  sessions    Session[]
-  auditLogs   AuditLog[]               @relation("OrganizationAuditLogs")
+  id                    String                   @id @default(uuid()) @db.Uuid
+  name                  String                   @db.VarChar(200)
+  slug                  String                   @unique @db.VarChar(120)
+  status                OrganizationStatus       @default(ACTIVE)
+  type                  OrganizationType
+  createdAt             DateTime                 @default(now()) @map("created_at")
+  updatedAt             DateTime                 @updatedAt @map("updated_at")
+  deletedAt             DateTime?                @map("deleted_at")
+  memberships           OrganizationMembership[]
+  sessions              Session[]
+  auditLogs             AuditLog[]               @relation("OrganizationAuditLogs")
   assessmentDefinitions AssessmentDefinition[]
   assessmentAssignments AssessmentAssignment[]
 
@@ -135,30 +135,30 @@ model Organization {
 }
 
 model User {
-  id                  String                   @id @default(uuid()) @db.Uuid
-  email               String                   @db.VarChar(320)
-  normalizedEmail     String                   @unique @map("normalized_email") @db.VarChar(320)
-  passwordHash        String?                  @map("password_hash") @db.VarChar(255)
-  firstName           String                   @map("first_name") @db.VarChar(100)
-  lastName            String                   @map("last_name") @db.VarChar(100)
-  status              UserStatus               @default(INVITED)
-  emailVerifiedAt     DateTime?                @map("email_verified_at")
-  lastLoginAt         DateTime?                @map("last_login_at")
-  failedLoginCount    Int                      @default(0) @map("failed_login_count")
-  lockedUntil         DateTime?                @map("locked_until")
-  createdAt           DateTime                 @default(now()) @map("created_at")
-  updatedAt           DateTime                 @updatedAt @map("updated_at")
-  deletedAt           DateTime?                @map("deleted_at")
-  memberships         OrganizationMembership[]
-  sessions            Session[]
-  passwordResetTokens PasswordResetToken[]
-  invitationTokens    InvitationToken[]
-  auditLogs           AuditLog[]               @relation("ActorAuditLogs")
-  createdAssessmentDefinitions AssessmentDefinition[] @relation("AssessmentDefinitionCreatedBy")
-  createdAssessmentVersions AssessmentVersion[] @relation("AssessmentVersionCreatedBy")
-  publishedAssessmentVersions AssessmentVersion[] @relation("AssessmentVersionPublishedBy")
-  assignedAssessments AssessmentAssignment[] @relation("AssessmentAssignmentCandidate")
-  createdAssessmentAssignments AssessmentAssignment[] @relation("AssessmentAssignmentAssignedBy")
+  id                           String                   @id @default(uuid()) @db.Uuid
+  email                        String                   @db.VarChar(320)
+  normalizedEmail              String                   @unique @map("normalized_email") @db.VarChar(320)
+  passwordHash                 String?                  @map("password_hash") @db.VarChar(255)
+  firstName                    String                   @map("first_name") @db.VarChar(100)
+  lastName                     String                   @map("last_name") @db.VarChar(100)
+  status                       UserStatus               @default(INVITED)
+  emailVerifiedAt              DateTime?                @map("email_verified_at")
+  lastLoginAt                  DateTime?                @map("last_login_at")
+  failedLoginCount             Int                      @default(0) @map("failed_login_count")
+  lockedUntil                  DateTime?                @map("locked_until")
+  createdAt                    DateTime                 @default(now()) @map("created_at")
+  updatedAt                    DateTime                 @updatedAt @map("updated_at")
+  deletedAt                    DateTime?                @map("deleted_at")
+  memberships                  OrganizationMembership[]
+  sessions                     Session[]
+  passwordResetTokens          PasswordResetToken[]
+  invitationTokens             InvitationToken[]
+  auditLogs                    AuditLog[]               @relation("ActorAuditLogs")
+  createdAssessmentDefinitions AssessmentDefinition[]   @relation("AssessmentDefinitionCreatedBy")
+  createdAssessmentVersions    AssessmentVersion[]      @relation("AssessmentVersionCreatedBy")
+  publishedAssessmentVersions  AssessmentVersion[]      @relation("AssessmentVersionPublishedBy")
+  assignedAssessments          AssessmentAssignment[]   @relation("AssessmentAssignmentCandidate")
+  createdAssessmentAssignments AssessmentAssignment[]   @relation("AssessmentAssignmentAssignedBy")
 
   @@index([status])
   @@index([status, lockedUntil])
@@ -234,7 +234,6 @@ model InvitationToken {
   @@map("invitation_tokens")
 }
 
-
 /// Stable identity for an assessment across all versions.
 /// A null organizationId means platform-owned; otherwise the assessment is tenant-owned.
 model AssessmentDefinition {
@@ -258,30 +257,30 @@ model AssessmentDefinition {
 /// Versioned assessment specification.
 /// Published/retired versions are protected from content mutation by the database migration.
 model AssessmentVersion {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  assessmentDefinitionId String                  @map("assessment_definition_id") @db.Uuid
-  versionNumber          Int                     @map("version_number")
-  status                 AssessmentVersionStatus @default(DRAFT)
-  title                  String                  @db.VarChar(200)
-  edition                String                  @db.VarChar(60)
-  form                   String                  @db.VarChar(60)
-  language               String                  @db.VarChar(20)
-  scoringVersion         String                  @map("scoring_version") @db.VarChar(60)
-  normVersion            String                  @map("norm_version") @db.VarChar(60)
-  reportVersion          String                  @map("report_version") @db.VarChar(60)
-  description            String?                 @db.Text
-  instructions           String?                 @db.Text
-  deliveryConfig         Json?                   @map("delivery_config") @db.JsonB
-  scoringConfig          Json?                   @map("scoring_config") @db.JsonB
-  createdByUserId        String?                 @map("created_by_user_id") @db.Uuid
-  publishedByUserId      String?                 @map("published_by_user_id") @db.Uuid
-  createdAt              DateTime                @default(now()) @map("created_at")
-  updatedAt              DateTime                @updatedAt @map("updated_at")
-  publishedAt            DateTime?               @map("published_at")
-  retiredAt              DateTime?               @map("retired_at")
-  assessmentDefinition   AssessmentDefinition    @relation(fields: [assessmentDefinitionId], references: [id], onDelete: Restrict)
-  createdByUser          User?                   @relation("AssessmentVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  publishedByUser        User?                   @relation("AssessmentVersionPublishedBy", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  id                     String                         @id @default(uuid()) @db.Uuid
+  assessmentDefinitionId String                         @map("assessment_definition_id") @db.Uuid
+  versionNumber          Int                            @map("version_number")
+  status                 AssessmentVersionStatus        @default(DRAFT)
+  title                  String                         @db.VarChar(200)
+  edition                String                         @db.VarChar(60)
+  form                   String                         @db.VarChar(60)
+  language               String                         @db.VarChar(20)
+  scoringVersion         String                         @map("scoring_version") @db.VarChar(60)
+  normVersion            String                         @map("norm_version") @db.VarChar(60)
+  reportVersion          String                         @map("report_version") @db.VarChar(60)
+  description            String?                        @db.Text
+  instructions           String?                        @db.Text
+  deliveryConfig         Json?                          @map("delivery_config") @db.JsonB
+  scoringConfig          Json?                          @map("scoring_config") @db.JsonB
+  createdByUserId        String?                        @map("created_by_user_id") @db.Uuid
+  publishedByUserId      String?                        @map("published_by_user_id") @db.Uuid
+  createdAt              DateTime                       @default(now()) @map("created_at")
+  updatedAt              DateTime                       @updatedAt @map("updated_at")
+  publishedAt            DateTime?                      @map("published_at")
+  retiredAt              DateTime?                      @map("retired_at")
+  assessmentDefinition   AssessmentDefinition           @relation(fields: [assessmentDefinitionId], references: [id], onDelete: Restrict)
+  createdByUser          User?                          @relation("AssessmentVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  publishedByUser        User?                          @relation("AssessmentVersionPublishedBy", fields: [publishedByUserId], references: [id], onDelete: Restrict)
   constructs             AssessmentConstruct[]
   items                  AssessmentItem[]
   assignments            AssessmentAssignment[]
@@ -295,24 +294,23 @@ model AssessmentVersion {
   @@map("assessment_versions")
 }
 
-
 /// A scored or interpreted dimension inside one immutable assessment version.
 model AssessmentConstruct {
-  id                    String                    @id @default(uuid()) @db.Uuid
-  assessmentVersionId   String                    @map("assessment_version_id") @db.Uuid
-  code                  String                    @db.VarChar(120)
-  name                  String                    @db.VarChar(200)
-  description           String?                   @db.Text
-  orderIndex            Int                       @map("order_index")
-  metadata              Json?                     @db.JsonB
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
-  assessmentVersion     AssessmentVersion         @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
-  itemLinks             AssessmentItemConstruct[]
-  optionScores          AssessmentOptionScore[]
-  rawScores             AssessmentConstructScore[]
-  normTables            AssessmentConstructNormTable[]
-  interpretationRules  AssessmentInterpretationRule[]
+  id                  String                         @id @default(uuid()) @db.Uuid
+  assessmentVersionId String                         @map("assessment_version_id") @db.Uuid
+  code                String                         @db.VarChar(120)
+  name                String                         @db.VarChar(200)
+  description         String?                        @db.Text
+  orderIndex          Int                            @map("order_index")
+  metadata            Json?                          @db.JsonB
+  createdAt           DateTime                       @default(now()) @map("created_at")
+  updatedAt           DateTime                       @updatedAt @map("updated_at")
+  assessmentVersion   AssessmentVersion              @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  itemLinks           AssessmentItemConstruct[]
+  optionScores        AssessmentOptionScore[]
+  rawScores           AssessmentConstructScore[]
+  normTables          AssessmentConstructNormTable[]
+  interpretationRules AssessmentInterpretationRule[]
 
   @@unique([assessmentVersionId, code])
   @@unique([assessmentVersionId, orderIndex])
@@ -322,21 +320,21 @@ model AssessmentConstruct {
 
 /// One administered item/question belonging to exactly one assessment version.
 model AssessmentItem {
-  id                    String                    @id @default(uuid()) @db.Uuid
-  assessmentVersionId   String                    @map("assessment_version_id") @db.Uuid
-  code                  String                    @db.VarChar(120)
-  type                  AssessmentItemType
-  prompt                String                    @db.Text
-  helpText              String?                   @map("help_text") @db.Text
-  orderIndex            Int                       @map("order_index")
-  required              Boolean                   @default(true)
-  metadata              Json?                     @db.JsonB
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
-  assessmentVersion     AssessmentVersion         @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
-  options               AssessmentItemOption[]
-  constructLinks        AssessmentItemConstruct[]
-  responses             AssessmentResponse[]
+  id                  String                    @id @default(uuid()) @db.Uuid
+  assessmentVersionId String                    @map("assessment_version_id") @db.Uuid
+  code                String                    @db.VarChar(120)
+  type                AssessmentItemType
+  prompt              String                    @db.Text
+  helpText            String?                   @map("help_text") @db.Text
+  orderIndex          Int                       @map("order_index")
+  required            Boolean                   @default(true)
+  metadata            Json?                     @db.JsonB
+  createdAt           DateTime                  @default(now()) @map("created_at")
+  updatedAt           DateTime                  @updatedAt @map("updated_at")
+  assessmentVersion   AssessmentVersion         @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  options             AssessmentItemOption[]
+  constructLinks      AssessmentItemConstruct[]
+  responses           AssessmentResponse[]
 
   @@unique([assessmentVersionId, code])
   @@unique([assessmentVersionId, orderIndex])
@@ -346,17 +344,17 @@ model AssessmentItem {
 
 /// Ordered response choice for an item.
 model AssessmentItemOption {
-  id                    String                  @id @default(uuid()) @db.Uuid
-  assessmentItemId      String                  @map("assessment_item_id") @db.Uuid
-  code                  String                  @db.VarChar(120)
-  label                 String                  @db.Text
-  orderIndex            Int                     @map("order_index")
-  metadata              Json?                   @db.JsonB
-  createdAt             DateTime                @default(now()) @map("created_at")
-  updatedAt             DateTime                @updatedAt @map("updated_at")
-  assessmentItem        AssessmentItem          @relation(fields: [assessmentItemId], references: [id], onDelete: Restrict)
-  scores                AssessmentOptionScore[]
-  responseSelections    AssessmentResponseOption[]
+  id                 String                     @id @default(uuid()) @db.Uuid
+  assessmentItemId   String                     @map("assessment_item_id") @db.Uuid
+  code               String                     @db.VarChar(120)
+  label              String                     @db.Text
+  orderIndex         Int                        @map("order_index")
+  metadata           Json?                      @db.JsonB
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  updatedAt          DateTime                   @updatedAt @map("updated_at")
+  assessmentItem     AssessmentItem             @relation(fields: [assessmentItemId], references: [id], onDelete: Restrict)
+  scores             AssessmentOptionScore[]
+  responseSelections AssessmentResponseOption[]
 
   @@unique([assessmentItemId, code])
   @@unique([assessmentItemId, orderIndex])
@@ -367,12 +365,12 @@ model AssessmentItemOption {
 /// Declares which construct(s) an item contributes to.
 /// Weight supports differential contribution; reverseScored supports keyed direction.
 model AssessmentItemConstruct {
-  assessmentItemId      String               @map("assessment_item_id") @db.Uuid
-  assessmentConstructId String               @map("assessment_construct_id") @db.Uuid
-  weight                Decimal              @default(1) @db.Decimal(10, 4)
-  reverseScored         Boolean              @default(false) @map("reverse_scored")
-  assessmentItem        AssessmentItem       @relation(fields: [assessmentItemId], references: [id], onDelete: Restrict)
-  assessmentConstruct   AssessmentConstruct  @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+  assessmentItemId      String              @map("assessment_item_id") @db.Uuid
+  assessmentConstructId String              @map("assessment_construct_id") @db.Uuid
+  weight                Decimal             @default(1) @db.Decimal(10, 4)
+  reverseScored         Boolean             @default(false) @map("reverse_scored")
+  assessmentItem        AssessmentItem      @relation(fields: [assessmentItemId], references: [id], onDelete: Restrict)
+  assessmentConstruct   AssessmentConstruct @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
 
   @@id([assessmentItemId, assessmentConstructId])
   @@index([assessmentConstructId])
@@ -382,17 +380,16 @@ model AssessmentItemConstruct {
 /// Explicit scoring key for a response option against a construct.
 /// This supports aptitude keys, Likert scoring, multidimensional items, and weighted responses.
 model AssessmentOptionScore {
-  assessmentItemOptionId String                  @map("assessment_item_option_id") @db.Uuid
-  assessmentConstructId  String                  @map("assessment_construct_id") @db.Uuid
-  score                  Decimal                 @db.Decimal(12, 4)
-  assessmentItemOption   AssessmentItemOption    @relation(fields: [assessmentItemOptionId], references: [id], onDelete: Restrict)
-  assessmentConstruct    AssessmentConstruct     @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+  assessmentItemOptionId String               @map("assessment_item_option_id") @db.Uuid
+  assessmentConstructId  String               @map("assessment_construct_id") @db.Uuid
+  score                  Decimal              @db.Decimal(12, 4)
+  assessmentItemOption   AssessmentItemOption @relation(fields: [assessmentItemOptionId], references: [id], onDelete: Restrict)
+  assessmentConstruct    AssessmentConstruct  @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
 
   @@id([assessmentItemOptionId, assessmentConstructId])
   @@index([assessmentConstructId])
   @@map("assessment_option_scores")
 }
-
 
 /// Assignment of one immutable assessment version to one candidate/user.
 model AssessmentAssignment {
@@ -444,17 +441,17 @@ model AssessmentAttempt {
 
 /// Candidate response to one item during one attempt.
 model AssessmentResponse {
-  id            String                     @id @default(uuid()) @db.Uuid
-  attemptId     String                     @map("attempt_id") @db.Uuid
-  itemId        String                     @map("item_id") @db.Uuid
-  textValue     String?                    @map("text_value") @db.Text
-  numericValue  Decimal?                   @map("numeric_value") @db.Decimal(18, 6)
-  booleanValue  Boolean?                   @map("boolean_value")
-  answeredAt    DateTime                   @default(now()) @map("answered_at")
-  updatedAt     DateTime                   @updatedAt @map("updated_at")
-  attempt       AssessmentAttempt          @relation(fields: [attemptId], references: [id], onDelete: Restrict)
-  item          AssessmentItem             @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  selections    AssessmentResponseOption[]
+  id           String                     @id @default(uuid()) @db.Uuid
+  attemptId    String                     @map("attempt_id") @db.Uuid
+  itemId       String                     @map("item_id") @db.Uuid
+  textValue    String?                    @map("text_value") @db.Text
+  numericValue Decimal?                   @map("numeric_value") @db.Decimal(18, 6)
+  booleanValue Boolean?                   @map("boolean_value")
+  answeredAt   DateTime                   @default(now()) @map("answered_at")
+  updatedAt    DateTime                   @updatedAt @map("updated_at")
+  attempt      AssessmentAttempt          @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  item         AssessmentItem             @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  selections   AssessmentResponseOption[]
 
   @@unique([attemptId, itemId])
   @@index([attemptId])
@@ -475,20 +472,19 @@ model AssessmentResponseOption {
   @@map("assessment_response_options")
 }
 
-
 /// Immutable record of one deterministic scoring execution.
 /// This stores raw-score provenance only; norms and interpretation are separate layers.
 model AssessmentScoringRun {
-  id                     String                     @id @default(uuid()) @db.Uuid
-  attemptId              String                     @map("attempt_id") @db.Uuid
-  scoringVersion         String                     @map("scoring_version") @db.VarChar(60)
-  algorithmVersion       String                     @map("algorithm_version") @db.VarChar(60)
-  inputHash              String                     @map("input_hash") @db.Char(64)
-  calculatedAt           DateTime                   @default(now()) @map("calculated_at")
-  metadata               Json?                      @db.JsonB
-  attempt                AssessmentAttempt          @relation(fields: [attemptId], references: [id], onDelete: Restrict)
-  constructScores        AssessmentConstructScore[]
-  reportDataSnapshots    AssessmentReportDataSnapshot[]
+  id                  String                         @id @default(uuid()) @db.Uuid
+  attemptId           String                         @map("attempt_id") @db.Uuid
+  scoringVersion      String                         @map("scoring_version") @db.VarChar(60)
+  algorithmVersion    String                         @map("algorithm_version") @db.VarChar(60)
+  inputHash           String                         @map("input_hash") @db.Char(64)
+  calculatedAt        DateTime                       @default(now()) @map("calculated_at")
+  metadata            Json?                          @db.JsonB
+  attempt             AssessmentAttempt              @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  constructScores     AssessmentConstructScore[]
+  reportDataSnapshots AssessmentReportDataSnapshot[]
 
   @@unique([attemptId, scoringVersion, algorithmVersion, inputHash])
   @@index([attemptId, calculatedAt])
@@ -498,37 +494,36 @@ model AssessmentScoringRun {
 
 /// Raw score for one construct produced by one immutable scoring run.
 model AssessmentConstructScore {
-  scoringRunId           String                  @map("scoring_run_id") @db.Uuid
-  assessmentConstructId  String                  @map("assessment_construct_id") @db.Uuid
-  rawScore               Decimal                 @map("raw_score") @db.Decimal(20, 8)
-  answeredItemCount      Int                     @map("answered_item_count")
-  contributionCount      Int                     @map("contribution_count")
-  scoringRun             AssessmentScoringRun    @relation(fields: [scoringRunId], references: [id], onDelete: Restrict)
-  assessmentConstruct    AssessmentConstruct     @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
-  normApplications       AssessmentNormApplication[]
+  scoringRunId          String                      @map("scoring_run_id") @db.Uuid
+  assessmentConstructId String                      @map("assessment_construct_id") @db.Uuid
+  rawScore              Decimal                     @map("raw_score") @db.Decimal(20, 8)
+  answeredItemCount     Int                         @map("answered_item_count")
+  contributionCount     Int                         @map("contribution_count")
+  scoringRun            AssessmentScoringRun        @relation(fields: [scoringRunId], references: [id], onDelete: Restrict)
+  assessmentConstruct   AssessmentConstruct         @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+  normApplications      AssessmentNormApplication[]
 
   @@id([scoringRunId, assessmentConstructId])
   @@index([assessmentConstructId])
   @@map("assessment_construct_scores")
 }
 
-
 /// Versioned normative data package for one immutable assessment version.
 /// Actual norm values must come from validated psychometric source data.
 model AssessmentNormSet {
-  id                  String                  @id @default(uuid()) @db.Uuid
-  assessmentVersionId String                  @map("assessment_version_id") @db.Uuid
-  normVersion         String                  @map("norm_version") @db.VarChar(60)
-  name                String                  @db.VarChar(200)
-  description         String?                 @db.Text
-  sourceReference     String?                 @map("source_reference") @db.Text
-  populationMetadata  Json?                   @map("population_metadata") @db.JsonB
-  status              AssessmentNormSetStatus @default(DRAFT)
-  publishedAt         DateTime?               @map("published_at")
-  retiredAt           DateTime?               @map("retired_at")
-  createdAt           DateTime                @default(now()) @map("created_at")
-  updatedAt           DateTime                @updatedAt @map("updated_at")
-  assessmentVersion   AssessmentVersion       @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  id                  String                      @id @default(uuid()) @db.Uuid
+  assessmentVersionId String                      @map("assessment_version_id") @db.Uuid
+  normVersion         String                      @map("norm_version") @db.VarChar(60)
+  name                String                      @db.VarChar(200)
+  description         String?                     @db.Text
+  sourceReference     String?                     @map("source_reference") @db.Text
+  populationMetadata  Json?                       @map("population_metadata") @db.JsonB
+  status              AssessmentNormSetStatus     @default(DRAFT)
+  publishedAt         DateTime?                   @map("published_at")
+  retiredAt           DateTime?                   @map("retired_at")
+  createdAt           DateTime                    @default(now()) @map("created_at")
+  updatedAt           DateTime                    @updatedAt @map("updated_at")
+  assessmentVersion   AssessmentVersion           @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
   groups              AssessmentNormGroup[]
   applications        AssessmentNormApplication[]
 
@@ -541,19 +536,19 @@ model AssessmentNormSet {
 /// One defined norm population/subgroup inside a norm set.
 /// criteria stores documented inclusion criteria only; it is not executable scoring logic.
 model AssessmentNormGroup {
-  id               String                         @id @default(uuid()) @db.Uuid
-  normSetId        String                         @map("norm_set_id") @db.Uuid
-  code             String                         @db.VarChar(120)
-  name             String                         @db.VarChar(200)
-  description      String?                        @db.Text
-  criteria         Json?                          @db.JsonB
-  sampleSize       Int?                           @map("sample_size")
-  metadata         Json?                          @db.JsonB
-  createdAt        DateTime                       @default(now()) @map("created_at")
-  updatedAt        DateTime                       @updatedAt @map("updated_at")
-  normSet          AssessmentNormSet              @relation(fields: [normSetId], references: [id], onDelete: Restrict)
-  constructTables  AssessmentConstructNormTable[]
-  applications     AssessmentNormApplication[]
+  id              String                         @id @default(uuid()) @db.Uuid
+  normSetId       String                         @map("norm_set_id") @db.Uuid
+  code            String                         @db.VarChar(120)
+  name            String                         @db.VarChar(200)
+  description     String?                        @db.Text
+  criteria        Json?                          @db.JsonB
+  sampleSize      Int?                           @map("sample_size")
+  metadata        Json?                          @db.JsonB
+  createdAt       DateTime                       @default(now()) @map("created_at")
+  updatedAt       DateTime                       @updatedAt @map("updated_at")
+  normSet         AssessmentNormSet              @relation(fields: [normSetId], references: [id], onDelete: Restrict)
+  constructTables AssessmentConstructNormTable[]
+  applications    AssessmentNormApplication[]
 
   @@unique([normSetId, code])
   @@index([normSetId])
@@ -562,14 +557,14 @@ model AssessmentNormGroup {
 
 /// Norm lookup table for one construct within one norm group.
 model AssessmentConstructNormTable {
-  id                    String                    @id @default(uuid()) @db.Uuid
-  normGroupId           String                    @map("norm_group_id") @db.Uuid
-  assessmentConstructId String                    @map("assessment_construct_id") @db.Uuid
-  metadata              Json?                     @db.JsonB
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
-  normGroup             AssessmentNormGroup       @relation(fields: [normGroupId], references: [id], onDelete: Restrict)
-  assessmentConstruct   AssessmentConstruct       @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+  id                    String                      @id @default(uuid()) @db.Uuid
+  normGroupId           String                      @map("norm_group_id") @db.Uuid
+  assessmentConstructId String                      @map("assessment_construct_id") @db.Uuid
+  metadata              Json?                       @db.JsonB
+  createdAt             DateTime                    @default(now()) @map("created_at")
+  updatedAt             DateTime                    @updatedAt @map("updated_at")
+  normGroup             AssessmentNormGroup         @relation(fields: [normGroupId], references: [id], onDelete: Restrict)
+  assessmentConstruct   AssessmentConstruct         @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
   rows                  AssessmentNormLookupRow[]
   applications          AssessmentNormApplication[]
 
@@ -581,44 +576,43 @@ model AssessmentConstructNormTable {
 /// One validated raw-score lookup interval.
 /// Standardized values remain nullable until supported by validated norm data.
 model AssessmentNormLookupRow {
-  id                    String                       @id @default(uuid()) @db.Uuid
-  constructNormTableId  String                       @map("construct_norm_table_id") @db.Uuid
-  rawScoreMin           Decimal                      @map("raw_score_min") @db.Decimal(20, 8)
-  rawScoreMax           Decimal                      @map("raw_score_max") @db.Decimal(20, 8)
-  standardizedScore     Decimal?                     @map("standardized_score") @db.Decimal(20, 8)
-  percentile            Decimal?                     @db.Decimal(8, 4)
-  metadata              Json?                        @db.JsonB
-  createdAt             DateTime                     @default(now()) @map("created_at")
-  constructNormTable    AssessmentConstructNormTable @relation(fields: [constructNormTableId], references: [id], onDelete: Restrict)
-  applications          AssessmentNormApplication[]
+  id                   String                       @id @default(uuid()) @db.Uuid
+  constructNormTableId String                       @map("construct_norm_table_id") @db.Uuid
+  rawScoreMin          Decimal                      @map("raw_score_min") @db.Decimal(20, 8)
+  rawScoreMax          Decimal                      @map("raw_score_max") @db.Decimal(20, 8)
+  standardizedScore    Decimal?                     @map("standardized_score") @db.Decimal(20, 8)
+  percentile           Decimal?                     @db.Decimal(8, 4)
+  metadata             Json?                        @db.JsonB
+  createdAt            DateTime                     @default(now()) @map("created_at")
+  constructNormTable   AssessmentConstructNormTable @relation(fields: [constructNormTableId], references: [id], onDelete: Restrict)
+  applications         AssessmentNormApplication[]
 
   @@unique([constructNormTableId, rawScoreMin, rawScoreMax])
-  @@index([constructNormTableId, rawScoreMin, rawScoreMax])
+  @@index([constructNormTableId, rawScoreMin, rawScoreMax], map: "assessment_norm_lookup_rows_lookup_idx")
   @@map("assessment_norm_lookup_rows")
 }
-
 
 /// Immutable record of applying one published norm group/table to one raw construct score.
 /// No interpretation or recommendation is stored here.
 model AssessmentNormApplication {
-  id                    String                       @id @default(uuid()) @db.Uuid
-  scoringRunId          String                       @map("scoring_run_id") @db.Uuid
-  assessmentConstructId String                       @map("assessment_construct_id") @db.Uuid
-  normSetId             String                       @map("norm_set_id") @db.Uuid
-  normGroupId           String                       @map("norm_group_id") @db.Uuid
-  constructNormTableId  String                       @map("construct_norm_table_id") @db.Uuid
-  normLookupRowId       String                       @map("norm_lookup_row_id") @db.Uuid
-  rawScore              Decimal                      @map("raw_score") @db.Decimal(20, 8)
-  standardizedScore     Decimal?                     @map("standardized_score") @db.Decimal(20, 8)
-  percentile            Decimal?                     @db.Decimal(8, 4)
-  appliedAt             DateTime                     @default(now()) @map("applied_at")
-  metadata              Json?                        @db.JsonB
+  id                    String   @id @default(uuid()) @db.Uuid
+  scoringRunId          String   @map("scoring_run_id") @db.Uuid
+  assessmentConstructId String   @map("assessment_construct_id") @db.Uuid
+  normSetId             String   @map("norm_set_id") @db.Uuid
+  normGroupId           String   @map("norm_group_id") @db.Uuid
+  constructNormTableId  String   @map("construct_norm_table_id") @db.Uuid
+  normLookupRowId       String   @map("norm_lookup_row_id") @db.Uuid
+  rawScore              Decimal  @map("raw_score") @db.Decimal(20, 8)
+  standardizedScore     Decimal? @map("standardized_score") @db.Decimal(20, 8)
+  percentile            Decimal? @db.Decimal(8, 4)
+  appliedAt             DateTime @default(now()) @map("applied_at")
+  metadata              Json?    @db.JsonB
 
-  constructScore        AssessmentConstructScore     @relation(fields: [scoringRunId, assessmentConstructId], references: [scoringRunId, assessmentConstructId], onDelete: Restrict)
-  normSet               AssessmentNormSet            @relation(fields: [normSetId], references: [id], onDelete: Restrict)
-  normGroup             AssessmentNormGroup          @relation(fields: [normGroupId], references: [id], onDelete: Restrict)
-  constructNormTable    AssessmentConstructNormTable @relation(fields: [constructNormTableId], references: [id], onDelete: Restrict)
-  normLookupRow         AssessmentNormLookupRow      @relation(fields: [normLookupRowId], references: [id], onDelete: Restrict)
+  constructScore             AssessmentConstructScore              @relation(fields: [scoringRunId, assessmentConstructId], references: [scoringRunId, assessmentConstructId], onDelete: Restrict)
+  normSet                    AssessmentNormSet                     @relation(fields: [normSetId], references: [id], onDelete: Restrict)
+  normGroup                  AssessmentNormGroup                   @relation(fields: [normGroupId], references: [id], onDelete: Restrict)
+  constructNormTable         AssessmentConstructNormTable          @relation(fields: [constructNormTableId], references: [id], onDelete: Restrict)
+  normLookupRow              AssessmentNormLookupRow               @relation(fields: [normLookupRowId], references: [id], onDelete: Restrict)
   interpretationApplications AssessmentInterpretationApplication[]
 
   @@unique([scoringRunId, assessmentConstructId, normGroupId])
@@ -629,7 +623,6 @@ model AssessmentNormApplication {
   @@index([appliedAt])
   @@map("assessment_norm_applications")
 }
-
 
 /// Versioned interpretation-rule package for one assessment version.
 /// Rules must be supported by validated psychometric documentation before publication.
@@ -659,22 +652,22 @@ model AssessmentInterpretationSet {
 /// One versioned interpretation rule for a construct.
 /// outputData is intentionally generic; no interpretation content is seeded by migration.
 model AssessmentInterpretationRule {
-  id                    String                         @id @default(uuid()) @db.Uuid
-  interpretationSetId   String                         @map("interpretation_set_id") @db.Uuid
-  assessmentConstructId String                         @map("assessment_construct_id") @db.Uuid
-  code                  String                         @db.VarChar(120)
+  id                    String                                @id @default(uuid()) @db.Uuid
+  interpretationSetId   String                                @map("interpretation_set_id") @db.Uuid
+  assessmentConstructId String                                @map("assessment_construct_id") @db.Uuid
+  code                  String                                @db.VarChar(120)
   metric                AssessmentInterpretationMetric
-  lowerBound            Decimal?                       @map("lower_bound") @db.Decimal(20, 8)
-  upperBound            Decimal?                       @map("upper_bound") @db.Decimal(20, 8)
-  lowerInclusive        Boolean                        @default(true) @map("lower_inclusive")
-  upperInclusive        Boolean                        @default(true) @map("upper_inclusive")
-  priority              Int                            @default(0)
-  outputData            Json?                          @map("output_data") @db.JsonB
-  metadata              Json?                          @db.JsonB
-  createdAt             DateTime                       @default(now()) @map("created_at")
-  updatedAt             DateTime                       @updatedAt @map("updated_at")
-  interpretationSet     AssessmentInterpretationSet    @relation(fields: [interpretationSetId], references: [id], onDelete: Restrict)
-  assessmentConstruct   AssessmentConstruct            @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+  lowerBound            Decimal?                              @map("lower_bound") @db.Decimal(20, 8)
+  upperBound            Decimal?                              @map("upper_bound") @db.Decimal(20, 8)
+  lowerInclusive        Boolean                               @default(true) @map("lower_inclusive")
+  upperInclusive        Boolean                               @default(true) @map("upper_inclusive")
+  priority              Int                                   @default(0)
+  outputData            Json?                                 @map("output_data") @db.JsonB
+  metadata              Json?                                 @db.JsonB
+  createdAt             DateTime                              @default(now()) @map("created_at")
+  updatedAt             DateTime                              @updatedAt @map("updated_at")
+  interpretationSet     AssessmentInterpretationSet           @relation(fields: [interpretationSetId], references: [id], onDelete: Restrict)
+  assessmentConstruct   AssessmentConstruct                   @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
   applications          AssessmentInterpretationApplication[]
 
   @@unique([interpretationSetId, code])
@@ -686,15 +679,15 @@ model AssessmentInterpretationRule {
 /// Immutable record showing exactly which interpretation rule was applied
 /// to one normalized construct result.
 model AssessmentInterpretationApplication {
-  id                    String                       @id @default(uuid()) @db.Uuid
-  normApplicationId     String                       @map("norm_application_id") @db.Uuid
-  interpretationRuleId  String                       @map("interpretation_rule_id") @db.Uuid
-  metricValue           Decimal                      @map("metric_value") @db.Decimal(20, 8)
-  outputData            Json?                        @map("output_data") @db.JsonB
-  appliedAt             DateTime                     @default(now()) @map("applied_at")
-  metadata              Json?                        @db.JsonB
-  normApplication       AssessmentNormApplication    @relation(fields: [normApplicationId], references: [id], onDelete: Restrict)
-  interpretationRule    AssessmentInterpretationRule @relation(fields: [interpretationRuleId], references: [id], onDelete: Restrict)
+  id                   String                       @id @default(uuid()) @db.Uuid
+  normApplicationId    String                       @map("norm_application_id") @db.Uuid
+  interpretationRuleId String                       @map("interpretation_rule_id") @db.Uuid
+  metricValue          Decimal                      @map("metric_value") @db.Decimal(20, 8)
+  outputData           Json?                        @map("output_data") @db.JsonB
+  appliedAt            DateTime                     @default(now()) @map("applied_at")
+  metadata             Json?                        @db.JsonB
+  normApplication      AssessmentNormApplication    @relation(fields: [normApplicationId], references: [id], onDelete: Restrict)
+  interpretationRule   AssessmentInterpretationRule @relation(fields: [interpretationRuleId], references: [id], onDelete: Restrict)
 
   @@unique([normApplicationId, interpretationRuleId])
   @@index([interpretationRuleId])
@@ -705,18 +698,18 @@ model AssessmentInterpretationApplication {
 /// Immutable structured data snapshot used as the input to a later report renderer.
 /// This is report-data provenance, not a rendered PDF/HTML report.
 model AssessmentReportDataSnapshot {
-  id                    String                      @id @default(uuid()) @db.Uuid
-  scoringRunId          String                      @map("scoring_run_id") @db.Uuid
-  assessmentVersionId   String                      @map("assessment_version_id") @db.Uuid
-  interpretationSetId   String?                     @map("interpretation_set_id") @db.Uuid
-  reportVersion         String                      @map("report_version") @db.VarChar(60)
-  inputHash             String                      @map("input_hash") @db.Char(64)
-  payload               Json                        @db.JsonB
-  generatedAt           DateTime                    @default(now()) @map("generated_at")
-  metadata              Json?                       @db.JsonB
-  scoringRun            AssessmentScoringRun        @relation(fields: [scoringRunId], references: [id], onDelete: Restrict)
-  assessmentVersion     AssessmentVersion           @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
-  interpretationSet     AssessmentInterpretationSet? @relation(fields: [interpretationSetId], references: [id], onDelete: Restrict)
+  id                  String                       @id @default(uuid()) @db.Uuid
+  scoringRunId        String                       @map("scoring_run_id") @db.Uuid
+  assessmentVersionId String                       @map("assessment_version_id") @db.Uuid
+  interpretationSetId String?                      @map("interpretation_set_id") @db.Uuid
+  reportVersion       String                       @map("report_version") @db.VarChar(60)
+  inputHash           String                       @map("input_hash") @db.Char(64)
+  payload             Json                         @db.JsonB
+  generatedAt         DateTime                     @default(now()) @map("generated_at")
+  metadata            Json?                        @db.JsonB
+  scoringRun          AssessmentScoringRun         @relation(fields: [scoringRunId], references: [id], onDelete: Restrict)
+  assessmentVersion   AssessmentVersion            @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  interpretationSet   AssessmentInterpretationSet? @relation(fields: [interpretationSetId], references: [id], onDelete: Restrict)
 
   @@unique([scoringRunId, reportVersion, inputHash])
   @@index([assessmentVersionId, reportVersion])
