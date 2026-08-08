@@ -15,6 +15,7 @@ import {
 } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
+import { AssessmentScoringService } from "./assessment-scoring.service";
 import type { SaveAssessmentResponseDto } from "./assessment.types";
 
 @Injectable()
@@ -22,6 +23,8 @@ export class AssessmentService {
   public constructor(
     @Inject(DATABASE_PRISMA)
     private readonly prisma: PrismaClient,
+    @Inject(AssessmentScoringService)
+    private readonly scoring: AssessmentScoringService,
   ) {}
 
   public async listAssignments(context: AuthContext) {
@@ -402,7 +405,7 @@ export class AssessmentService {
   public async submitAttempt(context: AuthContext, attemptId: string) {
     const organizationId = this.requireOrganization(context);
 
-    return this.prisma.$transaction(async (tx) => {
+    const submission = await this.prisma.$transaction(async (tx) => {
       const attempt = await tx.assessmentAttempt.findFirst({
         where: {
           id: attemptId,
@@ -500,6 +503,10 @@ export class AssessmentService {
         submittedAt,
       };
     });
+
+    await this.scoring.scoreSubmittedAttempt(attemptId);
+
+    return submission;
   }
 
   private requireOrganization(context: AuthContext): string {

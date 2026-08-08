@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../auth/auth.types";
+import type { AssessmentScoringService } from "./assessment-scoring.service";
 import { AssessmentService } from "./assessment.service";
 
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -63,7 +64,12 @@ describe("AssessmentService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prisma = createPrisma();
-    service = new AssessmentService(prisma as unknown as PrismaClient);
+    service = new AssessmentService(
+      prisma as unknown as PrismaClient,
+      {
+        scoreSubmittedAttempt: vi.fn().mockResolvedValue({}),
+      } as unknown as AssessmentScoringService,
+    );
   });
 
   it("requires organization scope", async () => {

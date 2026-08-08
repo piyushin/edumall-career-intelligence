@@ -90,3 +90,5 @@ export * from "./credential-lifecycle";
 export * from "./password";
 export * from "./sessions";
 export { hashOpaqueToken } from "./tokens";
+
+export * from "./scoring";
