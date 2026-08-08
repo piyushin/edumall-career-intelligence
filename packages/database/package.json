@@ -12,7 +12,7 @@
     "db:migrate:local": "prisma migrate dev --schema prisma/schema.prisma",
     "lint": "eslint . --max-warnings=0",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
-    "test": "pnpm prisma:generate && vitest run",
+    "test": "vitest run",
     "test:integration": "pnpm prisma:generate && pnpm exec tsx src/run-database-integration-tests.ts",
     "test:unit": "pnpm prisma:generate && vitest run --exclude src/integration.test.ts",
     "type-check": "tsc -p tsconfig.json --noEmit"

@@ -4,7 +4,7 @@ import { createPrismaClient } from "@edumall/database";
 import { APP_CONFIG } from "../config/app-config.token";
 
 @Injectable()
-export class AuthPrismaProvider implements OnModuleDestroy {
+export class DatabasePrismaProvider implements OnModuleDestroy {
   public readonly client: ReturnType<typeof createPrismaClient>;
 
   public constructor(@Inject(APP_CONFIG) config: AppConfig) {

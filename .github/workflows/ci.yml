@@ -6,11 +6,27 @@ on:
     branches:
       - main
       - "phase-0/**"
+      - "phase-2/**"
 
 jobs:
   validate:
     name: Validate
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: edumall
+          POSTGRES_PASSWORD: ci-integration
+          POSTGRES_DB: edumall_integration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edumall -d edumall_integration"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout
@@ -34,6 +50,13 @@ jobs:
         run: pnpm prisma:generate
         env:
           DATABASE_URL: postgresql://edumall:ci-placeholder@localhost:5432/edumall_ci?schema=public
+
+      - name: PostgreSQL integration tests
+        run: pnpm --filter @edumall/database test:integration
+        env:
+          NODE_ENV: test
+          RUN_DATABASE_INTEGRATION_TESTS: "true"
+          DATABASE_INTEGRATION_URL: postgresql://edumall:ci-integration@localhost:5432/edumall_integration?schema=public
 
       - name: Format check
         run: pnpm format:check

@@ -17,7 +17,7 @@ import {
 } from "@edumall/database";
 import { SessionScope, type PrismaClient, type User } from "@prisma/client";
 import { APP_CONFIG } from "../config/app-config.token";
-import { AUTH_PRISMA } from "./auth.tokens";
+import { DATABASE_PRISMA } from "../database/database.tokens";
 import type { AuthContext, AuthenticationUser, LoginResult, SafeUser } from "./auth.types";
 
 interface RequestMetadata {
@@ -31,7 +31,7 @@ const DUMMY_PASSWORD_HASH =
 @Injectable()
 export class AuthService {
   public constructor(
-    @Inject(AUTH_PRISMA) private readonly prisma: PrismaClient,
+    @Inject(DATABASE_PRISMA) private readonly prisma: PrismaClient,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
