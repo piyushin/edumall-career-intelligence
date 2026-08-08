@@ -235,6 +235,8 @@ describe.skipIf(!runIntegrationTests)("Phase 2 assessment database integration",
       prisma.assessmentVersion.update({
         where: { id: version.id },
         data: {
+          status: AssessmentVersionStatus.RETIRED,
+          retiredAt: new Date(),
           title: "Mutated published assessment",
         },
       }),
