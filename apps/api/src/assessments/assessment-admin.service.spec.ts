@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
-import { MembershipRole, Prisma, type PrismaClient } from "@prisma/client";
+import { AssessmentVersionStatus, MembershipRole, Prisma, type PrismaClient } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../auth/auth.types";
 import { AssessmentAdminService } from "./assessment-admin.service";
@@ -32,6 +32,8 @@ function createPrisma() {
     },
     assessmentVersion: {
       create: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
     },
   };
 }
@@ -232,5 +234,141 @@ describe("AssessmentAdminService", () => {
         code: "CAREER_TEST",
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+  it("allows editing an owned DRAFT assessment version", async () => {
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: "12121212-1212-4121-8121-121212121212",
+      assessmentDefinitionId: "13131313-1313-4131-8131-131313131313",
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentVersion.update.mockResolvedValue({
+      id: "12121212-1212-4121-8121-121212121212",
+      status: AssessmentVersionStatus.DRAFT,
+      title: "Updated Assessment",
+    });
+
+    await service.updateDraftVersion(
+      organizationContext,
+      "13131313-1313-4131-8131-131313131313",
+      "12121212-1212-4121-8121-121212121212",
+      {
+        title: " Updated Assessment ",
+        description: " Updated description ",
+        instructions: " ",
+      },
+    );
+
+    expect(prisma.assessmentVersion.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "12121212-1212-4121-8121-121212121212",
+        },
+        data: expect.objectContaining({
+          title: "Updated Assessment",
+          description: "Updated description",
+          instructions: null,
+        }),
+      }),
+    );
+  });
+
+  it("blocks editing a PUBLISHED assessment version", async () => {
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: "14141414-1414-4141-8141-141414141414",
+      assessmentDefinitionId: "15151515-1515-4151-8151-151515151515",
+      status: AssessmentVersionStatus.PUBLISHED,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    await expect(
+      service.updateDraftVersion(
+        organizationContext,
+        "15151515-1515-4151-8151-151515151515",
+        "14141414-1414-4141-8141-141414141414",
+        {
+          title: "Must not change",
+        },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
+  });
+
+  it("blocks editing a RETIRED assessment version", async () => {
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: "16161616-1616-4161-8161-161616161616",
+      assessmentDefinitionId: "17171717-1717-4171-8171-171717171717",
+      status: AssessmentVersionStatus.RETIRED,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    await expect(
+      service.updateDraftVersion(
+        organizationContext,
+        "17171717-1717-4171-8171-171717171717",
+        "16161616-1616-4161-8161-161616161616",
+        {
+          title: "Must not change",
+        },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
+  });
+
+  it("blocks editing a DRAFT version owned by another organization", async () => {
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: "18181818-1818-4181-8181-181818181818",
+      assessmentDefinitionId: "19191919-1919-4191-8191-191919191919",
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId: "20202020-2020-4202-8202-202020202020",
+      },
+    });
+
+    await expect(
+      service.updateDraftVersion(
+        organizationContext,
+        "19191919-1919-4191-8191-191919191919",
+        "18181818-1818-4181-8181-181818181818",
+        {
+          title: "Unauthorized edit",
+        },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
+  });
+
+  it("returns not found when the version does not belong to the requested definition", async () => {
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: "21212121-2121-4212-8212-212121212121",
+      assessmentDefinitionId: "22222222-2222-4222-8222-222222222222",
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    await expect(
+      service.updateDraftVersion(
+        organizationContext,
+        "23232323-2323-4232-8232-232323232323",
+        "21212121-2121-4212-8212-212121212121",
+        {
+          title: "Wrong definition",
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
   });
 });

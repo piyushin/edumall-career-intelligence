@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   UseGuards,
 } from "@nestjs/common";
 import { MembershipRole } from "@prisma/client";
@@ -20,6 +21,7 @@ import { AssessmentAdminService } from "./assessment-admin.service";
 import {
   CreateAssessmentDefinitionDto,
   CreateAssessmentVersionDto,
+  UpdateAssessmentVersionDto,
 } from "./assessment-admin.types";
 
 @Controller("admin/assessments")
@@ -65,5 +67,16 @@ export class AssessmentAdminController {
     @Body() body: CreateAssessmentVersionDto,
   ) {
     return this.assessments.createDraftVersion(context, definitionId, body);
+  }
+  @Put(":definitionId/versions/:versionId")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public updateVersion(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("definitionId", new ParseUUIDPipe()) definitionId: string,
+    @Param("versionId", new ParseUUIDPipe()) versionId: string,
+    @Body() body: UpdateAssessmentVersionDto,
+  ) {
+    return this.assessments.updateDraftVersion(context, definitionId, versionId, body);
   }
 }

@@ -11,6 +11,7 @@ import { DATABASE_PRISMA } from "../database/database.tokens";
 import type {
   CreateAssessmentDefinitionDto,
   CreateAssessmentVersionDto,
+  UpdateAssessmentVersionDto,
 } from "./assessment-admin.types";
 
 @Injectable()
@@ -209,6 +210,90 @@ export class AssessmentAdminService {
 
       throw error;
     }
+  }
+
+  public async updateDraftVersion(
+    context: AuthContext,
+    definitionId: string,
+    versionId: string,
+    body: UpdateAssessmentVersionDto,
+  ) {
+    const version = await this.prisma.assessmentVersion.findUnique({
+      where: {
+        id: versionId,
+      },
+      select: {
+        id: true,
+        assessmentDefinitionId: true,
+        status: true,
+        assessmentDefinition: {
+          select: {
+            organizationId: true,
+          },
+        },
+      },
+    });
+
+    if (!version || version.assessmentDefinitionId !== definitionId) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_VERSION_NOT_FOUND",
+        message: "Assessment version not found.",
+      });
+    }
+
+    this.assertWriteAccess(context, version.assessmentDefinition.organizationId);
+
+    if (version.status !== AssessmentVersionStatus.DRAFT) {
+      throw new ConflictException({
+        code: "ASSESSMENT_VERSION_NOT_DRAFT",
+        message: "Only draft assessment versions may be edited.",
+      });
+    }
+
+    const data: Prisma.AssessmentVersionUpdateInput = {};
+
+    if (body.title !== undefined) data.title = body.title.trim();
+    if (body.edition !== undefined) data.edition = body.edition.trim();
+    if (body.form !== undefined) data.form = body.form.trim();
+    if (body.language !== undefined) data.language = body.language.trim();
+    if (body.scoringVersion !== undefined) {
+      data.scoringVersion = body.scoringVersion.trim();
+    }
+    if (body.normVersion !== undefined) {
+      data.normVersion = body.normVersion.trim();
+    }
+    if (body.reportVersion !== undefined) {
+      data.reportVersion = body.reportVersion.trim();
+    }
+    if (body.description !== undefined) {
+      data.description = body.description.trim() || null;
+    }
+    if (body.instructions !== undefined) {
+      data.instructions = body.instructions.trim() || null;
+    }
+
+    return this.prisma.assessmentVersion.update({
+      where: {
+        id: version.id,
+      },
+      data,
+      select: {
+        id: true,
+        assessmentDefinitionId: true,
+        versionNumber: true,
+        status: true,
+        title: true,
+        edition: true,
+        form: true,
+        language: true,
+        scoringVersion: true,
+        normVersion: true,
+        reportVersion: true,
+        description: true,
+        instructions: true,
+        updatedAt: true,
+      },
+    });
   }
 
   private readScope(context: AuthContext) {

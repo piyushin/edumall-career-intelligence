@@ -57,3 +57,57 @@ export class CreateAssessmentVersionDto {
   @MaxLength(10000)
   public instructions?: string;
 }
+
+export class UpdateAssessmentVersionDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  public title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  public edition?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  public form?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(20)
+  public language?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  public scoringVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  public normVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  public reportVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  public description?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  public instructions?: string;
+}
