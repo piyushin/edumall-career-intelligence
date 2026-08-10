@@ -1,4 +1,6 @@
 import { Module } from "@nestjs/common";
+import { AssessmentAssignmentAdminController } from "./assessment-assignment-admin.controller";
+import { AssessmentAssignmentAdminService } from "./assessment-assignment-admin.service";
 import { AssessmentAdminController } from "./assessment-admin.controller";
 import { AssessmentAdminService } from "./assessment-admin.service";
 import { AssessmentController } from "./assessment.controller";
@@ -9,9 +11,14 @@ import { AssessmentScoringService } from "./assessment-scoring.service";
 import { AssessmentService } from "./assessment.service";
 
 @Module({
-  controllers: [AssessmentController, AssessmentAdminController],
+  controllers: [
+    AssessmentController,
+    AssessmentAdminController,
+    AssessmentAssignmentAdminController,
+  ],
   providers: [
     AssessmentAdminService,
+    AssessmentAssignmentAdminService,
     AssessmentInterpretationService,
     AssessmentNormService,
     AssessmentReportDataService,

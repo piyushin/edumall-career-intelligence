@@ -83,42 +83,49 @@ export class UpdateAssessmentVersionDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @Matches(/\\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(200)
   public title?: string;
 
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @Matches(/\\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(60)
   public edition?: string;
 
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @Matches(/\\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(60)
   public form?: string;
 
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @Matches(/\\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(20)
   public language?: string;
 
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @Matches(/\\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(60)
   public scoringVersion?: string;
 
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @Matches(/\\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(60)
   public normVersion?: string;
 
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @Matches(/\\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(60)
   public reportVersion?: string;
 
@@ -136,6 +143,7 @@ export class UpdateAssessmentVersionDto {
 export class CreateAssessmentConstructDto {
   @IsString()
   @MinLength(1)
+  @Matches(/\\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(120)
   public code!: string;
 
@@ -158,6 +166,7 @@ export class CreateAssessmentConstructDto {
 export class CreateAssessmentItemDto {
   @IsString()
   @MinLength(1)
+  @Matches(/\\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(120)
   public code!: string;
 
@@ -187,6 +196,7 @@ export class CreateAssessmentItemDto {
 export class CreateAssessmentItemOptionDto {
   @IsString()
   @MinLength(1)
+  @Matches(/\\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(120)
   public code!: string;
 
