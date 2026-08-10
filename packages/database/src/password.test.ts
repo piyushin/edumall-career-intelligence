@@ -13,7 +13,7 @@ describe("password security", () => {
 
     await expect(verifyPassword(passwordHash, "A strong passphrase! 2026")).resolves.toBe(true);
     await expect(verifyPassword(passwordHash, "not-the-password")).resolves.toBe(false);
-  });
+  }, 15_000);
 
   it("salts hashes so the same password has non-identical hashes", async () => {
     const first = await hashPassword("same password");

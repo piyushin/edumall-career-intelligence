@@ -5,6 +5,10 @@ export interface ApiErrorBody {
   message?: string;
 }
 
+interface CsrfResponse {
+  csrfToken: string;
+}
+
 export class ApiError extends Error {
   public readonly status: number;
   public readonly code?: string;
@@ -13,21 +17,11 @@ export class ApiError extends Error {
     super(body?.message ?? `Request failed with status ${status}`);
     this.name = "ApiError";
     this.status = status;
+
     if (body?.code !== undefined) {
       this.code = body.code;
     }
   }
-}
-
-function readCookie(name: string): string | undefined {
-  if (typeof document === "undefined") {
-    return undefined;
-  }
-
-  const prefix = `${encodeURIComponent(name)}=`;
-  const value = document.cookie.split("; ").find((entry) => entry.startsWith(prefix));
-
-  return value ? decodeURIComponent(value.slice(prefix.length)) : undefined;
 }
 
 async function parseError(response: Response): Promise<ApiErrorBody | undefined> {
@@ -36,6 +30,47 @@ async function parseError(response: Response): Promise<ApiErrorBody | undefined>
   } catch {
     return undefined;
   }
+}
+
+async function fetchCsrfToken(): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/auth/csrf`, {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+    headers: {
+      accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await parseError(response));
+  }
+
+  let body: unknown;
+
+  try {
+    body = await response.json();
+  } catch {
+    throw new ApiError(502, {
+      code: "CSRF_TOKEN_UNAVAILABLE",
+      message: "Request protection could not be established.",
+    });
+  }
+
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !("csrfToken" in body) ||
+    typeof (body as CsrfResponse).csrfToken !== "string" ||
+    !(body as CsrfResponse).csrfToken.trim()
+  ) {
+    throw new ApiError(502, {
+      code: "CSRF_TOKEN_UNAVAILABLE",
+      message: "Request protection could not be established.",
+    });
+  }
+
+  return (body as CsrfResponse).csrfToken;
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -48,32 +83,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   const method = (init.method ?? "GET").toUpperCase();
 
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
-    let csrfCookie = readCookie("edumall_csrf");
-
-    if (!csrfCookie) {
-      const csrfResponse = await fetch(`${API_BASE_URL}/auth/csrf`, {
-        credentials: "include",
-        cache: "no-store",
-      });
-
-      if (!csrfResponse.ok) {
-        throw new ApiError(csrfResponse.status, await parseError(csrfResponse));
-      }
-
-      csrfCookie = readCookie("edumall_csrf");
-    }
-
-    if (!csrfCookie) {
-      throw new Error("CSRF token could not be established.");
-    }
-
-    const token = csrfCookie.split(".")[0];
-
-    if (!token) {
-      throw new Error("CSRF token cookie is malformed.");
-    }
-
-    headers.set("x-csrf-token", token);
+    headers.set("x-csrf-token", await fetchCsrfToken());
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
