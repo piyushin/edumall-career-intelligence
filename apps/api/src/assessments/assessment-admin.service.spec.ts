@@ -44,12 +44,21 @@ function createPrisma() {
     },
     assessmentConstruct: {
       create: vi.fn(),
+      findFirst: vi.fn(),
     },
     assessmentItem: {
       create: vi.fn(),
       findFirst: vi.fn(),
     },
     assessmentItemOption: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+    },
+    assessmentItemConstruct: {
+      create: vi.fn(),
+      findUnique: vi.fn(),
+    },
+    assessmentOptionScore: {
       create: vi.fn(),
     },
   };
@@ -683,6 +692,331 @@ describe("AssessmentAdminService", () => {
         code: "APTITUDE",
         name: "Aptitude",
         orderIndex: 0,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("creates an item-to-construct link inside the same DRAFT version", async () => {
+    const definitionId = "48484848-4848-4484-8484-484848484848";
+    const versionId = "49494949-4949-4494-8494-494949494949";
+    const itemId = "50505050-5050-4505-8505-505050505050";
+    const constructId = "51515151-5151-4515-8515-515151515151";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentItem.findFirst.mockResolvedValue({
+      id: itemId,
+    });
+
+    prisma.assessmentConstruct.findFirst.mockResolvedValue({
+      id: constructId,
+    });
+
+    prisma.assessmentItemConstruct.create.mockResolvedValue({
+      assessmentItemId: itemId,
+      assessmentConstructId: constructId,
+      weight: new Prisma.Decimal("1.5"),
+      reverseScored: false,
+    });
+
+    await service.createItemConstructLink(organizationContext, definitionId, versionId, itemId, {
+      constructId,
+      weight: 1.5,
+      reverseScored: false,
+    });
+
+    expect(prisma.assessmentConstruct.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: constructId,
+        assessmentVersionId: versionId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    expect(prisma.assessmentItemConstruct.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          assessmentItemId: itemId,
+          assessmentConstructId: constructId,
+          weight: 1.5,
+          reverseScored: false,
+        },
+      }),
+    );
+  });
+
+  it("rejects an item-to-construct link when the construct is outside the version", async () => {
+    const definitionId = "52525252-5252-4525-8525-525252525252";
+    const versionId = "53535353-5353-4535-8535-535353535353";
+    const itemId = "54545454-5454-4545-8545-545454545454";
+    const constructId = "55555555-5555-4555-8555-555555555556";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentItem.findFirst.mockResolvedValue({
+      id: itemId,
+    });
+
+    prisma.assessmentConstruct.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createItemConstructLink(organizationContext, definitionId, versionId, itemId, {
+        constructId,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.assessmentItemConstruct.create).not.toHaveBeenCalled();
+  });
+
+  it("creates an explicit option score only when the construct link exists", async () => {
+    const definitionId = "56565656-5656-4565-8565-565656565656";
+    const versionId = "57575757-5757-4575-8575-575757575757";
+    const itemId = "58585858-5858-4585-8585-585858585858";
+    const optionId = "59595959-5959-4595-8595-595959595959";
+    const constructId = "60606060-6060-4606-8606-606060606060";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentItem.findFirst.mockResolvedValue({
+      id: itemId,
+    });
+
+    prisma.assessmentItemOption.findFirst.mockResolvedValue({
+      id: optionId,
+    });
+
+    prisma.assessmentItemConstruct.findUnique.mockResolvedValue({
+      assessmentItemId: itemId,
+      assessmentConstructId: constructId,
+    });
+
+    prisma.assessmentOptionScore.create.mockResolvedValue({
+      assessmentItemOptionId: optionId,
+      assessmentConstructId: constructId,
+      score: new Prisma.Decimal("2.5"),
+    });
+
+    await service.createOptionScore(
+      organizationContext,
+      definitionId,
+      versionId,
+      itemId,
+      optionId,
+      {
+        constructId,
+        score: 2.5,
+      },
+    );
+
+    expect(prisma.assessmentOptionScore.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          assessmentItemOptionId: optionId,
+          assessmentConstructId: constructId,
+          score: 2.5,
+        },
+      }),
+    );
+  });
+
+  it("rejects an explicit option score when the item-to-construct link is missing", async () => {
+    const definitionId = "61616161-6161-4616-8616-616161616161";
+    const versionId = "62626262-6262-4626-8626-626262626262";
+    const itemId = "63636363-6363-4636-8636-636363636363";
+    const optionId = "64646464-6464-4646-8646-646464646464";
+    const constructId = "65656565-6565-4656-8656-656565656565";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentItem.findFirst.mockResolvedValue({
+      id: itemId,
+    });
+
+    prisma.assessmentItemOption.findFirst.mockResolvedValue({
+      id: optionId,
+    });
+
+    prisma.assessmentItemConstruct.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.createOptionScore(organizationContext, definitionId, versionId, itemId, optionId, {
+        constructId,
+        score: 1,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.assessmentOptionScore.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an option score when the option does not belong to the requested item", async () => {
+    const definitionId = "66666666-6666-4666-8666-666666666667";
+    const versionId = "67676767-6767-4676-8676-676767676767";
+    const itemId = "68686868-6868-4686-8686-686868686868";
+    const optionId = "69696969-6969-4696-8696-696969696969";
+    const constructId = "70707070-7070-4707-8707-707070707070";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentItem.findFirst.mockResolvedValue({
+      id: itemId,
+    });
+
+    prisma.assessmentItemOption.findFirst.mockResolvedValue(null);
+
+    prisma.assessmentItemConstruct.findUnique.mockResolvedValue({
+      assessmentItemId: itemId,
+      assessmentConstructId: constructId,
+    });
+
+    await expect(
+      service.createOptionScore(organizationContext, definitionId, versionId, itemId, optionId, {
+        constructId,
+        score: 1,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.assessmentOptionScore.create).not.toHaveBeenCalled();
+  });
+
+  it("blocks scoring configuration changes on a PUBLISHED version", async () => {
+    const definitionId = "71717171-7171-4717-8717-717171717171";
+    const versionId = "72727272-7272-4727-8727-727272727272";
+    const itemId = "73737373-7373-4737-8737-737373737373";
+    const constructId = "74747474-7474-4747-8747-747474747474";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.PUBLISHED,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    await expect(
+      service.createItemConstructLink(organizationContext, definitionId, versionId, itemId, {
+        constructId,
+        weight: 1,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.assessmentItemConstruct.create).not.toHaveBeenCalled();
+  });
+
+  it("maps duplicate item-to-construct links to a safe conflict", async () => {
+    const definitionId = "75757575-7575-4757-8757-757575757575";
+    const versionId = "76767676-7676-4767-8767-767676767676";
+    const itemId = "77777777-7777-4777-8777-777777777778";
+    const constructId = "78787878-7878-4787-8787-787878787878";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentItem.findFirst.mockResolvedValue({
+      id: itemId,
+    });
+
+    prisma.assessmentConstruct.findFirst.mockResolvedValue({
+      id: constructId,
+    });
+
+    prisma.assessmentItemConstruct.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("duplicate", {
+        code: "P2002",
+        clientVersion: "6.19.3",
+      }),
+    );
+
+    await expect(
+      service.createItemConstructLink(organizationContext, definitionId, versionId, itemId, {
+        constructId,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("maps duplicate option scores to a safe conflict", async () => {
+    const definitionId = "79797979-7979-4797-8797-797979797979";
+    const versionId = "80808080-8080-4808-8808-808080808080";
+    const itemId = "81818181-8181-4818-8818-818181818181";
+    const optionId = "82828282-8282-4828-8828-828282828282";
+    const constructId = "83838383-8383-4838-8838-838383838383";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentItem.findFirst.mockResolvedValue({
+      id: itemId,
+    });
+
+    prisma.assessmentItemOption.findFirst.mockResolvedValue({
+      id: optionId,
+    });
+
+    prisma.assessmentItemConstruct.findUnique.mockResolvedValue({
+      assessmentItemId: itemId,
+      assessmentConstructId: constructId,
+    });
+
+    prisma.assessmentOptionScore.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("duplicate", {
+        code: "P2002",
+        clientVersion: "6.19.3",
+      }),
+    );
+
+    await expect(
+      service.createOptionScore(organizationContext, definitionId, versionId, itemId, optionId, {
+        constructId,
+        score: 1,
       }),
     ).rejects.toBeInstanceOf(ConflictException);
   });

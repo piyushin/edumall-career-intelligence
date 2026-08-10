@@ -3,6 +3,8 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsNumber,
+  IsUUID,
   IsOptional,
   IsString,
   MaxLength,
@@ -185,4 +187,25 @@ export class CreateAssessmentItemOptionDto {
   @IsInt()
   @Min(0)
   public orderIndex!: number;
+}
+
+export class CreateAssessmentItemConstructDto {
+  @IsUUID()
+  public constructId!: string;
+
+  @IsOptional()
+  @IsNumber()
+  public weight?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  public reverseScored?: boolean;
+}
+
+export class CreateAssessmentOptionScoreDto {
+  @IsUUID()
+  public constructId!: string;
+
+  @IsNumber()
+  public score!: number;
 }

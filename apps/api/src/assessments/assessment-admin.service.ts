@@ -12,7 +12,9 @@ import type {
   CreateAssessmentConstructDto,
   CreateAssessmentDefinitionDto,
   CreateAssessmentItemDto,
+  CreateAssessmentItemConstructDto,
   CreateAssessmentItemOptionDto,
+  CreateAssessmentOptionScoreDto,
   CreateAssessmentVersionDto,
   UpdateAssessmentVersionDto,
 } from "./assessment-admin.types";
@@ -481,6 +483,167 @@ export class AssessmentAdminService {
         throw new ConflictException({
           code: "ASSESSMENT_ITEM_OPTION_CONFLICT",
           message: "An option with this code or order already exists for the assessment item.",
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  public async createItemConstructLink(
+    context: AuthContext,
+    definitionId: string,
+    versionId: string,
+    itemId: string,
+    body: CreateAssessmentItemConstructDto,
+  ) {
+    await this.requireWritableDraftVersion(context, definitionId, versionId);
+
+    const [item, construct] = await Promise.all([
+      this.prisma.assessmentItem.findFirst({
+        where: {
+          id: itemId,
+          assessmentVersionId: versionId,
+        },
+        select: {
+          id: true,
+        },
+      }),
+      this.prisma.assessmentConstruct.findFirst({
+        where: {
+          id: body.constructId,
+          assessmentVersionId: versionId,
+        },
+        select: {
+          id: true,
+        },
+      }),
+    ]);
+
+    if (!item) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_ITEM_NOT_FOUND",
+        message: "Assessment item not found.",
+      });
+    }
+
+    if (!construct) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_CONSTRUCT_NOT_FOUND",
+        message: "Assessment construct not found.",
+      });
+    }
+
+    try {
+      return await this.prisma.assessmentItemConstruct.create({
+        data: {
+          assessmentItemId: item.id,
+          assessmentConstructId: construct.id,
+          weight: body.weight ?? 1,
+          reverseScored: body.reverseScored ?? false,
+        },
+        select: {
+          assessmentItemId: true,
+          assessmentConstructId: true,
+          weight: true,
+          reverseScored: true,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException({
+          code: "ASSESSMENT_ITEM_CONSTRUCT_CONFLICT",
+          message: "This item is already linked to the assessment construct.",
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  public async createOptionScore(
+    context: AuthContext,
+    definitionId: string,
+    versionId: string,
+    itemId: string,
+    optionId: string,
+    body: CreateAssessmentOptionScoreDto,
+  ) {
+    await this.requireWritableDraftVersion(context, definitionId, versionId);
+
+    const [item, option, constructLink] = await Promise.all([
+      this.prisma.assessmentItem.findFirst({
+        where: {
+          id: itemId,
+          assessmentVersionId: versionId,
+        },
+        select: {
+          id: true,
+        },
+      }),
+      this.prisma.assessmentItemOption.findFirst({
+        where: {
+          id: optionId,
+          assessmentItemId: itemId,
+        },
+        select: {
+          id: true,
+        },
+      }),
+      this.prisma.assessmentItemConstruct.findUnique({
+        where: {
+          assessmentItemId_assessmentConstructId: {
+            assessmentItemId: itemId,
+            assessmentConstructId: body.constructId,
+          },
+        },
+        select: {
+          assessmentItemId: true,
+          assessmentConstructId: true,
+        },
+      }),
+    ]);
+
+    if (!item) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_ITEM_NOT_FOUND",
+        message: "Assessment item not found.",
+      });
+    }
+
+    if (!option) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_ITEM_OPTION_NOT_FOUND",
+        message: "Assessment item option not found.",
+      });
+    }
+
+    if (!constructLink) {
+      throw new ConflictException({
+        code: "ASSESSMENT_OPTION_SCORE_REQUIRES_CONSTRUCT_LINK",
+        message:
+          "The assessment item must be linked to the construct before an option score can be defined.",
+      });
+    }
+
+    try {
+      return await this.prisma.assessmentOptionScore.create({
+        data: {
+          assessmentItemOptionId: option.id,
+          assessmentConstructId: body.constructId,
+          score: body.score,
+        },
+        select: {
+          assessmentItemOptionId: true,
+          assessmentConstructId: true,
+          score: true,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException({
+          code: "ASSESSMENT_OPTION_SCORE_CONFLICT",
+          message: "A score for this option and construct has already been defined.",
         });
       }
 

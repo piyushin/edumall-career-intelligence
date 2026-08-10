@@ -22,7 +22,9 @@ import {
   CreateAssessmentConstructDto,
   CreateAssessmentDefinitionDto,
   CreateAssessmentItemDto,
+  CreateAssessmentItemConstructDto,
   CreateAssessmentItemOptionDto,
+  CreateAssessmentOptionScoreDto,
   CreateAssessmentVersionDto,
   UpdateAssessmentVersionDto,
 } from "./assessment-admin.types";
@@ -127,5 +129,39 @@ export class AssessmentAdminController {
     @Body() body: CreateAssessmentItemOptionDto,
   ) {
     return this.assessments.createItemOption(context, definitionId, versionId, itemId, body);
+  }
+
+  @Post(":definitionId/versions/:versionId/items/:itemId/constructs")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public createItemConstructLink(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("definitionId", new ParseUUIDPipe()) definitionId: string,
+    @Param("versionId", new ParseUUIDPipe()) versionId: string,
+    @Param("itemId", new ParseUUIDPipe()) itemId: string,
+    @Body() body: CreateAssessmentItemConstructDto,
+  ) {
+    return this.assessments.createItemConstructLink(context, definitionId, versionId, itemId, body);
+  }
+
+  @Post(":definitionId/versions/:versionId/items/:itemId/options/:optionId/scores")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public createOptionScore(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("definitionId", new ParseUUIDPipe()) definitionId: string,
+    @Param("versionId", new ParseUUIDPipe()) versionId: string,
+    @Param("itemId", new ParseUUIDPipe()) itemId: string,
+    @Param("optionId", new ParseUUIDPipe()) optionId: string,
+    @Body() body: CreateAssessmentOptionScoreDto,
+  ) {
+    return this.assessments.createOptionScore(
+      context,
+      definitionId,
+      versionId,
+      itemId,
+      optionId,
+      body,
+    );
   }
 }
