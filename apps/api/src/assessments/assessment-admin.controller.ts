@@ -164,4 +164,36 @@ export class AssessmentAdminController {
       body,
     );
   }
+
+  @Get(":definitionId/versions/:versionId/publication-readiness")
+  @Header("cache-control", "no-store")
+  public getPublicationReadiness(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("definitionId", new ParseUUIDPipe()) definitionId: string,
+    @Param("versionId", new ParseUUIDPipe()) versionId: string,
+  ) {
+    return this.assessments.getPublicationReadiness(context, definitionId, versionId);
+  }
+
+  @Post(":definitionId/versions/:versionId/publish")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public publishVersion(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("definitionId", new ParseUUIDPipe()) definitionId: string,
+    @Param("versionId", new ParseUUIDPipe()) versionId: string,
+  ) {
+    return this.assessments.publishVersion(context, definitionId, versionId);
+  }
+
+  @Post(":definitionId/versions/:versionId/retire")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public retireVersion(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("definitionId", new ParseUUIDPipe()) definitionId: string,
+    @Param("versionId", new ParseUUIDPipe()) versionId: string,
+  ) {
+    return this.assessments.retireVersion(context, definitionId, versionId);
+  }
 }

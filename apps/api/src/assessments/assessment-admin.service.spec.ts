@@ -1020,4 +1020,406 @@ describe("AssessmentAdminService", () => {
       }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
+
+  it("reports a structurally complete DRAFT version as ready for publication", async () => {
+    const definitionId = "84848484-8484-4848-8848-848484848484";
+    const versionId = "85858585-8585-4858-8858-858585858585";
+    const itemId = "86868686-8686-4868-8868-868686868686";
+    const optionId = "87878787-8787-4878-8878-878787878787";
+    const constructId = "88888888-8888-4888-8888-888888888888";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentVersion.findUniqueOrThrow.mockResolvedValue({
+      id: versionId,
+      assessmentDefinition: {
+        status: "ACTIVE",
+      },
+      items: [
+        {
+          id: itemId,
+          code: "Q1",
+          type: AssessmentItemType.SINGLE_CHOICE,
+          constructLinks: [
+            {
+              assessmentConstructId: constructId,
+            },
+          ],
+          options: [
+            {
+              id: optionId,
+              code: "A",
+              scores: [
+                {
+                  assessmentConstructId: constructId,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await service.getPublicationReadiness(
+      organizationContext,
+      definitionId,
+      versionId,
+    );
+
+    expect(result).toEqual({
+      versionId,
+      ready: true,
+      issues: [],
+    });
+  });
+
+  it("blocks publication when the DRAFT version has no items", async () => {
+    const definitionId = "89898989-8989-4898-8898-898989898989";
+    const versionId = "90909090-9090-4909-8909-909090909090";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentVersion.findUniqueOrThrow.mockResolvedValue({
+      id: versionId,
+      assessmentDefinition: {
+        status: "ACTIVE",
+      },
+      items: [],
+    });
+
+    await expect(
+      service.publishVersion(organizationContext, definitionId, versionId),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
+  });
+
+  it("blocks publication for an archived assessment definition", async () => {
+    const definitionId = "91919191-9191-4919-8919-919191919191";
+    const versionId = "92929292-9292-4929-8929-929292929292";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentVersion.findUniqueOrThrow.mockResolvedValue({
+      id: versionId,
+      assessmentDefinition: {
+        status: "ARCHIVED",
+      },
+      items: [
+        {
+          id: "93939393-9393-4939-8939-939393939393",
+          code: "Q1",
+          type: AssessmentItemType.TEXT,
+          constructLinks: [],
+          options: [],
+        },
+      ],
+    });
+
+    const result = await service.getPublicationReadiness(
+      organizationContext,
+      definitionId,
+      versionId,
+    );
+
+    expect(result.ready).toBe(false);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "ASSESSMENT_DEFINITION_NOT_ACTIVE",
+        }),
+      ]),
+    );
+  });
+
+  it("blocks readiness when a scored item uses an unsupported response type", async () => {
+    const definitionId = "94949494-9494-4949-8949-949494949494";
+    const versionId = "95959595-9595-4959-8959-959595959595";
+    const constructId = "96969696-9696-4969-8969-969696969696";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentVersion.findUniqueOrThrow.mockResolvedValue({
+      id: versionId,
+      assessmentDefinition: {
+        status: "ACTIVE",
+      },
+      items: [
+        {
+          id: "97979797-9797-4979-8979-979797979797",
+          code: "Q1",
+          type: AssessmentItemType.TEXT,
+          constructLinks: [
+            {
+              assessmentConstructId: constructId,
+            },
+          ],
+          options: [],
+        },
+      ],
+    });
+
+    const result = await service.getPublicationReadiness(
+      organizationContext,
+      definitionId,
+      versionId,
+    );
+
+    expect(result.ready).toBe(false);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "ASSESSMENT_SCORING_CONFIGURATION_UNSUPPORTED",
+        }),
+      ]),
+    );
+  });
+
+  it("blocks readiness when an option is missing an explicit linked-construct score", async () => {
+    const definitionId = "98989898-9898-4989-8989-989898989898";
+    const versionId = "99999999-9999-4999-8999-999999999999";
+    const constructId = "10101010-1010-4010-8010-101010101010";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentVersion.findUniqueOrThrow.mockResolvedValue({
+      id: versionId,
+      assessmentDefinition: {
+        status: "ACTIVE",
+      },
+      items: [
+        {
+          id: "11101010-1010-4010-8010-101010101010",
+          code: "Q1",
+          type: AssessmentItemType.SINGLE_CHOICE,
+          constructLinks: [
+            {
+              assessmentConstructId: constructId,
+            },
+          ],
+          options: [
+            {
+              id: "12101010-1010-4010-8010-101010101010",
+              code: "A",
+              scores: [],
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await service.getPublicationReadiness(
+      organizationContext,
+      definitionId,
+      versionId,
+    );
+
+    expect(result.ready).toBe(false);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "ASSESSMENT_OPTION_SCORE_INCOMPLETE",
+          constructId,
+        }),
+      ]),
+    );
+  });
+
+  it("publishes a ready DRAFT version with publication provenance", async () => {
+    const definitionId = "13101010-1010-4010-8010-101010101010";
+    const versionId = "14101010-1010-4010-8010-101010101010";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentVersion.findUniqueOrThrow.mockResolvedValue({
+      id: versionId,
+      assessmentDefinition: {
+        status: "ACTIVE",
+      },
+      items: [
+        {
+          id: "15101010-1010-4010-8010-101010101010",
+          code: "Q1",
+          type: AssessmentItemType.TEXT,
+          constructLinks: [],
+          options: [],
+        },
+      ],
+    });
+
+    prisma.assessmentVersion.update.mockResolvedValue({
+      id: versionId,
+      status: AssessmentVersionStatus.PUBLISHED,
+    });
+
+    await service.publishVersion(organizationContext, definitionId, versionId);
+
+    expect(prisma.assessmentVersion.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: versionId,
+        },
+        data: expect.objectContaining({
+          status: AssessmentVersionStatus.PUBLISHED,
+          publishedByUserId: organizationContext.userId,
+          publishedAt: expect.any(Date),
+        }),
+      }),
+    );
+  });
+
+  it("retires a PUBLISHED version while preserving publication provenance", async () => {
+    const definitionId = "16101010-1010-4010-8010-101010101010";
+    const versionId = "17101010-1010-4010-8010-101010101010";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.PUBLISHED,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentVersion.update.mockResolvedValue({
+      id: versionId,
+      status: AssessmentVersionStatus.RETIRED,
+    });
+
+    await service.retireVersion(organizationContext, definitionId, versionId);
+
+    expect(prisma.assessmentVersion.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: versionId,
+        },
+        data: {
+          status: AssessmentVersionStatus.RETIRED,
+          retiredAt: expect.any(Date),
+        },
+      }),
+    );
+  });
+
+  it("rejects retirement of a DRAFT version", async () => {
+    const definitionId = "18101010-1010-4010-8010-101010101010";
+    const versionId = "19101010-1010-4010-8010-101010101010";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    await expect(
+      service.retireVersion(organizationContext, definitionId, versionId),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects retirement of an already RETIRED version", async () => {
+    const definitionId = "20101010-1010-4010-8010-101010101010";
+    const versionId = "21101010-1010-4010-8010-101010101010";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.RETIRED,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    await expect(
+      service.retireVersion(organizationContext, definitionId, versionId),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
+  });
+
+  it("blocks cross-organization publication", async () => {
+    const definitionId = "22101010-1010-4010-8010-101010101010";
+    const versionId = "23101010-1010-4010-8010-101010101010";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId: "24101010-1010-4010-8010-101010101010",
+      },
+    });
+
+    await expect(
+      service.publishVersion(organizationContext, definitionId, versionId),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
+  });
+
+  it("blocks cross-organization retirement", async () => {
+    const definitionId = "25101010-1010-4010-8010-101010101010";
+    const versionId = "26101010-1010-4010-8010-101010101010";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.PUBLISHED,
+      assessmentDefinition: {
+        organizationId: "27101010-1010-4010-8010-101010101010",
+      },
+    });
+
+    await expect(
+      service.retireVersion(organizationContext, definitionId, versionId),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
+  });
 });

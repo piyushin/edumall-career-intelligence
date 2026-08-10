@@ -5,7 +5,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AssessmentVersionStatus, MembershipRole, Prisma, type PrismaClient } from "@prisma/client";
+import {
+  AssessmentItemType,
+  AssessmentVersionStatus,
+  MembershipRole,
+  Prisma,
+  type PrismaClient,
+} from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import type {
@@ -649,6 +655,228 @@ export class AssessmentAdminService {
 
       throw error;
     }
+  }
+
+  public async getPublicationReadiness(
+    context: AuthContext,
+    definitionId: string,
+    versionId: string,
+  ) {
+    await this.requireWritableDraftVersion(context, definitionId, versionId);
+
+    const content = await this.prisma.assessmentVersion.findUniqueOrThrow({
+      where: {
+        id: versionId,
+      },
+      select: {
+        id: true,
+        assessmentDefinition: {
+          select: {
+            status: true,
+          },
+        },
+        items: {
+          orderBy: {
+            orderIndex: "asc",
+          },
+          select: {
+            id: true,
+            code: true,
+            type: true,
+            options: {
+              orderBy: {
+                orderIndex: "asc",
+              },
+              select: {
+                id: true,
+                code: true,
+                scores: {
+                  select: {
+                    assessmentConstructId: true,
+                  },
+                },
+              },
+            },
+            constructLinks: {
+              select: {
+                assessmentConstructId: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const issues: Array<{
+      code: string;
+      message: string;
+      itemId?: string;
+      optionId?: string;
+      constructId?: string;
+    }> = [];
+
+    if (content.assessmentDefinition.status !== "ACTIVE") {
+      issues.push({
+        code: "ASSESSMENT_DEFINITION_NOT_ACTIVE",
+        message: "An archived assessment definition cannot publish a new version.",
+      });
+    }
+
+    if (content.items.length === 0) {
+      issues.push({
+        code: "ASSESSMENT_VERSION_HAS_NO_ITEMS",
+        message: "The assessment version must contain at least one item before publication.",
+      });
+    }
+
+    const optionScoredTypes = new Set<AssessmentItemType>([
+      AssessmentItemType.SINGLE_CHOICE,
+      AssessmentItemType.MULTIPLE_CHOICE,
+      AssessmentItemType.LIKERT,
+    ]);
+
+    for (const item of content.items) {
+      if (item.constructLinks.length === 0) {
+        continue;
+      }
+
+      if (!optionScoredTypes.has(item.type)) {
+        issues.push({
+          code: "ASSESSMENT_SCORING_CONFIGURATION_UNSUPPORTED",
+          message:
+            "A scored assessment item uses a response type without an explicit scoring strategy.",
+          itemId: item.id,
+        });
+        continue;
+      }
+
+      if (item.options.length === 0) {
+        issues.push({
+          code: "ASSESSMENT_SCORED_ITEM_HAS_NO_OPTIONS",
+          message: "A scored option-based assessment item must contain at least one option.",
+          itemId: item.id,
+        });
+        continue;
+      }
+
+      const requiredConstructIds = new Set(
+        item.constructLinks.map((link) => link.assessmentConstructId),
+      );
+
+      for (const option of item.options) {
+        const scoredConstructIds = new Set(
+          option.scores.map((score) => score.assessmentConstructId),
+        );
+
+        for (const constructId of requiredConstructIds) {
+          if (!scoredConstructIds.has(constructId)) {
+            issues.push({
+              code: "ASSESSMENT_OPTION_SCORE_INCOMPLETE",
+              message:
+                "Every option of a scored item must define an explicit score for every linked construct.",
+              itemId: item.id,
+              optionId: option.id,
+              constructId,
+            });
+          }
+        }
+      }
+    }
+
+    return {
+      versionId: content.id,
+      ready: issues.length === 0,
+      issues,
+    };
+  }
+
+  public async publishVersion(context: AuthContext, definitionId: string, versionId: string) {
+    await this.requireWritableDraftVersion(context, definitionId, versionId);
+
+    const readiness = await this.getPublicationReadiness(context, definitionId, versionId);
+
+    if (!readiness.ready) {
+      throw new ConflictException({
+        code: "ASSESSMENT_VERSION_NOT_READY_FOR_PUBLICATION",
+        message: "Assessment version failed publication readiness checks.",
+        issues: readiness.issues,
+      });
+    }
+
+    const publishedAt = new Date();
+
+    return this.prisma.assessmentVersion.update({
+      where: {
+        id: versionId,
+      },
+      data: {
+        status: AssessmentVersionStatus.PUBLISHED,
+        publishedAt,
+        publishedByUserId: context.userId,
+      },
+      select: {
+        id: true,
+        assessmentDefinitionId: true,
+        versionNumber: true,
+        status: true,
+        publishedByUserId: true,
+        publishedAt: true,
+        retiredAt: true,
+      },
+    });
+  }
+
+  public async retireVersion(context: AuthContext, definitionId: string, versionId: string) {
+    const version = await this.prisma.assessmentVersion.findUnique({
+      where: {
+        id: versionId,
+      },
+      select: {
+        id: true,
+        assessmentDefinitionId: true,
+        status: true,
+        assessmentDefinition: {
+          select: {
+            organizationId: true,
+          },
+        },
+      },
+    });
+
+    if (!version || version.assessmentDefinitionId !== definitionId) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_VERSION_NOT_FOUND",
+        message: "Assessment version not found.",
+      });
+    }
+
+    this.assertWriteAccess(context, version.assessmentDefinition.organizationId);
+
+    if (version.status !== AssessmentVersionStatus.PUBLISHED) {
+      throw new ConflictException({
+        code: "ASSESSMENT_VERSION_NOT_PUBLISHED",
+        message: "Only a published assessment version may be retired.",
+      });
+    }
+
+    return this.prisma.assessmentVersion.update({
+      where: {
+        id: versionId,
+      },
+      data: {
+        status: AssessmentVersionStatus.RETIRED,
+        retiredAt: new Date(),
+      },
+      select: {
+        id: true,
+        assessmentDefinitionId: true,
+        versionNumber: true,
+        status: true,
+        publishedByUserId: true,
+        publishedAt: true,
+        retiredAt: true,
+      },
+    });
   }
 
   private async requireWritableDraftVersion(
