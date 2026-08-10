@@ -9,7 +9,10 @@ import { AssessmentVersionStatus, MembershipRole, Prisma, type PrismaClient } fr
 import type { AuthContext } from "../auth/auth.types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import type {
+  CreateAssessmentConstructDto,
   CreateAssessmentDefinitionDto,
+  CreateAssessmentItemDto,
+  CreateAssessmentItemOptionDto,
   CreateAssessmentVersionDto,
   UpdateAssessmentVersionDto,
 } from "./assessment-admin.types";
@@ -294,6 +297,235 @@ export class AssessmentAdminService {
         updatedAt: true,
       },
     });
+  }
+
+  public async getVersionContent(context: AuthContext, definitionId: string, versionId: string) {
+    await this.requireWritableDraftVersion(context, definitionId, versionId);
+
+    return this.prisma.assessmentVersion.findUniqueOrThrow({
+      where: {
+        id: versionId,
+      },
+      select: {
+        id: true,
+        versionNumber: true,
+        status: true,
+        constructs: {
+          orderBy: {
+            orderIndex: "asc",
+          },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            description: true,
+            orderIndex: true,
+          },
+        },
+        items: {
+          orderBy: {
+            orderIndex: "asc",
+          },
+          select: {
+            id: true,
+            code: true,
+            type: true,
+            prompt: true,
+            helpText: true,
+            orderIndex: true,
+            required: true,
+            options: {
+              orderBy: {
+                orderIndex: "asc",
+              },
+              select: {
+                id: true,
+                code: true,
+                label: true,
+                orderIndex: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  public async createConstruct(
+    context: AuthContext,
+    definitionId: string,
+    versionId: string,
+    body: CreateAssessmentConstructDto,
+  ) {
+    await this.requireWritableDraftVersion(context, definitionId, versionId);
+
+    try {
+      return await this.prisma.assessmentConstruct.create({
+        data: {
+          assessmentVersionId: versionId,
+          code: body.code.trim(),
+          name: body.name.trim(),
+          description: body.description?.trim() || null,
+          orderIndex: body.orderIndex,
+        },
+        select: {
+          id: true,
+          assessmentVersionId: true,
+          code: true,
+          name: true,
+          description: true,
+          orderIndex: true,
+          createdAt: true,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException({
+          code: "ASSESSMENT_CONSTRUCT_CONFLICT",
+          message: "A construct with this code or order already exists in the assessment version.",
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  public async createItem(
+    context: AuthContext,
+    definitionId: string,
+    versionId: string,
+    body: CreateAssessmentItemDto,
+  ) {
+    await this.requireWritableDraftVersion(context, definitionId, versionId);
+
+    try {
+      return await this.prisma.assessmentItem.create({
+        data: {
+          assessmentVersionId: versionId,
+          code: body.code.trim(),
+          type: body.type,
+          prompt: body.prompt.trim(),
+          helpText: body.helpText?.trim() || null,
+          orderIndex: body.orderIndex,
+          required: body.required ?? true,
+        },
+        select: {
+          id: true,
+          assessmentVersionId: true,
+          code: true,
+          type: true,
+          prompt: true,
+          helpText: true,
+          orderIndex: true,
+          required: true,
+          createdAt: true,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException({
+          code: "ASSESSMENT_ITEM_CONFLICT",
+          message: "An item with this code or order already exists in the assessment version.",
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  public async createItemOption(
+    context: AuthContext,
+    definitionId: string,
+    versionId: string,
+    itemId: string,
+    body: CreateAssessmentItemOptionDto,
+  ) {
+    await this.requireWritableDraftVersion(context, definitionId, versionId);
+
+    const item = await this.prisma.assessmentItem.findFirst({
+      where: {
+        id: itemId,
+        assessmentVersionId: versionId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_ITEM_NOT_FOUND",
+        message: "Assessment item not found.",
+      });
+    }
+
+    try {
+      return await this.prisma.assessmentItemOption.create({
+        data: {
+          assessmentItemId: item.id,
+          code: body.code.trim(),
+          label: body.label.trim(),
+          orderIndex: body.orderIndex,
+        },
+        select: {
+          id: true,
+          assessmentItemId: true,
+          code: true,
+          label: true,
+          orderIndex: true,
+          createdAt: true,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException({
+          code: "ASSESSMENT_ITEM_OPTION_CONFLICT",
+          message: "An option with this code or order already exists for the assessment item.",
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  private async requireWritableDraftVersion(
+    context: AuthContext,
+    definitionId: string,
+    versionId: string,
+  ) {
+    const version = await this.prisma.assessmentVersion.findUnique({
+      where: {
+        id: versionId,
+      },
+      select: {
+        id: true,
+        assessmentDefinitionId: true,
+        status: true,
+        assessmentDefinition: {
+          select: {
+            organizationId: true,
+          },
+        },
+      },
+    });
+
+    if (!version || version.assessmentDefinitionId !== definitionId) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_VERSION_NOT_FOUND",
+        message: "Assessment version not found.",
+      });
+    }
+
+    this.assertWriteAccess(context, version.assessmentDefinition.organizationId);
+
+    if (version.status !== AssessmentVersionStatus.DRAFT) {
+      throw new ConflictException({
+        code: "ASSESSMENT_VERSION_NOT_DRAFT",
+        message: "Only draft assessment versions may be modified.",
+      });
+    }
+
+    return version;
   }
 
   private readScope(context: AuthContext) {

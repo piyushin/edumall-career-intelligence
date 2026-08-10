@@ -19,7 +19,10 @@ import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { AssessmentAdminService } from "./assessment-admin.service";
 import {
+  CreateAssessmentConstructDto,
   CreateAssessmentDefinitionDto,
+  CreateAssessmentItemDto,
+  CreateAssessmentItemOptionDto,
   CreateAssessmentVersionDto,
   UpdateAssessmentVersionDto,
 } from "./assessment-admin.types";
@@ -78,5 +81,51 @@ export class AssessmentAdminController {
     @Body() body: UpdateAssessmentVersionDto,
   ) {
     return this.assessments.updateDraftVersion(context, definitionId, versionId, body);
+  }
+  @Get(":definitionId/versions/:versionId/content")
+  @Header("cache-control", "no-store")
+  public getVersionContent(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("definitionId", new ParseUUIDPipe()) definitionId: string,
+    @Param("versionId", new ParseUUIDPipe()) versionId: string,
+  ) {
+    return this.assessments.getVersionContent(context, definitionId, versionId);
+  }
+
+  @Post(":definitionId/versions/:versionId/constructs")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public createConstruct(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("definitionId", new ParseUUIDPipe()) definitionId: string,
+    @Param("versionId", new ParseUUIDPipe()) versionId: string,
+    @Body() body: CreateAssessmentConstructDto,
+  ) {
+    return this.assessments.createConstruct(context, definitionId, versionId, body);
+  }
+
+  @Post(":definitionId/versions/:versionId/items")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public createItem(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("definitionId", new ParseUUIDPipe()) definitionId: string,
+    @Param("versionId", new ParseUUIDPipe()) versionId: string,
+    @Body() body: CreateAssessmentItemDto,
+  ) {
+    return this.assessments.createItem(context, definitionId, versionId, body);
+  }
+
+  @Post(":definitionId/versions/:versionId/items/:itemId/options")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public createItemOption(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("definitionId", new ParseUUIDPipe()) definitionId: string,
+    @Param("versionId", new ParseUUIDPipe()) versionId: string,
+    @Param("itemId", new ParseUUIDPipe()) itemId: string,
+    @Body() body: CreateAssessmentItemOptionDto,
+  ) {
+    return this.assessments.createItemOption(context, definitionId, versionId, itemId, body);
   }
 }

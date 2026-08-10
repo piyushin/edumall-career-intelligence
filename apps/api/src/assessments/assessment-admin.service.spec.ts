@@ -1,5 +1,11 @@
 import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
-import { AssessmentVersionStatus, MembershipRole, Prisma, type PrismaClient } from "@prisma/client";
+import {
+  AssessmentItemType,
+  AssessmentVersionStatus,
+  MembershipRole,
+  Prisma,
+  type PrismaClient,
+} from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../auth/auth.types";
 import { AssessmentAdminService } from "./assessment-admin.service";
@@ -33,7 +39,18 @@ function createPrisma() {
     assessmentVersion: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
+    },
+    assessmentConstruct: {
+      create: vi.fn(),
+    },
+    assessmentItem: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+    },
+    assessmentItemOption: {
+      create: vi.fn(),
     },
   };
 }
@@ -370,5 +387,303 @@ describe("AssessmentAdminService", () => {
     ).rejects.toBeInstanceOf(NotFoundException);
 
     expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
+  });
+
+  it("creates a construct only inside an owned DRAFT version", async () => {
+    const definitionId = "24242424-2424-4242-8242-242424242424";
+    const versionId = "25252525-2525-4252-8252-252525252525";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentConstruct.create.mockResolvedValue({
+      id: "26262626-2626-4262-8262-262626262626",
+      assessmentVersionId: versionId,
+      code: "APTITUDE",
+      name: "Aptitude",
+      description: null,
+      orderIndex: 0,
+    });
+
+    await service.createConstruct(organizationContext, definitionId, versionId, {
+      code: " APTITUDE ",
+      name: " Aptitude ",
+      orderIndex: 0,
+    });
+
+    expect(prisma.assessmentConstruct.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          assessmentVersionId: versionId,
+          code: "APTITUDE",
+          name: "Aptitude",
+          orderIndex: 0,
+        }),
+      }),
+    );
+  });
+
+  it("creates an assessment item inside an owned DRAFT version", async () => {
+    const definitionId = "27272727-2727-4272-8272-272727272727";
+    const versionId = "28282828-2828-4282-8282-282828282828";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentItem.create.mockResolvedValue({
+      id: "29292929-2929-4292-8292-292929292929",
+      assessmentVersionId: versionId,
+      code: "Q1",
+      type: AssessmentItemType.SINGLE_CHOICE,
+      prompt: "Choose one",
+      orderIndex: 0,
+      required: true,
+    });
+
+    await service.createItem(organizationContext, definitionId, versionId, {
+      code: " Q1 ",
+      type: AssessmentItemType.SINGLE_CHOICE,
+      prompt: " Choose one ",
+      orderIndex: 0,
+    });
+
+    expect(prisma.assessmentItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          assessmentVersionId: versionId,
+          code: "Q1",
+          type: AssessmentItemType.SINGLE_CHOICE,
+          prompt: "Choose one",
+          orderIndex: 0,
+          required: true,
+        }),
+      }),
+    );
+  });
+
+  it("creates an option only for an item belonging to the requested DRAFT version", async () => {
+    const definitionId = "30303030-3030-4303-8303-303030303030";
+    const versionId = "31313131-3131-4313-8313-313131313131";
+    const itemId = "32323232-3232-4323-8323-323232323232";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentItem.findFirst.mockResolvedValue({
+      id: itemId,
+    });
+
+    prisma.assessmentItemOption.create.mockResolvedValue({
+      id: "33333333-3333-4333-8333-333333333334",
+      assessmentItemId: itemId,
+      code: "A",
+      label: "Option A",
+      orderIndex: 0,
+    });
+
+    await service.createItemOption(organizationContext, definitionId, versionId, itemId, {
+      code: " A ",
+      label: " Option A ",
+      orderIndex: 0,
+    });
+
+    expect(prisma.assessmentItem.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: itemId,
+        assessmentVersionId: versionId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    expect(prisma.assessmentItemOption.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          assessmentItemId: itemId,
+          code: "A",
+          label: "Option A",
+          orderIndex: 0,
+        }),
+      }),
+    );
+  });
+
+  it("returns DRAFT version content with constructs, items and options", async () => {
+    const definitionId = "34343434-3434-4343-8343-343434343434";
+    const versionId = "35353535-3535-4353-8353-353535353535";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentVersion.findUniqueOrThrow.mockResolvedValue({
+      id: versionId,
+      status: AssessmentVersionStatus.DRAFT,
+      constructs: [],
+      items: [],
+    });
+
+    await service.getVersionContent(organizationContext, definitionId, versionId);
+
+    expect(prisma.assessmentVersion.findUniqueOrThrow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: versionId,
+        },
+      }),
+    );
+  });
+
+  it("blocks content modification when the assessment version is PUBLISHED", async () => {
+    const definitionId = "36363636-3636-4363-8363-363636363636";
+    const versionId = "37373737-3737-4373-8373-373737373737";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.PUBLISHED,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    await expect(
+      service.createConstruct(organizationContext, definitionId, versionId, {
+        code: "BLOCKED",
+        name: "Blocked",
+        orderIndex: 0,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.assessmentConstruct.create).not.toHaveBeenCalled();
+  });
+
+  it("blocks content modification when the assessment version is RETIRED", async () => {
+    const definitionId = "38383838-3838-4383-8383-383838383838";
+    const versionId = "39393939-3939-4393-8393-393939393939";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.RETIRED,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    await expect(
+      service.createItem(organizationContext, definitionId, versionId, {
+        code: "Q1",
+        type: AssessmentItemType.TEXT,
+        prompt: "Blocked",
+        orderIndex: 0,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.assessmentItem.create).not.toHaveBeenCalled();
+  });
+
+  it("blocks DRAFT content modification across organization boundaries", async () => {
+    const definitionId = "40404040-4040-4404-8404-404040404040";
+    const versionId = "41414141-4141-4414-8414-414141414141";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId: "42424242-4242-4424-8424-424242424242",
+      },
+    });
+
+    await expect(
+      service.createConstruct(organizationContext, definitionId, versionId, {
+        code: "PRIVATE",
+        name: "Private",
+        orderIndex: 0,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.assessmentConstruct.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an option when the item is not part of the requested version", async () => {
+    const definitionId = "43434343-4343-4434-8434-434343434343";
+    const versionId = "44444444-4444-4444-8444-444444444445";
+    const itemId = "45454545-4545-4454-8454-454545454545";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentItem.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createItemOption(organizationContext, definitionId, versionId, itemId, {
+        code: "A",
+        label: "Option A",
+        orderIndex: 0,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.assessmentItemOption.create).not.toHaveBeenCalled();
+  });
+
+  it("maps duplicate construct code or order to a safe conflict", async () => {
+    const definitionId = "46464646-4646-4464-8464-464646464646";
+    const versionId = "47474747-4747-4474-8474-474747474747";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+
+    prisma.assessmentConstruct.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("duplicate", {
+        code: "P2002",
+        clientVersion: "6.19.3",
+      }),
+    );
+
+    await expect(
+      service.createConstruct(organizationContext, definitionId, versionId, {
+        code: "APTITUDE",
+        name: "Aptitude",
+        orderIndex: 0,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

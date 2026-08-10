@@ -1,4 +1,14 @@
-import { IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from "class-validator";
+import { AssessmentItemType } from "@prisma/client";
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  MinLength,
+} from "class-validator";
 
 export class CreateAssessmentDefinitionDto {
   @IsString()
@@ -110,4 +120,69 @@ export class UpdateAssessmentVersionDto {
   @IsString()
   @MaxLength(10000)
   public instructions?: string;
+}
+
+export class CreateAssessmentConstructDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  public code!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  public name!: string;
+
+  @IsInt()
+  @Min(0)
+  public orderIndex!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  public description?: string;
+}
+
+export class CreateAssessmentItemDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  public code!: string;
+
+  @IsEnum(AssessmentItemType)
+  public type!: AssessmentItemType;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(10000)
+  public prompt!: string;
+
+  @IsInt()
+  @Min(0)
+  public orderIndex!: number;
+
+  @IsOptional()
+  @IsBoolean()
+  public required?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  public helpText?: string;
+}
+
+export class CreateAssessmentItemOptionDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  public code!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(5000)
+  public label!: string;
+
+  @IsInt()
+  @Min(0)
+  public orderIndex!: number;
 }
