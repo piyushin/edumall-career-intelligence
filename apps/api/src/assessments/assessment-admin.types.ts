@@ -7,6 +7,7 @@ import {
   IsUUID,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   Min,
   MinLength,
@@ -15,6 +16,7 @@ import {
 export class CreateAssessmentDefinitionDto {
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(120)
   public code!: string;
 }
@@ -26,36 +28,43 @@ export class CreateAssessmentVersionDto {
 
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(200)
   public title!: string;
 
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(60)
   public edition!: string;
 
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(60)
   public form!: string;
 
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(20)
   public language!: string;
 
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(60)
   public scoringVersion!: string;
 
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(60)
   public normVersion!: string;
 
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(60)
   public reportVersion!: string;
 
@@ -132,6 +141,7 @@ export class CreateAssessmentConstructDto {
 
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(200)
   public name!: string;
 
@@ -156,6 +166,7 @@ export class CreateAssessmentItemDto {
 
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(10000)
   public prompt!: string;
 
@@ -181,6 +192,7 @@ export class CreateAssessmentItemOptionDto {
 
   @IsString()
   @MinLength(1)
+  @Matches(/\S/, { message: "must contain at least one non-whitespace character" })
   @MaxLength(5000)
   public label!: string;
 

@@ -2,8 +2,12 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  description: "Engineering foundation status for The EduMall Career Intelligence Platform.",
-  title: "EduMall Career Intelligence",
+  description:
+    "The EduMall Career Intelligence Platform for assessment administration, delivery and reporting.",
+  title: {
+    default: "EduMall Career Intelligence",
+    template: "%s | EduMall Career Intelligence",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
