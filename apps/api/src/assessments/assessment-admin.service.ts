@@ -342,6 +342,13 @@ export class AssessmentAdminService {
             helpText: true,
             orderIndex: true,
             required: true,
+            constructLinks: {
+              select: {
+                assessmentConstructId: true,
+                weight: true,
+                reverseScored: true,
+              },
+            },
             options: {
               orderBy: {
                 orderIndex: "asc",
@@ -351,6 +358,12 @@ export class AssessmentAdminService {
                 code: true,
                 label: true,
                 orderIndex: true,
+                scores: {
+                  select: {
+                    assessmentConstructId: true,
+                    score: true,
+                  },
+                },
               },
             },
           },

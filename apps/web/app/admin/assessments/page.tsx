@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@edumall/ui";
 import { ApiError } from "../../../lib/api";
@@ -174,25 +175,34 @@ export default function AssessmentsPage() {
                       </p>
                     </div>
 
-                    {latest ? (
-                      <div className="text-left md:text-right">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${statusClass(
-                            latest.status,
-                          )}`}
-                        >
-                          {latest.status}
-                        </span>
-                        <p className="mt-2 text-sm font-medium text-slate-900">
-                          v{latest.versionNumber} · {latest.title}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {latest.edition} · {latest.form} · {latest.language}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-slate-500">No versions created yet</p>
-                    )}
+                    <div className="flex flex-col items-start gap-3 md:items-end">
+                      <Link
+                        href={`/admin/assessments/${definition.id}`}
+                        className="inline-flex min-h-9 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+                      >
+                        Manage
+                      </Link>
+
+                      {latest ? (
+                        <div className="text-left md:text-right">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${statusClass(
+                              latest.status,
+                            )}`}
+                          >
+                            {latest.status}
+                          </span>
+                          <p className="mt-2 text-sm font-medium text-slate-900">
+                            v{latest.versionNumber} · {latest.title}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {latest.edition} · {latest.form} · {latest.language}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500">No versions created yet</p>
+                      )}
+                    </div>
                   </div>
 
                   {definition.versions.length > 0 ? (
