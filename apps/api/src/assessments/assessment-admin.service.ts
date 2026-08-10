@@ -677,7 +677,14 @@ export class AssessmentAdminService {
   ) {
     await this.requireWritableDraftVersion(context, definitionId, versionId);
 
-    const content = await this.prisma.assessmentVersion.findUniqueOrThrow({
+    return this.getPublicationReadinessWithClient(this.prisma, versionId);
+  }
+
+  private async getPublicationReadinessWithClient(
+    client: Prisma.TransactionClient | PrismaClient,
+    versionId: string,
+  ) {
+    const content = await client.assessmentVersion.findUniqueOrThrow({
       where: {
         id: versionId,
       },
@@ -804,9 +811,36 @@ export class AssessmentAdminService {
   }
 
   public async publishVersion(context: AuthContext, definitionId: string, versionId: string) {
-    await this.requireWritableDraftVersion(context, definitionId, versionId);
+    try {
+      return await this.prisma.$transaction(
+        async (transaction) =>
+          this.publishVersionInTransaction(transaction, context, definitionId, versionId),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+        throw new ConflictException({
+          code: "ASSESSMENT_PUBLICATION_CONCURRENCY_CONFLICT",
+          message:
+            "The assessment changed while publication was being finalized. Review readiness and try again.",
+        });
+      }
 
-    const readiness = await this.getPublicationReadiness(context, definitionId, versionId);
+      throw error;
+    }
+  }
+
+  private async publishVersionInTransaction(
+    transaction: Prisma.TransactionClient,
+    context: AuthContext,
+    definitionId: string,
+    versionId: string,
+  ) {
+    await this.requireWritableDraftVersion(context, definitionId, versionId, transaction);
+
+    const readiness = await this.getPublicationReadinessWithClient(transaction, versionId);
 
     if (!readiness.ready) {
       throw new ConflictException({
@@ -818,7 +852,7 @@ export class AssessmentAdminService {
 
     const publishedAt = new Date();
 
-    return this.prisma.assessmentVersion.update({
+    return transaction.assessmentVersion.update({
       where: {
         id: versionId,
       },
@@ -896,8 +930,9 @@ export class AssessmentAdminService {
     context: AuthContext,
     definitionId: string,
     versionId: string,
+    client: Prisma.TransactionClient | PrismaClient = this.prisma,
   ) {
-    const version = await this.prisma.assessmentVersion.findUnique({
+    const version = await client.assessmentVersion.findUnique({
       where: {
         id: versionId,
       },

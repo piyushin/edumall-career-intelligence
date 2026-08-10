@@ -29,7 +29,7 @@ const organizationContext: AuthContext = {
 };
 
 function createPrisma() {
-  return {
+  const prisma = {
     assessmentDefinition: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
@@ -61,6 +61,13 @@ function createPrisma() {
     assessmentOptionScore: {
       create: vi.fn(),
     },
+  };
+
+  return {
+    ...prisma,
+    $transaction: vi.fn(async (callback: (client: typeof prisma) => Promise<unknown>) =>
+      callback(prisma),
+    ),
   };
 }
 
@@ -1421,5 +1428,57 @@ describe("AssessmentAdminService", () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
+  });
+
+  it("returns construct links and explicit option scores in draft content", async () => {
+    const definitionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const versionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.DRAFT,
+      assessmentDefinition: {
+        organizationId: null,
+      },
+    });
+
+    prisma.assessmentVersion.findUniqueOrThrow.mockResolvedValue({
+      id: versionId,
+      versionNumber: 1,
+      status: AssessmentVersionStatus.DRAFT,
+      constructs: [],
+      items: [],
+    });
+
+    await service.getVersionContent(platformContext, definitionId, versionId);
+
+    expect(prisma.assessmentVersion.findUniqueOrThrow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          items: expect.objectContaining({
+            select: expect.objectContaining({
+              constructLinks: expect.objectContaining({
+                select: expect.objectContaining({
+                  assessmentConstructId: true,
+                  weight: true,
+                  reverseScored: true,
+                }),
+              }),
+              options: expect.objectContaining({
+                select: expect.objectContaining({
+                  scores: expect.objectContaining({
+                    select: expect.objectContaining({
+                      assessmentConstructId: true,
+                      score: true,
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
   });
 });
