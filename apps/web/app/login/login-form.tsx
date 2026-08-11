@@ -41,6 +41,12 @@ export function LoginForm() {
         return;
       }
 
+      if (result.session.role === "COUNSELLOR") {
+        router.replace(next?.startsWith("/staff") ? next : "/staff/results");
+        router.refresh();
+        return;
+      }
+
       await logout();
       setError("This account does not currently have access to this workspace.");
     } catch (caught) {
