@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  downloadAssessmentReportPdf,
   generateAssessmentReportSnapshot,
   getAssessmentReportReadiness,
 } from "./assessment-results";
@@ -36,6 +37,32 @@ describe("assessment report workflow API client", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
       "/staff/assessment-results/11111111-1111-4111-8111-111111111111/report-readiness",
     );
+  });
+
+  it("downloads an authenticated governed PDF report", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(new Blob(["%PDF-test"]), {
+        status: 200,
+        headers: {
+          "content-type": "application/pdf",
+          "content-disposition": 'attachment; filename="assessment-report-test.pdf"',
+        },
+      }),
+    );
+
+    const result = await downloadAssessmentReportPdf("11111111-1111-4111-8111-111111111111");
+
+    expect(result.filename).toBe("assessment-report-test.pdf");
+
+    expect(result.blob.type).toBe("application/pdf");
+
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    });
   });
 
   it("uses CSRF protection when generating a report snapshot", async () => {

@@ -6,6 +6,7 @@ import { AssessmentAdminService } from "./assessment-admin.service";
 import { AssessmentController } from "./assessment.controller";
 import { AssessmentInterpretationService } from "./assessment-interpretation.service";
 import { AssessmentReportDataService } from "./assessment-report-data.service";
+import { AssessmentReportPdfService } from "./assessment-report-pdf.service";
 import { AssessmentReportWorkflowService } from "./assessment-report-workflow.service";
 import { AssessmentResultsController } from "./assessment-results.controller";
 import { AssessmentResultsService } from "./assessment-results.service";
@@ -26,6 +27,7 @@ import { AssessmentService } from "./assessment.service";
     AssessmentInterpretationService,
     AssessmentNormService,
     AssessmentReportDataService,
+    AssessmentReportPdfService,
     AssessmentReportWorkflowService,
     AssessmentResultsService,
     AssessmentScoringService,

@@ -25,7 +25,15 @@ function createScoringRun() {
     calculatedAt: new Date("2026-08-08T08:00:00.000Z"),
     attempt: {
       id: attemptId,
+      startedAt: new Date("2026-08-08T07:30:00.000Z"),
+      submittedAt: new Date("2026-08-08T07:59:00.000Z"),
       assignment: {
+        user: {
+          id: "12121212-1212-4212-8212-121212121212",
+          email: "candidate@example.com",
+          firstName: "Test",
+          lastName: "Candidate",
+        },
         assessmentVersion: {
           id: assessmentVersionId,
           versionNumber: 1,
@@ -36,6 +44,9 @@ function createScoringRun() {
           scoringVersion: "score-v1",
           normVersion: "norm-v1",
           reportVersion: "report-v1",
+          assessmentDefinition: {
+            code: "TEST",
+          },
         },
       },
     },
@@ -164,6 +175,21 @@ describe("AssessmentReportDataService", () => {
     expect(createCall?.data.inputHash).toMatch(/^[a-f0-9]{64}$/);
 
     expect(result.reportVersion).toBe("report-v1");
+
+    expect(createCall?.data.payload).toMatchObject({
+      schemaVersion: "assessment-report-data-v2",
+      candidate: {
+        email: "candidate@example.com",
+        firstName: "Test",
+        lastName: "Candidate",
+      },
+      assessment: {
+        assessmentDefinitionCode: "TEST",
+      },
+      submission: {
+        attemptId,
+      },
+    });
   });
 
   it("returns the existing snapshot when the same canonical input already exists", async () => {

@@ -1,4 +1,4 @@
-import { apiRequest } from "./api";
+import { API_BASE_URL, ApiError, apiRequest } from "./api";
 
 export interface AssessmentResultSummary {
   id: string;
@@ -88,8 +88,20 @@ export function getAssessmentResult(
 
 export interface AssessmentReportPayload {
   schemaVersion: string;
+  candidate?: {
+    userId: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+  submission?: {
+    attemptId: string;
+    startedAt: string;
+    submittedAt: string | null;
+  };
   assessment: {
     assessmentVersionId: string;
+    assessmentDefinitionCode?: string;
     versionNumber: number;
     title: string;
     edition: string;
@@ -216,4 +228,47 @@ export function generateAssessmentReportSnapshot(
       body: JSON.stringify(input),
     },
   );
+}
+
+export async function downloadAssessmentReportPdf(
+  attemptId: string,
+  organizationId?: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/staff/assessment-results/${attemptId}/report.pdf${organizationQuery(
+      organizationId,
+    )}`,
+    {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+      headers: {
+        accept: "application/pdf",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    let body: { code?: string; message?: string } | undefined;
+
+    try {
+      body = (await response.json()) as {
+        code?: string;
+        message?: string;
+      };
+    } catch {
+      body = undefined;
+    }
+
+    throw new ApiError(response.status, body);
+  }
+
+  const disposition = response.headers.get("content-disposition");
+
+  const match = disposition?.match(/filename="?([^";]+)"?/i);
+
+  return {
+    blob: await response.blob(),
+    filename: match?.[1] ?? `assessment-report-${attemptId}.pdf`,
+  };
 }

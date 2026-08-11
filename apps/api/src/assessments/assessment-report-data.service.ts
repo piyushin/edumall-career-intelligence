@@ -44,8 +44,18 @@ export class AssessmentReportDataService {
           attempt: {
             select: {
               id: true,
+              startedAt: true,
+              submittedAt: true,
               assignment: {
                 select: {
+                  user: {
+                    select: {
+                      id: true,
+                      email: true,
+                      firstName: true,
+                      lastName: true,
+                    },
+                  },
                   assessmentVersion: {
                     select: {
                       id: true,
@@ -57,6 +67,11 @@ export class AssessmentReportDataService {
                       scoringVersion: true,
                       normVersion: true,
                       reportVersion: true,
+                      assessmentDefinition: {
+                        select: {
+                          code: true,
+                        },
+                      },
                     },
                   },
                 },
@@ -207,9 +222,21 @@ export class AssessmentReportDataService {
       }
 
       const payload = {
-        schemaVersion: "assessment-report-data-v1",
+        schemaVersion: "assessment-report-data-v2",
+        candidate: {
+          userId: scoringRun.attempt.assignment.user.id,
+          email: scoringRun.attempt.assignment.user.email,
+          firstName: scoringRun.attempt.assignment.user.firstName,
+          lastName: scoringRun.attempt.assignment.user.lastName,
+        },
+        submission: {
+          attemptId: scoringRun.attempt.id,
+          startedAt: scoringRun.attempt.startedAt.toISOString(),
+          submittedAt: scoringRun.attempt.submittedAt?.toISOString() ?? null,
+        },
         assessment: {
           assessmentVersionId: version.id,
+          assessmentDefinitionCode: version.assessmentDefinition.code,
           versionNumber: version.versionNumber,
           title: version.title,
           edition: version.edition,
