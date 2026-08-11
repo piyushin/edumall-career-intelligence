@@ -19,6 +19,7 @@ import { AssessmentService } from "./assessment.service";
   providers: [
     AssessmentAdminService,
     AssessmentAssignmentAdminService,
+    AssessmentAssignmentAdminService,
     AssessmentInterpretationService,
     AssessmentNormService,
     AssessmentReportDataService,
