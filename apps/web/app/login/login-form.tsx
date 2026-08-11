@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@edumall/ui";
 import { ApiError } from "../../lib/api";
-import { login } from "../../lib/auth";
+import { login, logout } from "../../lib/auth";
 
 export function LoginForm() {
   const router = useRouter();
@@ -27,14 +27,22 @@ export function LoginForm() {
         ...(organizationId.trim() ? { organizationId: organizationId.trim() } : {}),
       });
 
-      if (result.session.role !== "SUPER_ADMIN" && result.session.role !== "ORGANIZATION_ADMIN") {
-        setError("This login does not have administrator access.");
+      const next = searchParams.get("next");
+
+      if (result.session.role === "SUPER_ADMIN" || result.session.role === "ORGANIZATION_ADMIN") {
+        router.replace(next?.startsWith("/admin") ? next : "/admin");
+        router.refresh();
         return;
       }
 
-      const next = searchParams.get("next");
-      router.replace(next?.startsWith("/admin") ? next : "/admin");
-      router.refresh();
+      if (result.session.role === "STUDENT" || result.session.role === "EMPLOYEE") {
+        router.replace(next?.startsWith("/candidate") ? next : "/candidate/assessments");
+        router.refresh();
+        return;
+      }
+
+      await logout();
+      setError("This account does not currently have access to this workspace.");
     } catch (caught) {
       if (caught instanceof ApiError) {
         setError(caught.message);
@@ -54,7 +62,7 @@ export function LoginForm() {
             The EduMall
           </p>
           <h1 className="mt-6 text-4xl font-semibold leading-tight">
-            Career Intelligence Administration
+            Career Intelligence Platform
           </h1>
           <p className="mt-5 max-w-md text-base leading-7 text-blue-100">
             Manage versioned assessments, scoring configuration, publication lifecycle, and future
@@ -63,10 +71,10 @@ export function LoginForm() {
         </section>
 
         <section className="p-8 sm:p-12">
-          <p className="text-sm font-semibold text-blue-700">Administrator login</p>
+          <p className="text-sm font-semibold text-blue-700">Secure login</p>
           <h2 className="mt-2 text-3xl font-semibold text-slate-950">Welcome back</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Use your authorized EduMall administrator account.
+            Use your authorized EduMall account. Candidates must sign in within their organization.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
