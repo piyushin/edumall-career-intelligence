@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../../lib/api";
 import {
+  downloadAssessmentReportPdf,
   generateAssessmentReportSnapshot,
   getAssessmentReportReadiness,
   getAssessmentResult,
@@ -148,6 +149,7 @@ export default function ResultDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const [error, setError] = useState("");
   const [reportError, setReportError] = useState("");
@@ -224,6 +226,36 @@ export default function ResultDetailPage() {
       );
     } finally {
       setGeneratingReport(false);
+    }
+  }
+
+  async function handleDownloadPdf() {
+    setDownloadingPdf(true);
+    setReportError("");
+
+    try {
+      const { blob, filename } = await downloadAssessmentReportPdf(
+        params.attemptId,
+        organizationId,
+      );
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+
+      anchor.href = url;
+      anchor.download = filename;
+
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      URL.revokeObjectURL(url);
+    } catch (caught) {
+      setReportError(
+        caught instanceof ApiError ? caught.message : "Unable to download the assessment PDF.",
+      );
+    } finally {
+      setDownloadingPdf(false);
     }
   }
 
@@ -349,11 +381,38 @@ export default function ResultDetailPage() {
             Report generation cannot begin until deterministic scoring is available.
           </div>
         ) : reportReadiness.latestSnapshot ? (
-          <ReportSnapshotView
-            payload={reportReadiness.latestSnapshot.payload}
-            generatedAt={reportReadiness.latestSnapshot.generatedAt}
-            reportVersion={reportReadiness.latestSnapshot.reportVersion}
-          />
+          <>
+            <ReportSnapshotView
+              payload={reportReadiness.latestSnapshot.payload}
+              generatedAt={reportReadiness.latestSnapshot.generatedAt}
+              reportVersion={reportReadiness.latestSnapshot.reportVersion}
+            />
+
+            {reportError ? (
+              <div
+                role="alert"
+                className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+              >
+                {reportError}
+              </div>
+            ) : null}
+
+            <div className="mt-6 border-t border-slate-200 pt-6">
+              <button
+                type="button"
+                disabled={downloadingPdf}
+                onClick={() => void handleDownloadPdf()}
+                className="rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {downloadingPdf ? "Preparing PDF..." : "Download governed PDF report"}
+              </button>
+
+              <p className="mt-3 max-w-3xl text-xs leading-5 text-slate-500">
+                The PDF is rendered from the immutable report-data snapshot and preserves the
+                recorded scoring, normalization, interpretation, and report provenance.
+              </p>
+            </div>
+          </>
         ) : !reportReadiness.canGenerate ? (
           <>
             <p className="mt-3 text-sm leading-6 text-slate-600">
