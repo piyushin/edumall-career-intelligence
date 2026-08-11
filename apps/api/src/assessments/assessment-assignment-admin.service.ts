@@ -13,6 +13,7 @@ import {
   MembershipRole,
   MembershipStatus,
   OrganizationStatus,
+  Prisma,
   UserStatus,
   type PrismaClient,
 } from "@prisma/client";
@@ -131,6 +132,30 @@ export class AssessmentAssignmentAdminService {
   }
 
   public async createAssignment(context: AuthContext, input: CreateAssessmentAssignmentDto) {
+    try {
+      return await this.prisma.$transaction(
+        (tx) => this.createAssignmentInTransaction(context, input, tx),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+        throw new ConflictException({
+          code: "ASSESSMENT_ASSIGNMENT_CONCURRENCY_CONFLICT",
+          message: "Another assignment operation occurred concurrently. Please retry.",
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  private async createAssignmentInTransaction(
+    context: AuthContext,
+    input: CreateAssessmentAssignmentDto,
+    tx: Prisma.TransactionClient,
+  ) {
     const organizationId = await this.resolveOrganizationId(context, input.organizationId);
     const availableFrom = input.availableFrom ? new Date(input.availableFrom) : null;
     const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
@@ -143,7 +168,7 @@ export class AssessmentAssignmentAdminService {
       });
     }
 
-    const version = await this.prisma.assessmentVersion.findFirst({
+    const version = await tx.assessmentVersion.findFirst({
       where: {
         id: input.assessmentVersionId,
         status: AssessmentVersionStatus.PUBLISHED,
@@ -171,7 +196,7 @@ export class AssessmentAssignmentAdminService {
       });
     }
 
-    const candidateMembership = await this.prisma.organizationMembership.findFirst({
+    const candidateMembership = await tx.organizationMembership.findFirst({
       where: {
         organizationId,
         userId: input.userId,
@@ -199,7 +224,7 @@ export class AssessmentAssignmentAdminService {
     }
 
     const now = new Date();
-    const duplicate = await this.prisma.assessmentAssignment.findFirst({
+    const duplicate = await tx.assessmentAssignment.findFirst({
       where: {
         organizationId,
         assessmentVersionId: version.id,
@@ -219,7 +244,7 @@ export class AssessmentAssignmentAdminService {
       });
     }
 
-    return this.prisma.assessmentAssignment.create({
+    return tx.assessmentAssignment.create({
       data: {
         organizationId,
         assessmentVersionId: version.id,

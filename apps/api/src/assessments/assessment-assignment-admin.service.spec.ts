@@ -37,7 +37,7 @@ const platformContext: AuthContext = {
 };
 
 function createPrisma() {
-  return {
+  const prisma = {
     organization: {
       findFirst: vi.fn(),
     },
@@ -54,7 +54,14 @@ function createPrisma() {
       create: vi.fn(),
       update: vi.fn(),
     },
+    $transaction: vi.fn(),
   };
+
+  prisma.$transaction.mockImplementation(async (callback: (client: typeof prisma) => unknown) =>
+    callback(prisma),
+  );
+
+  return prisma;
 }
 
 describe("AssessmentAssignmentAdminService", () => {
@@ -210,6 +217,38 @@ describe("AssessmentAssignmentAdminService", () => {
           assignedByUserId: organizationContext.userId,
           maxAttempts: 2,
         }),
+      }),
+    );
+  });
+
+  it("creates assignments inside a serializable transaction", async () => {
+    prisma.assessmentVersion.findFirst.mockResolvedValue({
+      id: versionId,
+      status: AssessmentVersionStatus.PUBLISHED,
+      assessmentDefinition: {
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        organizationId,
+      },
+    });
+    prisma.organizationMembership.findFirst.mockResolvedValue({
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      role: MembershipRole.STUDENT,
+      userId: candidateId,
+    });
+    prisma.assessmentAssignment.findFirst.mockResolvedValue(null);
+    prisma.assessmentAssignment.create.mockResolvedValue({
+      id: assignmentId,
+    });
+
+    await service.createAssignment(organizationContext, {
+      assessmentVersionId: versionId,
+      userId: candidateId,
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        isolationLevel: "Serializable",
       }),
     );
   });

@@ -170,7 +170,10 @@ export class AssessmentService {
         },
       );
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        (error.code === "P2002" || error.code === "P2034")
+      ) {
         throw new ConflictException({
           code: "ASSESSMENT_ATTEMPT_CONFLICT",
           message: "Another assessment attempt was created concurrently. Please retry.",
