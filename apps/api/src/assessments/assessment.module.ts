@@ -5,6 +5,7 @@ import { AssessmentAdminController } from "./assessment-admin.controller";
 import { AssessmentAdminService } from "./assessment-admin.service";
 import { AssessmentController } from "./assessment.controller";
 import { AssessmentInterpretationService } from "./assessment-interpretation.service";
+import { AssessmentReportCompositionService } from "./assessment-report-composition.service";
 import { AssessmentReportDataService } from "./assessment-report-data.service";
 import { AssessmentReportPdfService } from "./assessment-report-pdf.service";
 import { AssessmentReportWorkflowService } from "./assessment-report-workflow.service";
@@ -26,6 +27,7 @@ import { AssessmentService } from "./assessment.service";
     AssessmentAssignmentAdminService,
     AssessmentInterpretationService,
     AssessmentNormService,
+    AssessmentReportCompositionService,
     AssessmentReportDataService,
     AssessmentReportPdfService,
     AssessmentReportWorkflowService,
@@ -33,5 +35,6 @@ import { AssessmentService } from "./assessment.service";
     AssessmentScoringService,
     AssessmentService,
   ],
+  exports: [AssessmentNormService],
 })
 export class AssessmentModule {}

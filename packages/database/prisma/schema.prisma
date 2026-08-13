@@ -103,6 +103,28 @@ enum AssessmentInterpretationMetric {
   PERCENTILE
 }
 
+enum CareerTaxonomyStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum CareerTaxonomyVersionStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+enum CareerFitModelStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+enum CareerFitFactorDirection {
+  POSITIVE
+  NEGATIVE
+}
+
 /// Technical metadata only. This is not a business-domain model.
 model SystemMetadata {
   id        String   @id @default(uuid()) @db.Uuid
@@ -287,6 +309,7 @@ model AssessmentVersion {
   normSets               AssessmentNormSet[]
   interpretationSets     AssessmentInterpretationSet[]
   reportDataSnapshots    AssessmentReportDataSnapshot[]
+  careerFitModels        CareerFitModel[]
 
   @@unique([assessmentDefinitionId, versionNumber])
   @@index([assessmentDefinitionId, status])
@@ -311,6 +334,7 @@ model AssessmentConstruct {
   rawScores           AssessmentConstructScore[]
   normTables          AssessmentConstructNormTable[]
   interpretationRules AssessmentInterpretationRule[]
+  careerFitFactors    CareerFitModelFactor[]
 
   @@unique([assessmentVersionId, code])
   @@unique([assessmentVersionId, orderIndex])
@@ -485,6 +509,7 @@ model AssessmentScoringRun {
   attempt             AssessmentAttempt              @relation(fields: [attemptId], references: [id], onDelete: Restrict)
   constructScores     AssessmentConstructScore[]
   reportDataSnapshots AssessmentReportDataSnapshot[]
+  careerFitRuns       CareerFitRun[]
 
   @@unique([attemptId, scoringVersion, algorithmVersion, inputHash])
   @@index([attemptId, calculatedAt])
@@ -716,6 +741,207 @@ model AssessmentReportDataSnapshot {
   @@index([interpretationSetId])
   @@index([generatedAt])
   @@map("assessment_report_data_snapshots")
+}
+
+/// Stable identity for one governed career taxonomy family.
+model CareerTaxonomy {
+  id          String               @id @default(uuid()) @db.Uuid
+  code        String               @unique @db.VarChar(120)
+  name        String               @db.VarChar(200)
+  description String?              @db.Text
+  status      CareerTaxonomyStatus @default(ACTIVE)
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  archivedAt  DateTime?            @map("archived_at")
+  versions    CareerTaxonomyVersion[]
+
+  @@index([status])
+  @@map("career_taxonomies")
+}
+
+/// Versioned career catalogue. Published/retired versions are immutable.
+model CareerTaxonomyVersion {
+  id               String                      @id @default(uuid()) @db.Uuid
+  careerTaxonomyId String                      @map("career_taxonomy_id") @db.Uuid
+  version          String                      @db.VarChar(60)
+  edition          String                      @db.VarChar(60)
+  locale           String                      @db.VarChar(20)
+  status           CareerTaxonomyVersionStatus @default(DRAFT)
+  sourceReference  String?                     @map("source_reference") @db.Text
+  methodology      Json?                       @db.JsonB
+  createdAt        DateTime                    @default(now()) @map("created_at")
+  updatedAt        DateTime                    @updatedAt @map("updated_at")
+  publishedAt      DateTime?                   @map("published_at")
+  retiredAt        DateTime?                   @map("retired_at")
+  careerTaxonomy   CareerTaxonomy              @relation(fields: [careerTaxonomyId], references: [id], onDelete: Restrict)
+  clusters         CareerCluster[]
+  paths            CareerPath[]
+  careerFitModels  CareerFitModel[]
+
+  @@unique([careerTaxonomyId, version])
+  @@index([careerTaxonomyId, status])
+  @@index([status, publishedAt])
+  @@map("career_taxonomy_versions")
+}
+
+/// Cluster of related career paths inside one immutable taxonomy version.
+model CareerCluster {
+  id                      String                @id @default(uuid()) @db.Uuid
+  careerTaxonomyVersionId String                @map("career_taxonomy_version_id") @db.Uuid
+  code                    String                @db.VarChar(120)
+  name                    String                @db.VarChar(200)
+  description             String?               @db.Text
+  orderIndex              Int                   @map("order_index")
+  metadata                Json?                 @db.JsonB
+  createdAt               DateTime              @default(now()) @map("created_at")
+  updatedAt               DateTime              @updatedAt @map("updated_at")
+  careerTaxonomyVersion   CareerTaxonomyVersion @relation(fields: [careerTaxonomyVersionId], references: [id], onDelete: Restrict)
+  paths                   CareerPath[]
+
+  @@unique([careerTaxonomyVersionId, code])
+  @@unique([careerTaxonomyVersionId, orderIndex])
+  @@index([careerTaxonomyVersionId])
+  @@map("career_clusters")
+}
+
+/// Governed career path inside one taxonomy version.
+model CareerPath {
+  id                      String                @id @default(uuid()) @db.Uuid
+  careerTaxonomyVersionId String                @map("career_taxonomy_version_id") @db.Uuid
+  careerClusterId         String                @map("career_cluster_id") @db.Uuid
+  code                    String                @db.VarChar(120)
+  name                    String                @db.VarChar(200)
+  description             String?               @db.Text
+  orderIndex              Int                   @map("order_index")
+  metadata                Json?                 @db.JsonB
+  createdAt               DateTime              @default(now()) @map("created_at")
+  updatedAt               DateTime              @updatedAt @map("updated_at")
+  careerTaxonomyVersion   CareerTaxonomyVersion @relation(fields: [careerTaxonomyVersionId], references: [id], onDelete: Restrict)
+  careerCluster           CareerCluster         @relation(fields: [careerClusterId], references: [id], onDelete: Restrict)
+  modelFactors            CareerFitModelFactor[]
+  fitResults              CareerFitResult[]
+
+  @@unique([careerTaxonomyVersionId, code])
+  @@unique([careerTaxonomyVersionId, orderIndex])
+  @@index([careerClusterId])
+  @@index([careerTaxonomyVersionId])
+  @@map("career_paths")
+}
+
+/// Published scientific/configuration package mapping an assessment version to a career taxonomy version.
+model CareerFitModel {
+  id                      String                @id @default(uuid()) @db.Uuid
+  assessmentVersionId     String                @map("assessment_version_id") @db.Uuid
+  careerTaxonomyVersionId String                @map("career_taxonomy_version_id") @db.Uuid
+  version                 String                @db.VarChar(60)
+  name                    String                @db.VarChar(200)
+  description             String?               @db.Text
+  algorithmKey            String                @map("algorithm_key") @db.VarChar(120)
+  algorithmVersion        String                @map("algorithm_version") @db.VarChar(60)
+  sourceReference         String?               @map("source_reference") @db.Text
+  methodology             Json?                 @db.JsonB
+  status                  CareerFitModelStatus  @default(DRAFT)
+  createdAt               DateTime              @default(now()) @map("created_at")
+  updatedAt               DateTime              @updatedAt @map("updated_at")
+  publishedAt             DateTime?             @map("published_at")
+  retiredAt               DateTime?             @map("retired_at")
+  assessmentVersion       AssessmentVersion     @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  careerTaxonomyVersion   CareerTaxonomyVersion @relation(fields: [careerTaxonomyVersionId], references: [id], onDelete: Restrict)
+  factors                 CareerFitModelFactor[]
+  recommendationBands     CareerFitRecommendationBand[]
+  runs                    CareerFitRun[]
+
+  @@unique([assessmentVersionId, careerTaxonomyVersionId, version])
+  @@index([assessmentVersionId, status])
+  @@index([careerTaxonomyVersionId, status])
+  @@index([status, publishedAt])
+  @@map("career_fit_models")
+}
+
+/// One approved construct-to-career relationship. No values are seeded by migration.
+model CareerFitModelFactor {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  careerFitModelId      String                   @map("career_fit_model_id") @db.Uuid
+  careerPathId          String                   @map("career_path_id") @db.Uuid
+  assessmentConstructId String                   @map("assessment_construct_id") @db.Uuid
+  weight                Decimal                  @db.Decimal(20, 8)
+  direction             CareerFitFactorDirection @default(POSITIVE)
+  configuration         Json?                    @db.JsonB
+  rationale             String?                  @db.Text
+  sourceReference       String?                  @map("source_reference") @db.Text
+  orderIndex            Int                      @map("order_index")
+  createdAt             DateTime                 @default(now()) @map("created_at")
+  updatedAt             DateTime                 @updatedAt @map("updated_at")
+  careerFitModel        CareerFitModel           @relation(fields: [careerFitModelId], references: [id], onDelete: Restrict)
+  careerPath            CareerPath               @relation(fields: [careerPathId], references: [id], onDelete: Restrict)
+  assessmentConstruct   AssessmentConstruct      @relation(fields: [assessmentConstructId], references: [id], onDelete: Restrict)
+
+  @@unique([careerFitModelId, careerPathId, assessmentConstructId])
+  @@unique([careerFitModelId, orderIndex])
+  @@index([careerPathId])
+  @@index([assessmentConstructId])
+  @@map("career_fit_model_factors")
+}
+
+/// Optional governed labels for deterministic fit scores.
+model CareerFitRecommendationBand {
+  id              String         @id @default(uuid()) @db.Uuid
+  careerFitModelId String         @map("career_fit_model_id") @db.Uuid
+  code            String         @db.VarChar(120)
+  label           String         @db.VarChar(200)
+  lowerBound      Decimal?       @map("lower_bound") @db.Decimal(20, 8)
+  upperBound      Decimal?       @map("upper_bound") @db.Decimal(20, 8)
+  lowerInclusive  Boolean        @default(true) @map("lower_inclusive")
+  upperInclusive  Boolean        @default(true) @map("upper_inclusive")
+  priority        Int            @default(0)
+  outputData      Json?          @map("output_data") @db.JsonB
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  careerFitModel  CareerFitModel @relation(fields: [careerFitModelId], references: [id], onDelete: Restrict)
+  results         CareerFitResult[]
+
+  @@unique([careerFitModelId, code])
+  @@index([careerFitModelId, priority])
+  @@map("career_fit_recommendation_bands")
+}
+
+/// Immutable deterministic execution of one published career-fit model against one immutable scoring run.
+model CareerFitRun {
+  id               String               @id @default(uuid()) @db.Uuid
+  scoringRunId     String               @map("scoring_run_id") @db.Uuid
+  careerFitModelId String               @map("career_fit_model_id") @db.Uuid
+  inputHash        String               @map("input_hash") @db.Char(64)
+  algorithmKey     String               @map("algorithm_key") @db.VarChar(120)
+  algorithmVersion String               @map("algorithm_version") @db.VarChar(60)
+  calculatedAt     DateTime             @default(now()) @map("calculated_at")
+  metadata         Json?                @db.JsonB
+  scoringRun       AssessmentScoringRun @relation(fields: [scoringRunId], references: [id], onDelete: Restrict)
+  careerFitModel   CareerFitModel       @relation(fields: [careerFitModelId], references: [id], onDelete: Restrict)
+  results          CareerFitResult[]
+
+  @@unique([scoringRunId, careerFitModelId, inputHash])
+  @@index([scoringRunId, calculatedAt])
+  @@index([careerFitModelId, calculatedAt])
+  @@map("career_fit_runs")
+}
+
+/// One immutable ranked career-path result with complete evidence required for reproducibility.
+model CareerFitResult {
+  careerFitRunId       String                       @map("career_fit_run_id") @db.Uuid
+  careerPathId         String                       @map("career_path_id") @db.Uuid
+  score                Decimal                      @db.Decimal(20, 8)
+  rank                 Int
+  recommendationBandId String?                      @map("recommendation_band_id") @db.Uuid
+  evidenceData         Json                         @map("evidence_data") @db.JsonB
+  careerFitRun         CareerFitRun                 @relation(fields: [careerFitRunId], references: [id], onDelete: Restrict)
+  careerPath           CareerPath                   @relation(fields: [careerPathId], references: [id], onDelete: Restrict)
+  recommendationBand   CareerFitRecommendationBand? @relation(fields: [recommendationBandId], references: [id], onDelete: Restrict)
+
+  @@id([careerFitRunId, careerPathId])
+  @@unique([careerFitRunId, rank])
+  @@index([careerPathId])
+  @@index([recommendationBandId])
+  @@map("career_fit_results")
 }
 
 model AuditLog {
