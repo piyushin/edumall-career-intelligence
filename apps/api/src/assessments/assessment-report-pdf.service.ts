@@ -338,6 +338,7 @@ export class AssessmentReportPdfService {
           });
       });
 
+      document.x = LEFT;
       document.y = scoreY + 68;
 
       document
@@ -544,6 +545,9 @@ export class AssessmentReportPdfService {
       document.switchToPage(index);
 
       const footerY = PAGE_HEIGHT - 38;
+      const originalBottomMargin = document.page.margins.bottom;
+
+      document.page.margins.bottom = 0;
 
       document
         .moveTo(LEFT, footerY - 8)
@@ -571,6 +575,8 @@ export class AssessmentReportPdfService {
           lineBreak: false,
         },
       );
+
+      document.page.margins.bottom = originalBottomMargin;
     }
   }
 }
