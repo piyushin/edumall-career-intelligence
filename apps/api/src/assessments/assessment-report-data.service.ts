@@ -18,6 +18,14 @@ function canonicalize(value: unknown): string {
   return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalize(object[key])}`).join(",")}}`;
 }
 
+function resolveIndiaLocale(language: string): string {
+  const normalized = language.trim().toLowerCase();
+  if (normalized.startsWith("hi")) return "hi-IN";
+  if (normalized.startsWith("gu")) return "gu-IN";
+  if (normalized.startsWith("mr")) return "mr-IN";
+  return "en-IN";
+}
+
 @Injectable()
 export class AssessmentReportDataService {
   public constructor(
@@ -91,7 +99,9 @@ export class AssessmentReportDataService {
                 select: {
                   code: true,
                   name: true,
+                  description: true,
                   orderIndex: true,
+                  metadata: true,
                 },
               },
             },
@@ -221,8 +231,73 @@ export class AssessmentReportDataService {
         });
       }
 
+      const careerFitRun = await tx.careerFitRun.findFirst({
+        where: { scoringRunId },
+        orderBy: { calculatedAt: "desc" },
+        select: {
+          id: true,
+          inputHash: true,
+          algorithmKey: true,
+          algorithmVersion: true,
+          calculatedAt: true,
+          metadata: true,
+          careerFitModel: {
+            select: {
+              id: true,
+              version: true,
+              name: true,
+              description: true,
+              sourceReference: true,
+              methodology: true,
+              careerTaxonomyVersion: {
+                select: {
+                  id: true,
+                  version: true,
+                  edition: true,
+                  locale: true,
+                  sourceReference: true,
+                  methodology: true,
+                },
+              },
+            },
+          },
+          results: {
+            orderBy: { rank: "asc" },
+            select: {
+              careerPathId: true,
+              score: true,
+              rank: true,
+              evidenceData: true,
+              careerPath: {
+                select: {
+                  code: true,
+                  name: true,
+                  description: true,
+                  careerCluster: {
+                    select: {
+                      id: true,
+                      code: true,
+                      name: true,
+                      description: true,
+                    },
+                  },
+                },
+              },
+              recommendationBand: {
+                select: {
+                  id: true,
+                  code: true,
+                  label: true,
+                  outputData: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
       const payload = {
-        schemaVersion: "assessment-report-data-v2",
+        schemaVersion: "assessment-report-data-v3",
         candidate: {
           userId: scoringRun.attempt.assignment.user.id,
           email: scoringRun.attempt.assignment.user.email,
@@ -257,6 +332,8 @@ export class AssessmentReportDataService {
             assessmentConstructId: score.assessmentConstructId,
             code: score.assessmentConstruct.code,
             name: score.assessmentConstruct.name,
+            description: score.assessmentConstruct.description,
+            metadata: score.assessmentConstruct.metadata,
             orderIndex: score.assessmentConstruct.orderIndex,
             rawScore: score.rawScore.toString(),
             answeredItemCount: score.answeredItemCount,
@@ -291,6 +368,67 @@ export class AssessmentReportDataService {
             outputData: application.outputData,
             appliedAt: application.appliedAt.toISOString(),
           })),
+        },
+        ...(careerFitRun
+          ? {
+              careerFit: {
+                careerFitRunId: careerFitRun.id,
+                inputHash: careerFitRun.inputHash,
+                algorithmKey: careerFitRun.algorithmKey,
+                algorithmVersion: careerFitRun.algorithmVersion,
+                calculatedAt: careerFitRun.calculatedAt.toISOString(),
+                metadata: careerFitRun.metadata,
+                model: {
+                  id: careerFitRun.careerFitModel.id,
+                  version: careerFitRun.careerFitModel.version,
+                  name: careerFitRun.careerFitModel.name,
+                  description: careerFitRun.careerFitModel.description,
+                  sourceReference: careerFitRun.careerFitModel.sourceReference,
+                  methodology: careerFitRun.careerFitModel.methodology,
+                },
+                taxonomy: {
+                  id: careerFitRun.careerFitModel.careerTaxonomyVersion.id,
+                  version: careerFitRun.careerFitModel.careerTaxonomyVersion.version,
+                  edition: careerFitRun.careerFitModel.careerTaxonomyVersion.edition,
+                  locale: careerFitRun.careerFitModel.careerTaxonomyVersion.locale,
+                  sourceReference:
+                    careerFitRun.careerFitModel.careerTaxonomyVersion.sourceReference,
+                  methodology: careerFitRun.careerFitModel.careerTaxonomyVersion.methodology,
+                },
+                rankedCareerPaths: careerFitRun.results.map((result) => ({
+                  careerPathId: result.careerPathId,
+                  careerPathCode: result.careerPath.code,
+                  careerPathName: result.careerPath.name,
+                  careerPathDescription: result.careerPath.description,
+                  careerClusterId: result.careerPath.careerCluster.id,
+                  careerClusterCode: result.careerPath.careerCluster.code,
+                  careerClusterName: result.careerPath.careerCluster.name,
+                  careerClusterDescription: result.careerPath.careerCluster.description,
+                  score: result.score.toString(),
+                  rank: result.rank,
+                  recommendationBand: result.recommendationBand
+                    ? {
+                        id: result.recommendationBand.id,
+                        code: result.recommendationBand.code,
+                        label: result.recommendationBand.label,
+                        outputData: result.recommendationBand.outputData,
+                      }
+                    : null,
+                  evidence: result.evidenceData,
+                })),
+              },
+            }
+          : {}),
+        reportComposition: {
+          templateId: "career-intelligence-student",
+          templateVersion: "1",
+          audience: "CANDIDATE",
+          locale: resolveIndiaLocale(version.language),
+        },
+        provenance: {
+          snapshotPolicy: "immutable-v3",
+          interpretationPolicy: "published-only",
+          careerFitPolicy: careerFitRun ? "frozen-deterministic-run" : "not-available",
         },
       };
 

@@ -1,5 +1,6 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import PDFDocument from "pdfkit";
+import { CareerIntelligenceReportPdfRenderer } from "./career-intelligence-report-pdf.renderer";
 
 interface ReportPayload {
   schemaVersion: string;
@@ -81,6 +82,16 @@ const CONTENT_WIDTH = PAGE_WIDTH - LEFT - RIGHT;
 @Injectable()
 export class AssessmentReportPdfService {
   public async render(snapshot: ReportSnapshot): Promise<Buffer> {
+    if (
+      typeof snapshot.payload === "object" &&
+      snapshot.payload !== null &&
+      "schemaVersion" in snapshot.payload &&
+      (snapshot.payload as { schemaVersion?: unknown }).schemaVersion ===
+        "assessment-report-data-v3"
+    ) {
+      return new CareerIntelligenceReportPdfRenderer().render(snapshot);
+    }
+
     const payload = this.parsePayload(snapshot.payload);
 
     return new Promise<Buffer>((resolve, reject) => {

@@ -80,6 +80,9 @@ function createPrisma() {
     assessmentInterpretationApplication: {
       findMany: vi.fn(),
     },
+    careerFitRun: {
+      findFirst: vi.fn(),
+    },
     assessmentReportDataSnapshot: {
       findUnique: vi.fn(),
       create: vi.fn(),
@@ -148,6 +151,8 @@ describe("AssessmentReportDataService", () => {
       },
     ]);
 
+    prisma.careerFitRun.findFirst.mockResolvedValue(null);
+
     prisma.assessmentReportDataSnapshot.findUnique.mockResolvedValue(null);
 
     prisma.assessmentReportDataSnapshot.create.mockImplementation(
@@ -177,7 +182,7 @@ describe("AssessmentReportDataService", () => {
     expect(result.reportVersion).toBe("report-v1");
 
     expect(createCall?.data.payload).toMatchObject({
-      schemaVersion: "assessment-report-data-v2",
+      schemaVersion: "assessment-report-data-v3",
       candidate: {
         email: "candidate@example.com",
         firstName: "Test",
@@ -188,6 +193,12 @@ describe("AssessmentReportDataService", () => {
       },
       submission: {
         attemptId,
+      },
+      reportComposition: {
+        templateId: "career-intelligence-student",
+        templateVersion: "1",
+        audience: "CANDIDATE",
+        locale: "en-IN",
       },
     });
   });
@@ -298,5 +309,79 @@ describe("AssessmentReportDataService", () => {
     await expect(
       service.createSnapshot(scoringRunId, normGroupId, interpretationSetId),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("freezes the latest deterministic CareerFit run into the v3 snapshot", async () => {
+    prisma.careerFitRun.findFirst.mockResolvedValue({
+      id: "90909090-9090-4090-8090-909090909090",
+      inputHash: "c".repeat(64),
+      algorithmKey: "career-fit",
+      algorithmVersion: "1",
+      calculatedAt: new Date("2026-08-08T08:03:00.000Z"),
+      metadata: { source: "test" },
+      careerFitModel: {
+        id: "91919191-9191-4191-8191-919191919191",
+        version: "1",
+        name: "CareerFit Model",
+        description: "Model description",
+        sourceReference: "methodology-ref",
+        methodology: { method: "published" },
+        careerTaxonomyVersion: {
+          id: "92929292-9292-4292-8292-929292929292",
+          version: "2026",
+          edition: "India",
+          locale: "en-IN",
+          sourceReference: "taxonomy-ref",
+          methodology: { scope: "India" },
+        },
+      },
+      results: [
+        {
+          careerPathId: "93939393-9393-4393-8393-939393939393",
+          score: decimal("91.5"),
+          rank: 1,
+          evidenceData: { summary: "deterministic evidence" },
+          careerPath: {
+            code: "PATH-1",
+            name: "Career Path One",
+            description: "Published path description",
+            careerCluster: {
+              id: "94949494-9494-4494-8494-949494949494",
+              code: "CLUSTER-1",
+              name: "Cluster One",
+              description: "Published cluster description",
+            },
+          },
+          recommendationBand: {
+            id: "95959595-9595-4595-8595-959595959595",
+            code: "STRONG",
+            label: "Strong alignment",
+            outputData: { summary: "Published band interpretation" },
+          },
+        },
+      ],
+    });
+
+    await service.createSnapshot(scoringRunId, normGroupId, interpretationSetId);
+
+    const createCall = prisma.assessmentReportDataSnapshot.create.mock.calls[0]?.[0];
+    expect(createCall?.data.payload).toMatchObject({
+      schemaVersion: "assessment-report-data-v3",
+      careerFit: {
+        algorithmKey: "career-fit",
+        algorithmVersion: "1",
+        model: { name: "CareerFit Model", version: "1" },
+        taxonomy: { version: "2026", edition: "India" },
+        rankedCareerPaths: [
+          {
+            careerPathCode: "PATH-1",
+            careerPathName: "Career Path One",
+            score: "91.5",
+            rank: 1,
+            recommendationBand: { label: "Strong alignment" },
+          },
+        ],
+      },
+    });
   });
 });
