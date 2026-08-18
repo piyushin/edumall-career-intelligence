@@ -1,4 +1,5 @@
 import { ConflictException } from "@nestjs/common";
+import { readFileSync } from "node:fs";
 import PDFDocument from "pdfkit";
 import type { AssessmentReportPayloadV3 } from "./assessment-report-composition.types";
 
@@ -49,6 +50,15 @@ const INK = "#172033";
 const MUTED = "#667085";
 const LINE = "#E4E7EC";
 const PANEL = "#F7F9FC";
+const ACCENT = "#F58220";
+const REPORT_TITLE = "The EduMall Career Intelligence Report - Next Generation";
+const REPORT_EMAIL = "careeradTEM@gmail.com";
+const REPORT_WEBSITE = "www.theedumall.com";
+const REPORT_PHONE_PRIMARY = "+91 82381 03232";
+const REPORT_PHONE_SECONDARY = "+91 85115 50150";
+const REPORT_ADDRESS =
+  "Office No. 231, The EduMall, Suyash Solitaire, Kudasan, Gandhinagar, Gujarat";
+const EDUMALL_LOGO = readFileSync(new URL("./assets/edumall-logo.png", import.meta.url));
 
 const DIMENSION_SECTIONS = [
   ["PERSONALITY", "Career Personality"],
@@ -135,10 +145,10 @@ export class CareerIntelligenceReportPdfRenderer {
         margins: { top: TOP, right: RIGHT, bottom: BOTTOM, left: LEFT },
         bufferPages: true,
         info: {
-          Title: "DMentor Career Intelligence Report — Next Generation",
+          Title: REPORT_TITLE,
           Author: "The EduMall",
           Subject: "Governed Career Intelligence and Psychometric Assessment Report",
-          Keywords: "career intelligence, psychometric, assessment, DMentor, EduMall",
+          Keywords: "career intelligence, psychometric, assessment, The EduMall, Meetium",
           CreationDate: new Date(snapshot.generatedAt),
         },
       });
@@ -275,25 +285,34 @@ export class CareerIntelligenceReportPdfRenderer {
     const candidate = asRecord(payload.candidate);
 
     document.rect(0, 0, PAGE_WIDTH, 235).fill(BRAND);
+    document.roundedRect(LEFT, 26, 190, 78, 8).fill("#FFFFFF");
+    document.image(EDUMALL_LOGO, LEFT + 10, -8, { width: 170 });
+
     document
       .fillColor("#FFFFFF")
       .font("Helvetica-Bold")
-      .fontSize(12)
-      .text("THE EDUMALL", LEFT, 54, {
-        characterSpacing: 2,
+      .fontSize(27)
+      .text("Career Intelligence Report", LEFT, 118, {
+        width: CONTENT_WIDTH,
+        lineGap: 4,
       });
-    document.fontSize(29).text("DMentor Career Intelligence Report", LEFT, 86, {
-      width: CONTENT_WIDTH,
-      lineGap: 4,
-    });
-    document.font("Helvetica").fontSize(18).fillColor("#DCE8F8").text("Next Generation", LEFT, 166);
+    document.font("Helvetica").fontSize(17).fillColor("#DCE8F8").text("Next Generation", LEFT, 160);
+    document
+      .font("Helvetica-Bold")
+      .fontSize(7.8)
+      .fillColor("#FFFFFF")
+      .text("AN INITIATIVE OF MEETIUM PVT. LTD.", LEFT, 202, {
+        characterSpacing: 0.8,
+      });
 
     document.y = 278;
+    const rawAssessmentTitle = asString(assessment?.title) ?? "Career Intelligence Assessment";
+    const assessmentTitle = rawAssessmentTitle.replace(/DMentor/gi, "The EduMall");
     document
       .fillColor(INK)
       .font("Helvetica-Bold")
-      .fontSize(24)
-      .text(asString(assessment?.title) ?? "Career Intelligence Assessment");
+      .fontSize(23)
+      .text(assessmentTitle, LEFT, document.y, { width: CONTENT_WIDTH });
     document
       .moveDown(0.5)
       .font("Helvetica")
@@ -301,10 +320,12 @@ export class CareerIntelligenceReportPdfRenderer {
       .fillColor(MUTED)
       .text(
         "A governed assessment report combining published psychometric results with deterministic CareerFit evidence.",
+        LEFT,
+        document.y,
         { width: CONTENT_WIDTH, lineGap: 3 },
       );
 
-    document.moveDown(2);
+    document.moveDown(1.5);
     const candidateName = [asString(candidate?.firstName), asString(candidate?.lastName)]
       .filter(Boolean)
       .join(" ");
@@ -314,12 +335,15 @@ export class CareerIntelligenceReportPdfRenderer {
     this.keyValue(document, "Language", asString(assessment?.language) ?? "—");
     this.keyValue(document, "Report generated", this.formatDate(snapshot.generatedAt));
 
-    document.moveDown(1.6);
+    document.moveDown(1.1);
     this.noteBox(
       document,
       "REPORT PRINCIPLE",
       "The conclusions in this report are reproduced from frozen assessment, norm, interpretation and CareerFit records. The PDF renderer does not invent scores, norms, diagnoses or career-fit conclusions.",
     );
+
+    document.moveDown(0.25);
+    this.contactBlock(document);
   }
 
   private renderExecutiveSnapshot(
@@ -494,43 +518,60 @@ export class CareerIntelligenceReportPdfRenderer {
   }
 
   private renderProfileOverview(document: PDFKit.PDFDocument, constructs: ConstructView[]): void {
-    this.newPage(
-      document,
-      "Your Psychometric Profile",
-      "A consolidated view of the constructs measured in this assessment",
-    );
-
     if (constructs.length === 0) {
+      this.newPage(
+        document,
+        "Your Psychometric Profile",
+        "A consolidated view of the constructs measured in this assessment",
+      );
       this.mutedText(document, "No scored constructs were present in this snapshot.");
       return;
     }
 
-    constructs.slice(0, 12).forEach((construct) => {
-      const percentile = construct.percentile ? `P${construct.percentile}` : "No percentile";
-      document.roundedRect(LEFT, document.y, CONTENT_WIDTH, 42, 6).fill(PANEL);
-      const y = document.y + 10;
-      document
-        .font("Helvetica-Bold")
-        .fontSize(10)
-        .fillColor(INK)
-        .text(construct.name, LEFT + 12, y, {
-          width: CONTENT_WIDTH - 155,
-        });
-      document
-        .font("Helvetica")
-        .fontSize(8.5)
-        .fillColor(MUTED)
-        .text(construct.code, LEFT + 12, y + 17);
-      document
-        .font("Helvetica-Bold")
-        .fontSize(10)
-        .fillColor(BRAND)
-        .text(percentile, PAGE_WIDTH - RIGHT - 120, y + 8, {
-          width: 105,
-          align: "right",
-        });
-      document.y += 52;
-    });
+    const constructsPerPage = 8;
+
+    for (let offset = 0; offset < constructs.length; offset += constructsPerPage) {
+      this.newPage(
+        document,
+        "Your Psychometric Profile",
+        offset === 0
+          ? "A consolidated view of the constructs measured in this assessment"
+          : "A consolidated view of the constructs measured in this assessment - continued",
+      );
+
+      const pageConstructs = constructs.slice(offset, offset + constructsPerPage);
+      for (const construct of pageConstructs) {
+        const percentile = construct.percentile ? `P${construct.percentile}` : "No percentile";
+        const rowY = document.y;
+
+        document.roundedRect(LEFT, rowY, CONTENT_WIDTH, 42, 6).fill(PANEL);
+        document
+          .font("Helvetica-Bold")
+          .fontSize(10)
+          .fillColor(INK)
+          .text(construct.name, LEFT + 12, rowY + 10, {
+            width: CONTENT_WIDTH - 155,
+          });
+        document
+          .font("Helvetica")
+          .fontSize(8.5)
+          .fillColor(MUTED)
+          .text(construct.code, LEFT + 12, rowY + 27, {
+            width: CONTENT_WIDTH - 155,
+          });
+        document
+          .font("Helvetica-Bold")
+          .fontSize(10)
+          .fillColor(BRAND)
+          .text(percentile, PAGE_WIDTH - RIGHT - 120, rowY + 18, {
+            width: 105,
+            align: "right",
+          });
+
+        document.y = rowY + 52;
+        document.x = LEFT;
+      }
+    }
   }
 
   private renderDimensionPages(document: PDFKit.PDFDocument, constructs: ConstructView[]): void {
@@ -1063,6 +1104,7 @@ export class CareerIntelligenceReportPdfRenderer {
         align: "right",
       });
     document.y = y + height + 8;
+    document.x = LEFT;
   }
 
   private percentileBar(
@@ -1089,6 +1131,7 @@ export class CareerIntelligenceReportPdfRenderer {
         align: "right",
       });
     document.y = y + 24;
+    document.x = LEFT;
   }
 
   private definitionCard(document: PDFKit.PDFDocument, title: string, text: string): void {
@@ -1195,6 +1238,36 @@ export class CareerIntelligenceReportPdfRenderer {
     document.y = y + height + 12;
   }
 
+  private contactBlock(document: PDFKit.PDFDocument): void {
+    const y = document.y;
+    const height = 104;
+    document.roundedRect(LEFT, y, CONTENT_WIDTH, height, 8).fillAndStroke("#FFF8F1", "#F5CBA7");
+    document
+      .font("Helvetica-Bold")
+      .fontSize(9.5)
+      .fillColor(ACCENT)
+      .text("THE EDUMALL CONTACT", LEFT + 14, y + 13);
+    document
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .fillColor(INK)
+      .text(`Phone: ${REPORT_PHONE_PRIMARY} | ${REPORT_PHONE_SECONDARY}`, LEFT + 14, y + 34, {
+        width: CONTENT_WIDTH - 28,
+      });
+    document
+      .font("Helvetica")
+      .fontSize(8.8)
+      .fillColor("#475467")
+      .text(`Email: ${REPORT_EMAIL} | Web: ${REPORT_WEBSITE}`, LEFT + 14, y + 54, {
+        width: CONTENT_WIDTH - 28,
+      });
+    document.text(`Address: ${REPORT_ADDRESS}`, LEFT + 14, y + 73, {
+      width: CONTENT_WIDTH - 28,
+    });
+    document.y = y + height + 8;
+    document.x = LEFT;
+  }
+
   private keyValue(document: PDFKit.PDFDocument, label: string, value: string): void {
     const y = document.y;
     document.font("Helvetica").fontSize(8.5).fillColor(MUTED).text(label, LEFT, y, { width: 150 });
@@ -1206,6 +1279,7 @@ export class CareerIntelligenceReportPdfRenderer {
         width: CONTENT_WIDTH - 155,
       });
     document.y = Math.max(document.y, y + 22);
+    document.x = LEFT;
   }
 
   private hashBlock(document: PDFKit.PDFDocument, label: string, value: string): void {
@@ -1245,7 +1319,7 @@ export class CareerIntelligenceReportPdfRenderer {
     }).format(date);
   }
 
-  private addFooters(document: PDFKit.PDFDocument, snapshot: ReportSnapshot): void {
+  private addFooters(document: PDFKit.PDFDocument, _snapshot: ReportSnapshot): void {
     const range = document.bufferedPageRange();
     for (let index = range.start; index < range.start + range.count; index += 1) {
       document.switchToPage(index);
@@ -1260,23 +1334,29 @@ export class CareerIntelligenceReportPdfRenderer {
         .stroke();
       document
         .font("Helvetica")
-        .fontSize(7.2)
+        .fontSize(6.6)
         .fillColor("#98A2B3")
-        .text(`The EduMall | Career Intelligence snapshot ${snapshot.id}`, LEFT, footerY, {
-          width: CONTENT_WIDTH - 90,
-          lineBreak: false,
-        });
+        .text(
+          `The EduMall | ${REPORT_PHONE_PRIMARY} | ${REPORT_PHONE_SECONDARY} | ${REPORT_EMAIL} | ${REPORT_WEBSITE}`,
+          LEFT,
+          footerY,
+          {
+            width: CONTENT_WIDTH - 72,
+            lineBreak: false,
+          },
+        );
       document.text(
         `Page ${index - range.start + 1} of ${range.count}`,
-        PAGE_WIDTH - RIGHT - 78,
+        PAGE_WIDTH - RIGHT - 64,
         footerY,
         {
-          width: 78,
+          width: 64,
           align: "right",
           lineBreak: false,
         },
       );
       document.page.margins.bottom = originalBottomMargin;
+      document.x = LEFT;
     }
   }
 }
