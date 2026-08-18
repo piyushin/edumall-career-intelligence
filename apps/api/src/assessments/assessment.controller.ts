@@ -8,15 +8,20 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  Res,
+  StreamableFile,
   UseGuards,
 } from "@nestjs/common";
 import { MembershipRole } from "@prisma/client";
+import type { Response } from "express";
 import { AuthGuard } from "../auth/auth.guard";
 import type { AuthContext } from "../auth/auth.types";
 import { CsrfGuard } from "../auth/csrf.guard";
 import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { AssessmentReportPdfService } from "./assessment-report-pdf.service";
+import { AssessmentReportReleaseService } from "./assessment-report-release.service";
 import { AssessmentService } from "./assessment.service";
 import { SaveAssessmentResponseDto } from "./assessment.types";
 
@@ -27,6 +32,10 @@ export class AssessmentController {
   public constructor(
     @Inject(AssessmentService)
     private readonly assessments: AssessmentService,
+    @Inject(AssessmentReportReleaseService)
+    private readonly releases: AssessmentReportReleaseService,
+    @Inject(AssessmentReportPdfService)
+    private readonly pdf: AssessmentReportPdfService,
   ) {}
 
   @Get("assignments")
@@ -44,6 +53,26 @@ export class AssessmentController {
     assignmentId: string,
   ) {
     return this.assessments.startOrResumeAttempt(context, assignmentId);
+  }
+
+  @Get("attempts/:attemptId/released-report.pdf")
+  @Header("cache-control", "private, no-store")
+  public async downloadReleasedReportPdf(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const release = await this.releases.getCandidateReleasedSnapshot(context, attemptId);
+    const pdf = await this.pdf.render(release.reportDataSnapshot);
+
+    response.setHeader("content-type", "application/pdf");
+    response.setHeader(
+      "content-disposition",
+      `attachment; filename="career-intelligence-report-${attemptId}.pdf"`,
+    );
+    response.setHeader("content-length", String(pdf.length));
+
+    return new StreamableFile(pdf);
   }
 
   @Get("attempts/:attemptId")

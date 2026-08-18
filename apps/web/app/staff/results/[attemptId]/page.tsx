@@ -9,6 +9,7 @@ import {
   generateAssessmentReportSnapshot,
   getAssessmentReportReadiness,
   getAssessmentResult,
+  releaseAssessmentReport,
   type AssessmentReportPayload,
   type AssessmentReportReadiness,
   type AssessmentResultDetail,
@@ -150,6 +151,7 @@ export default function ResultDetailPage() {
   const [loading, setLoading] = useState(true);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [releasingReport, setReleasingReport] = useState(false);
 
   const [error, setError] = useState("");
   const [reportError, setReportError] = useState("");
@@ -256,6 +258,33 @@ export default function ResultDetailPage() {
       );
     } finally {
       setDownloadingPdf(false);
+    }
+  }
+
+  async function handleReleaseReport() {
+    const confirmed = window.confirm(
+      "Release this exact immutable Career Intelligence report to the candidate?",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setReleasingReport(true);
+    setReportError("");
+
+    try {
+      await releaseAssessmentReport(params.attemptId, organizationId);
+      const refreshed = await getAssessmentReportReadiness(params.attemptId, organizationId);
+      setReportReadiness(refreshed);
+    } catch (caught) {
+      setReportError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Unable to release the report to the candidate.",
+      );
+    } finally {
+      setReleasingReport(false);
     }
   }
 
@@ -411,6 +440,35 @@ export default function ResultDetailPage() {
                 The PDF is rendered from the immutable report-data snapshot and preserves the
                 recorded scoring, normalization, interpretation, and report provenance.
               </p>
+            </div>
+            <div className="mt-6 border-t border-slate-200 pt-6">
+              {reportReadiness.latestRelease?.reportDataSnapshotId ===
+              reportReadiness.latestSnapshot.id ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-sm font-semibold text-emerald-900">
+                    Reviewed and released to candidate
+                  </p>
+                  <p className="mt-1 text-xs text-emerald-800">
+                    Released {formatDate(reportReadiness.latestRelease.releasedAt)}. Candidate
+                    access is locked to this immutable snapshot.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={releasingReport}
+                    onClick={() => void handleReleaseReport()}
+                    className="rounded-lg bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {releasingReport ? "Releasing..." : "Review & release to candidate"}
+                  </button>
+                  <p className="mt-3 max-w-3xl text-xs leading-5 text-slate-500">
+                    Release is permitted only for the governed v3 snapshot with deterministic
+                    CareerFit evidence. The released snapshot cannot be silently changed.
+                  </p>
+                </>
+              )}
             </div>
           </>
         ) : !reportReadiness.canGenerate ? (

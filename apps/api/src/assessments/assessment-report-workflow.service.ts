@@ -41,6 +41,7 @@ export class AssessmentReportWorkflowService {
 
     const attempt = await this.findSubmittedAttempt(attemptId, organizationId);
 
+    const latestRelease = attempt.reportReleases[0] ?? null;
     const scoringRun = attempt.scoringRuns[0] ?? null;
 
     if (!scoringRun) {
@@ -50,6 +51,7 @@ export class AssessmentReportWorkflowService {
         publishedNormGroups: [],
         publishedInterpretationSets: [],
         latestSnapshot: null,
+        latestRelease,
         canGenerate: false,
       };
     }
@@ -131,6 +133,7 @@ export class AssessmentReportWorkflowService {
       publishedNormGroups,
       publishedInterpretationSets: interpretationSets,
       latestSnapshot,
+      latestRelease,
       canGenerate,
     };
   }
@@ -200,6 +203,19 @@ export class AssessmentReportWorkflowService {
                 normVersion: true,
               },
             },
+          },
+        },
+        reportReleases: {
+          orderBy: {
+            releasedAt: "desc",
+          },
+          take: 1,
+          select: {
+            id: true,
+            reportDataSnapshotId: true,
+            releasedByUserId: true,
+            reviewedAt: true,
+            releasedAt: true,
           },
         },
         scoringRuns: {
