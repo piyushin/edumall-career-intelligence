@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../../lib/api";
 import {
   downloadAssessmentReportPdf,
+  executeCareerFitRun,
   generateAssessmentReportSnapshot,
   getAssessmentReportReadiness,
   getAssessmentResult,
@@ -147,6 +148,7 @@ export default function ResultDetailPage() {
 
   const [normGroupId, setNormGroupId] = useState("");
   const [interpretationSetId, setInterpretationSetId] = useState("");
+  const [careerFitModelId, setCareerFitModelId] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [generatingReport, setGeneratingReport] = useState(false);
@@ -180,6 +182,10 @@ export default function ResultDetailPage() {
         if (readiness.publishedInterpretationSets.length === 1) {
           setInterpretationSetId(readiness.publishedInterpretationSets[0]?.id ?? "");
         }
+
+        if (readiness.publishedCareerFitModels.length === 1) {
+          setCareerFitModelId(readiness.publishedCareerFitModels[0]?.id ?? "");
+        }
       } catch (caught) {
         if (!active) {
           return;
@@ -201,8 +207,8 @@ export default function ResultDetailPage() {
   }, [params.attemptId, organizationId]);
 
   async function handleGenerateReport() {
-    if (!normGroupId || !interpretationSetId) {
-      setReportError("Select both a published norm group and a published interpretation set.");
+    if (!normGroupId || !interpretationSetId || !careerFitModelId) {
+      setReportError("Select a published norm group, interpretation set, and CareerFit model.");
       return;
     }
 
@@ -210,6 +216,23 @@ export default function ResultDetailPage() {
     setReportError("");
 
     try {
+      const existingCareerFit = reportReadiness?.latestCareerFitRun;
+
+      if (
+        !existingCareerFit ||
+        existingCareerFit.careerFitModelId !== careerFitModelId ||
+        existingCareerFit.normGroupId !== normGroupId
+      ) {
+        await executeCareerFitRun(
+          params.attemptId,
+          {
+            normGroupId,
+            careerFitModelId,
+          },
+          organizationId,
+        );
+      }
+
       await generateAssessmentReportSnapshot(
         params.attemptId,
         {
@@ -409,7 +432,7 @@ export default function ResultDetailPage() {
           <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
             Report generation cannot begin until deterministic scoring is available.
           </div>
-        ) : reportReadiness.latestSnapshot ? (
+        ) : reportReadiness.latestSnapshot?.payload.careerFit?.rankedCareerPaths.length ? (
           <>
             <ReportSnapshotView
               payload={reportReadiness.latestSnapshot.payload}
@@ -474,13 +497,13 @@ export default function ResultDetailPage() {
         ) : !reportReadiness.canGenerate ? (
           <>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              A report may be generated only when published norm data and a published interpretation
-              set are available for this exact assessment version.
+              A report may be generated only when published norm data, a published interpretation
+              set, and a published CareerFit model are available for this exact assessment version.
             </p>
 
             <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
-              Scientific configuration is incomplete. No interpretive report will be generated until
-              the required published norm and interpretation data exists.
+              Scientific configuration is incomplete. No candidate report will be generated until
+              the required published norm, interpretation, and CareerFit configuration exists.
             </div>
           </>
         ) : (
@@ -491,7 +514,7 @@ export default function ResultDetailPage() {
               or incomplete scientific data.
             </p>
 
-            <div className="mt-6 grid gap-5 md:grid-cols-2">
+            <div className="mt-6 grid gap-5 md:grid-cols-3">
               <label className="block">
                 <span className="text-sm font-medium text-slate-800">Published norm group</span>
 
@@ -549,6 +572,36 @@ export default function ResultDetailPage() {
                   </p>
                 ) : null}
               </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-slate-800">
+                  Published CareerFit model
+                </span>
+
+                <select
+                  value={careerFitModelId}
+                  onChange={(event) => setCareerFitModelId(event.target.value)}
+                  className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="">Select CareerFit model</option>
+
+                  {reportReadiness.publishedCareerFitModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} - {model.version}
+                    </option>
+                  ))}
+                </select>
+
+                {careerFitModelId ? (
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {
+                      reportReadiness.publishedCareerFitModels.find(
+                        (model) => model.id === careerFitModelId,
+                      )?.sourceReference
+                    }
+                  </p>
+                ) : null}
+              </label>
             </div>
 
             {reportError ? (
@@ -563,19 +616,21 @@ export default function ResultDetailPage() {
             <div className="mt-6">
               <button
                 type="button"
-                disabled={generatingReport || !normGroupId || !interpretationSetId}
+                disabled={
+                  generatingReport || !normGroupId || !interpretationSetId || !careerFitModelId
+                }
                 onClick={() => void handleGenerateReport()}
                 className="rounded-lg bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {generatingReport
-                  ? "Generating governed report..."
-                  : "Generate governed report data"}
+                  ? "Calculating CareerFit and generating report..."
+                  : "Calculate CareerFit & generate report"}
               </button>
 
               <p className="mt-3 max-w-3xl text-xs leading-5 text-slate-500">
-                This action does not calculate new norms or invent interpretations. It applies only
-                published configuration and stores an immutable report-data snapshot with
-                provenance.
+                This action applies only published norm, interpretation and CareerFit configuration.
+                It stores deterministic CareerFit evidence and an immutable report-data snapshot
+                with provenance; it does not invent scientific norms or weights.
               </p>
             </div>
           </>

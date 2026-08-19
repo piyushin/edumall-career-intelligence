@@ -8,6 +8,7 @@ import { CareerFitExecutionController } from "./career-fit-execution.controller"
 import { CareerFitExecutionService } from "./career-fit-execution.service";
 import { CareerIntelligenceAdminController } from "./career-intelligence-admin.controller";
 import { CareerIntelligenceAdminService } from "./career-intelligence-admin.service";
+import { weightedPercentileCareerFitAlgorithm } from "./weighted-percentile-career-fit.algorithm";
 
 @Module({
   imports: [AssessmentModule],
@@ -15,7 +16,7 @@ import { CareerIntelligenceAdminService } from "./career-intelligence-admin.serv
   providers: [
     {
       provide: CAREER_FIT_ALGORITHM_DEFINITIONS,
-      useValue: [],
+      useValue: [weightedPercentileCareerFitAlgorithm],
     },
     CareerFitAlgorithmRegistry,
     CareerFitExecutionService,

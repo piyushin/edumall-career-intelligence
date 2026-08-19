@@ -19,6 +19,7 @@ import { AssessmentNormService } from "../assessments/assessment-norm.service";
 import type { AuthContext } from "../auth/auth.types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import {
+  CareerFitAlgorithmExecutionError,
   CareerFitAlgorithmRegistry,
   type CareerFitAlgorithmExecutionInput,
   type CareerFitAlgorithmExecutionPath,
@@ -449,7 +450,21 @@ export class CareerFitExecutionService {
       return this.serializeRun(existing);
     }
 
-    const algorithmResults = algorithm.execute(executionInput);
+    let algorithmResults: CareerFitAlgorithmExecutionResult[];
+
+    try {
+      algorithmResults = algorithm.execute(executionInput);
+    } catch (error) {
+      if (error instanceof CareerFitAlgorithmExecutionError) {
+        throw new ConflictException({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
+      throw error;
+    }
+
     const preparedResults = this.prepareResults(
       careerPaths,
       recommendationBands,

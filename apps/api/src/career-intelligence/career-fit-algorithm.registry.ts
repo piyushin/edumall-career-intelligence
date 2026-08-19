@@ -32,6 +32,16 @@ export interface CareerFitAlgorithmValidationContext {
 
 export type CareerFitRankOrder = "ASC" | "DESC";
 
+export class CareerFitAlgorithmExecutionError extends Error {
+  public constructor(
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "CareerFitAlgorithmExecutionError";
+  }
+}
+
 export interface CareerFitAlgorithmExecutionFactor {
   factorId: string;
   assessmentConstructId: string;
