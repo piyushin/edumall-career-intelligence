@@ -180,6 +180,13 @@ export interface AssessmentReportReadiness {
     description: string | null;
     sourceReference: string | null;
   }>;
+  latestRelease: {
+    id: string;
+    reportDataSnapshotId: string;
+    releasedByUserId: string;
+    reviewedAt: string;
+    releasedAt: string;
+  } | null;
   latestSnapshot: {
     id: string;
     scoringRunId: string;
@@ -226,6 +233,28 @@ export function generateAssessmentReportSnapshot(
     {
       method: "POST",
       body: JSON.stringify(input),
+    },
+  );
+}
+
+export interface ReleasedAssessmentReport {
+  id: string;
+  organizationId: string;
+  attemptId: string;
+  reportDataSnapshotId: string;
+  releasedByUserId: string;
+  reviewedAt: string;
+  releasedAt: string;
+}
+
+export function releaseAssessmentReport(
+  attemptId: string,
+  organizationId?: string,
+): Promise<ReleasedAssessmentReport> {
+  return apiRequest<ReleasedAssessmentReport>(
+    `/staff/assessment-results/${attemptId}/report-release${organizationQuery(organizationId)}`,
+    {
+      method: "POST",
     },
   );
 }

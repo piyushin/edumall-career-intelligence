@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError } from "../../../lib/api";
 import {
+  downloadCandidateReleasedReportPdf,
   listCandidateAssignments,
   startOrResumeCandidateAttempt,
   type CandidateAssignment,
@@ -33,6 +34,7 @@ export default function CandidateAssessmentsPage() {
   const [assignments, setAssignments] = useState<CandidateAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [workingId, setWorkingId] = useState<string | null>(null);
+  const [downloadingAttemptId, setDownloadingAttemptId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   async function loadAssignments() {
@@ -66,6 +68,30 @@ export default function CandidateAssessmentsPage() {
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Unable to open this assessment.");
       setWorkingId(null);
+    }
+  }
+
+  async function downloadReleasedReport(attemptId: string) {
+    setDownloadingAttemptId(attemptId);
+    setError("");
+
+    try {
+      const { blob, filename } = await downloadCandidateReleasedReportPdf(attemptId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError ? caught.message : "Unable to download your released report.",
+      );
+    } finally {
+      setDownloadingAttemptId(null);
     }
   }
 
@@ -108,6 +134,9 @@ export default function CandidateAssessmentsPage() {
         <div className="mt-8 grid gap-5">
           {visibleAssignments.map((assignment) => {
             const inProgress = currentAttempt(assignment);
+            const releasedAttempt = assignment.attempts.find(
+              (attempt) => (attempt.reportReleases?.length ?? 0) > 0,
+            );
             const completed = submittedCount(assignment);
             const attemptLimitReached = !inProgress && completed >= assignment.maxAttempts;
             const now = Date.now();
@@ -184,24 +213,39 @@ export default function CandidateAssessmentsPage() {
                     </dl>
                   </div>
 
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => void openAssessment(assignment)}
-                    className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  >
-                    {workingId === assignment.id
-                      ? "Opening..."
-                      : inProgress
-                        ? "Resume assessment"
-                        : attemptLimitReached
-                          ? "Attempt limit reached"
-                          : notYetAvailable
-                            ? "Not yet available"
-                            : expired
-                              ? "Expired"
-                              : "Start assessment"}
-                  </button>
+                  <div className="flex shrink-0 flex-col gap-2">
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => void openAssessment(assignment)}
+                      className="inline-flex min-h-11 items-center justify-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {workingId === assignment.id
+                        ? "Opening..."
+                        : inProgress
+                          ? "Resume assessment"
+                          : attemptLimitReached
+                            ? "Attempt limit reached"
+                            : notYetAvailable
+                              ? "Not yet available"
+                              : expired
+                                ? "Expired"
+                                : "Start assessment"}
+                    </button>
+
+                    {releasedAttempt ? (
+                      <button
+                        type="button"
+                        disabled={downloadingAttemptId === releasedAttempt.id}
+                        onClick={() => void downloadReleasedReport(releasedAttempt.id)}
+                        className="inline-flex min-h-11 items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 px-5 py-2.5 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {downloadingAttemptId === releasedAttempt.id
+                          ? "Preparing report..."
+                          : "Download released report"}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </article>
             );

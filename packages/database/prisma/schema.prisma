@@ -137,19 +137,20 @@ model SystemMetadata {
 }
 
 model Organization {
-  id                    String                   @id @default(uuid()) @db.Uuid
-  name                  String                   @db.VarChar(200)
-  slug                  String                   @unique @db.VarChar(120)
-  status                OrganizationStatus       @default(ACTIVE)
-  type                  OrganizationType
-  createdAt             DateTime                 @default(now()) @map("created_at")
-  updatedAt             DateTime                 @updatedAt @map("updated_at")
-  deletedAt             DateTime?                @map("deleted_at")
-  memberships           OrganizationMembership[]
-  sessions              Session[]
-  auditLogs             AuditLog[]               @relation("OrganizationAuditLogs")
-  assessmentDefinitions AssessmentDefinition[]
-  assessmentAssignments AssessmentAssignment[]
+  id                       String                    @id @default(uuid()) @db.Uuid
+  name                     String                    @db.VarChar(200)
+  slug                     String                    @unique @db.VarChar(120)
+  status                   OrganizationStatus        @default(ACTIVE)
+  type                     OrganizationType
+  createdAt                DateTime                  @default(now()) @map("created_at")
+  updatedAt                DateTime                  @updatedAt @map("updated_at")
+  deletedAt                DateTime?                 @map("deleted_at")
+  memberships              OrganizationMembership[]
+  sessions                 Session[]
+  auditLogs                AuditLog[]                @relation("OrganizationAuditLogs")
+  assessmentDefinitions    AssessmentDefinition[]
+  assessmentAssignments    AssessmentAssignment[]
+  assessmentReportReleases AssessmentReportRelease[]
 
   @@index([status])
   @@index([type, status])
@@ -157,30 +158,31 @@ model Organization {
 }
 
 model User {
-  id                           String                   @id @default(uuid()) @db.Uuid
-  email                        String                   @db.VarChar(320)
-  normalizedEmail              String                   @unique @map("normalized_email") @db.VarChar(320)
-  passwordHash                 String?                  @map("password_hash") @db.VarChar(255)
-  firstName                    String                   @map("first_name") @db.VarChar(100)
-  lastName                     String                   @map("last_name") @db.VarChar(100)
-  status                       UserStatus               @default(INVITED)
-  emailVerifiedAt              DateTime?                @map("email_verified_at")
-  lastLoginAt                  DateTime?                @map("last_login_at")
-  failedLoginCount             Int                      @default(0) @map("failed_login_count")
-  lockedUntil                  DateTime?                @map("locked_until")
-  createdAt                    DateTime                 @default(now()) @map("created_at")
-  updatedAt                    DateTime                 @updatedAt @map("updated_at")
-  deletedAt                    DateTime?                @map("deleted_at")
+  id                           String                    @id @default(uuid()) @db.Uuid
+  email                        String                    @db.VarChar(320)
+  normalizedEmail              String                    @unique @map("normalized_email") @db.VarChar(320)
+  passwordHash                 String?                   @map("password_hash") @db.VarChar(255)
+  firstName                    String                    @map("first_name") @db.VarChar(100)
+  lastName                     String                    @map("last_name") @db.VarChar(100)
+  status                       UserStatus                @default(INVITED)
+  emailVerifiedAt              DateTime?                 @map("email_verified_at")
+  lastLoginAt                  DateTime?                 @map("last_login_at")
+  failedLoginCount             Int                       @default(0) @map("failed_login_count")
+  lockedUntil                  DateTime?                 @map("locked_until")
+  createdAt                    DateTime                  @default(now()) @map("created_at")
+  updatedAt                    DateTime                  @updatedAt @map("updated_at")
+  deletedAt                    DateTime?                 @map("deleted_at")
   memberships                  OrganizationMembership[]
   sessions                     Session[]
   passwordResetTokens          PasswordResetToken[]
   invitationTokens             InvitationToken[]
-  auditLogs                    AuditLog[]               @relation("ActorAuditLogs")
-  createdAssessmentDefinitions AssessmentDefinition[]   @relation("AssessmentDefinitionCreatedBy")
-  createdAssessmentVersions    AssessmentVersion[]      @relation("AssessmentVersionCreatedBy")
-  publishedAssessmentVersions  AssessmentVersion[]      @relation("AssessmentVersionPublishedBy")
-  assignedAssessments          AssessmentAssignment[]   @relation("AssessmentAssignmentCandidate")
-  createdAssessmentAssignments AssessmentAssignment[]   @relation("AssessmentAssignmentAssignedBy")
+  auditLogs                    AuditLog[]                @relation("ActorAuditLogs")
+  createdAssessmentDefinitions AssessmentDefinition[]    @relation("AssessmentDefinitionCreatedBy")
+  createdAssessmentVersions    AssessmentVersion[]       @relation("AssessmentVersionCreatedBy")
+  publishedAssessmentVersions  AssessmentVersion[]       @relation("AssessmentVersionPublishedBy")
+  assignedAssessments          AssessmentAssignment[]    @relation("AssessmentAssignmentCandidate")
+  createdAssessmentAssignments AssessmentAssignment[]    @relation("AssessmentAssignmentAssignedBy")
+  releasedAssessmentReports    AssessmentReportRelease[] @relation("AssessmentReportReleaseReleasedBy")
 
   @@index([status])
   @@index([status, lockedUntil])
@@ -444,18 +446,19 @@ model AssessmentAssignment {
 
 /// One actual sitting/attempt under an assignment.
 model AssessmentAttempt {
-  id             String                  @id @default(uuid()) @db.Uuid
-  assignmentId   String                  @map("assignment_id") @db.Uuid
-  attemptNumber  Int                     @map("attempt_number")
-  status         AssessmentAttemptStatus @default(IN_PROGRESS)
-  startedAt      DateTime                @default(now()) @map("started_at")
-  lastActivityAt DateTime                @default(now()) @map("last_activity_at")
-  submittedAt    DateTime?               @map("submitted_at")
-  abandonedAt    DateTime?               @map("abandoned_at")
-  metadata       Json?                   @db.JsonB
-  assignment     AssessmentAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  id             String                    @id @default(uuid()) @db.Uuid
+  assignmentId   String                    @map("assignment_id") @db.Uuid
+  attemptNumber  Int                       @map("attempt_number")
+  status         AssessmentAttemptStatus   @default(IN_PROGRESS)
+  startedAt      DateTime                  @default(now()) @map("started_at")
+  lastActivityAt DateTime                  @default(now()) @map("last_activity_at")
+  submittedAt    DateTime?                 @map("submitted_at")
+  abandonedAt    DateTime?                 @map("abandoned_at")
+  metadata       Json?                     @db.JsonB
+  assignment     AssessmentAssignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   responses      AssessmentResponse[]
   scoringRuns    AssessmentScoringRun[]
+  reportReleases AssessmentReportRelease[]
 
   @@unique([assignmentId, attemptNumber])
   @@index([assignmentId, status])
@@ -735,6 +738,7 @@ model AssessmentReportDataSnapshot {
   scoringRun          AssessmentScoringRun         @relation(fields: [scoringRunId], references: [id], onDelete: Restrict)
   assessmentVersion   AssessmentVersion            @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
   interpretationSet   AssessmentInterpretationSet? @relation(fields: [interpretationSetId], references: [id], onDelete: Restrict)
+  reportReleases      AssessmentReportRelease[]
 
   @@unique([scoringRunId, reportVersion, inputHash])
   @@index([assessmentVersionId, reportVersion])
@@ -745,14 +749,14 @@ model AssessmentReportDataSnapshot {
 
 /// Stable identity for one governed career taxonomy family.
 model CareerTaxonomy {
-  id          String               @id @default(uuid()) @db.Uuid
-  code        String               @unique @db.VarChar(120)
-  name        String               @db.VarChar(200)
-  description String?              @db.Text
-  status      CareerTaxonomyStatus @default(ACTIVE)
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
-  archivedAt  DateTime?            @map("archived_at")
+  id          String                  @id @default(uuid()) @db.Uuid
+  code        String                  @unique @db.VarChar(120)
+  name        String                  @db.VarChar(200)
+  description String?                 @db.Text
+  status      CareerTaxonomyStatus    @default(ACTIVE)
+  createdAt   DateTime                @default(now()) @map("created_at")
+  updatedAt   DateTime                @updatedAt @map("updated_at")
+  archivedAt  DateTime?               @map("archived_at")
   versions    CareerTaxonomyVersion[]
 
   @@index([status])
@@ -806,18 +810,18 @@ model CareerCluster {
 
 /// Governed career path inside one taxonomy version.
 model CareerPath {
-  id                      String                @id @default(uuid()) @db.Uuid
-  careerTaxonomyVersionId String                @map("career_taxonomy_version_id") @db.Uuid
-  careerClusterId         String                @map("career_cluster_id") @db.Uuid
-  code                    String                @db.VarChar(120)
-  name                    String                @db.VarChar(200)
-  description             String?               @db.Text
-  orderIndex              Int                   @map("order_index")
-  metadata                Json?                 @db.JsonB
-  createdAt               DateTime              @default(now()) @map("created_at")
-  updatedAt               DateTime              @updatedAt @map("updated_at")
-  careerTaxonomyVersion   CareerTaxonomyVersion @relation(fields: [careerTaxonomyVersionId], references: [id], onDelete: Restrict)
-  careerCluster           CareerCluster         @relation(fields: [careerClusterId], references: [id], onDelete: Restrict)
+  id                      String                 @id @default(uuid()) @db.Uuid
+  careerTaxonomyVersionId String                 @map("career_taxonomy_version_id") @db.Uuid
+  careerClusterId         String                 @map("career_cluster_id") @db.Uuid
+  code                    String                 @db.VarChar(120)
+  name                    String                 @db.VarChar(200)
+  description             String?                @db.Text
+  orderIndex              Int                    @map("order_index")
+  metadata                Json?                  @db.JsonB
+  createdAt               DateTime               @default(now()) @map("created_at")
+  updatedAt               DateTime               @updatedAt @map("updated_at")
+  careerTaxonomyVersion   CareerTaxonomyVersion  @relation(fields: [careerTaxonomyVersionId], references: [id], onDelete: Restrict)
+  careerCluster           CareerCluster          @relation(fields: [careerClusterId], references: [id], onDelete: Restrict)
   modelFactors            CareerFitModelFactor[]
   fitResults              CareerFitResult[]
 
@@ -830,23 +834,23 @@ model CareerPath {
 
 /// Published scientific/configuration package mapping an assessment version to a career taxonomy version.
 model CareerFitModel {
-  id                      String                @id @default(uuid()) @db.Uuid
-  assessmentVersionId     String                @map("assessment_version_id") @db.Uuid
-  careerTaxonomyVersionId String                @map("career_taxonomy_version_id") @db.Uuid
-  version                 String                @db.VarChar(60)
-  name                    String                @db.VarChar(200)
-  description             String?               @db.Text
-  algorithmKey            String                @map("algorithm_key") @db.VarChar(120)
-  algorithmVersion        String                @map("algorithm_version") @db.VarChar(60)
-  sourceReference         String?               @map("source_reference") @db.Text
-  methodology             Json?                 @db.JsonB
-  status                  CareerFitModelStatus  @default(DRAFT)
-  createdAt               DateTime              @default(now()) @map("created_at")
-  updatedAt               DateTime              @updatedAt @map("updated_at")
-  publishedAt             DateTime?             @map("published_at")
-  retiredAt               DateTime?             @map("retired_at")
-  assessmentVersion       AssessmentVersion     @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
-  careerTaxonomyVersion   CareerTaxonomyVersion @relation(fields: [careerTaxonomyVersionId], references: [id], onDelete: Restrict)
+  id                      String                        @id @default(uuid()) @db.Uuid
+  assessmentVersionId     String                        @map("assessment_version_id") @db.Uuid
+  careerTaxonomyVersionId String                        @map("career_taxonomy_version_id") @db.Uuid
+  version                 String                        @db.VarChar(60)
+  name                    String                        @db.VarChar(200)
+  description             String?                       @db.Text
+  algorithmKey            String                        @map("algorithm_key") @db.VarChar(120)
+  algorithmVersion        String                        @map("algorithm_version") @db.VarChar(60)
+  sourceReference         String?                       @map("source_reference") @db.Text
+  methodology             Json?                         @db.JsonB
+  status                  CareerFitModelStatus          @default(DRAFT)
+  createdAt               DateTime                      @default(now()) @map("created_at")
+  updatedAt               DateTime                      @updatedAt @map("updated_at")
+  publishedAt             DateTime?                     @map("published_at")
+  retiredAt               DateTime?                     @map("retired_at")
+  assessmentVersion       AssessmentVersion             @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  careerTaxonomyVersion   CareerTaxonomyVersion         @relation(fields: [careerTaxonomyVersionId], references: [id], onDelete: Restrict)
   factors                 CareerFitModelFactor[]
   recommendationBands     CareerFitRecommendationBand[]
   runs                    CareerFitRun[]
@@ -885,20 +889,20 @@ model CareerFitModelFactor {
 
 /// Optional governed labels for deterministic fit scores.
 model CareerFitRecommendationBand {
-  id              String         @id @default(uuid()) @db.Uuid
-  careerFitModelId String         @map("career_fit_model_id") @db.Uuid
-  code            String         @db.VarChar(120)
-  label           String         @db.VarChar(200)
-  lowerBound      Decimal?       @map("lower_bound") @db.Decimal(20, 8)
-  upperBound      Decimal?       @map("upper_bound") @db.Decimal(20, 8)
-  lowerInclusive  Boolean        @default(true) @map("lower_inclusive")
-  upperInclusive  Boolean        @default(true) @map("upper_inclusive")
-  priority        Int            @default(0)
-  outputData      Json?          @map("output_data") @db.JsonB
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
-  careerFitModel  CareerFitModel @relation(fields: [careerFitModelId], references: [id], onDelete: Restrict)
-  results         CareerFitResult[]
+  id               String            @id @default(uuid()) @db.Uuid
+  careerFitModelId String            @map("career_fit_model_id") @db.Uuid
+  code             String            @db.VarChar(120)
+  label            String            @db.VarChar(200)
+  lowerBound       Decimal?          @map("lower_bound") @db.Decimal(20, 8)
+  upperBound       Decimal?          @map("upper_bound") @db.Decimal(20, 8)
+  lowerInclusive   Boolean           @default(true) @map("lower_inclusive")
+  upperInclusive   Boolean           @default(true) @map("upper_inclusive")
+  priority         Int               @default(0)
+  outputData       Json?             @map("output_data") @db.JsonB
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  careerFitModel   CareerFitModel    @relation(fields: [careerFitModelId], references: [id], onDelete: Restrict)
+  results          CareerFitResult[]
 
   @@unique([careerFitModelId, code])
   @@index([careerFitModelId, priority])
@@ -942,6 +946,30 @@ model CareerFitResult {
   @@index([careerPathId])
   @@index([recommendationBandId])
   @@map("career_fit_results")
+}
+
+/// Immutable evidence that a staff reviewer released one exact report snapshot to the candidate.
+/// A later release creates another row; previously released evidence is never mutated.
+model AssessmentReportRelease {
+  id                   String                       @id @default(uuid()) @db.Uuid
+  organizationId       String                       @map("organization_id") @db.Uuid
+  attemptId            String                       @map("attempt_id") @db.Uuid
+  reportDataSnapshotId String                       @map("report_data_snapshot_id") @db.Uuid
+  releasedByUserId     String                       @map("released_by_user_id") @db.Uuid
+  reviewedAt           DateTime                     @default(now()) @map("reviewed_at")
+  releasedAt           DateTime                     @default(now()) @map("released_at")
+  metadata             Json?                        @db.JsonB
+  organization         Organization                 @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  attempt              AssessmentAttempt            @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  reportDataSnapshot   AssessmentReportDataSnapshot @relation(fields: [reportDataSnapshotId], references: [id], onDelete: Restrict)
+  releasedByUser       User                         @relation("AssessmentReportReleaseReleasedBy", fields: [releasedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([attemptId, reportDataSnapshotId])
+  @@index([organizationId, releasedAt])
+  @@index([attemptId, releasedAt])
+  @@index([reportDataSnapshotId])
+  @@index([releasedByUserId, releasedAt])
+  @@map("assessment_report_releases")
 }
 
 model AuditLog {
