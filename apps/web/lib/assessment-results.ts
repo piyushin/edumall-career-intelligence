@@ -157,6 +157,14 @@ export interface AssessmentReportPayload {
       appliedAt: string;
     }>;
   };
+  careerFit?: {
+    careerFitRunId: string;
+    rankedCareerPaths: Array<{
+      careerPathId: string;
+      score: string;
+      rank: number;
+    }>;
+  };
 }
 
 export interface AssessmentReportReadiness {
@@ -180,6 +188,23 @@ export interface AssessmentReportReadiness {
     description: string | null;
     sourceReference: string | null;
   }>;
+  publishedCareerFitModels: Array<{
+    id: string;
+    version: string;
+    name: string;
+    description: string | null;
+    algorithmKey: string;
+    algorithmVersion: string;
+    sourceReference: string | null;
+  }>;
+  latestCareerFitRun: {
+    id: string;
+    careerFitModelId: string;
+    algorithmKey: string;
+    algorithmVersion: string;
+    calculatedAt: string;
+    normGroupId: string | null;
+  } | null;
   latestRelease: {
     id: string;
     reportDataSnapshotId: string;
@@ -217,6 +242,23 @@ export function getAssessmentReportReadiness(
 ): Promise<AssessmentReportReadiness> {
   return apiRequest<AssessmentReportReadiness>(
     `/staff/assessment-results/${attemptId}/report-readiness${organizationQuery(organizationId)}`,
+  );
+}
+
+export function executeCareerFitRun(
+  attemptId: string,
+  input: {
+    normGroupId: string;
+    careerFitModelId: string;
+  },
+  organizationId?: string,
+): Promise<{ id: string; careerFitModelId: string; rankedCareerPaths: unknown[] }> {
+  return apiRequest<{ id: string; careerFitModelId: string; rankedCareerPaths: unknown[] }>(
+    `/staff/career-intelligence/attempts/${attemptId}/career-fit-runs${organizationQuery(organizationId)}`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
   );
 }
 

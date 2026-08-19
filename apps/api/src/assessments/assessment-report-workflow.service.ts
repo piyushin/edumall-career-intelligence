@@ -10,6 +10,7 @@ import {
   AssessmentAttemptStatus,
   AssessmentInterpretationSetStatus,
   AssessmentNormSetStatus,
+  CareerFitModelStatus,
   MembershipRole,
   type PrismaClient,
 } from "@prisma/client";
@@ -18,6 +19,15 @@ import { DATABASE_PRISMA } from "../database/database.tokens";
 import { AssessmentInterpretationService } from "./assessment-interpretation.service";
 import { AssessmentNormService } from "./assessment-norm.service";
 import { AssessmentReportDataService } from "./assessment-report-data.service";
+
+function metadataString(value: unknown, key: string): string | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = (value as Record<string, unknown>)[key];
+  return typeof candidate === "string" ? candidate : null;
+}
 
 @Injectable()
 export class AssessmentReportWorkflowService {
@@ -50,6 +60,8 @@ export class AssessmentReportWorkflowService {
         scoringRunId: null,
         publishedNormGroups: [],
         publishedInterpretationSets: [],
+        publishedCareerFitModels: [],
+        latestCareerFitRun: null,
         latestSnapshot: null,
         latestRelease,
         canGenerate: false,
@@ -58,52 +70,81 @@ export class AssessmentReportWorkflowService {
 
     const version = attempt.assignment.assessmentVersion;
 
-    const [normSets, interpretationSets] = await Promise.all([
-      this.prisma.assessmentNormSet.findMany({
-        where: {
-          assessmentVersionId: version.id,
-          normVersion: version.normVersion,
-          status: AssessmentNormSetStatus.PUBLISHED,
-        },
-        orderBy: {
-          publishedAt: "desc",
-        },
-        select: {
-          id: true,
-          name: true,
-          normVersion: true,
-          sourceReference: true,
-          groups: {
-            orderBy: {
-              code: "asc",
-            },
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              description: true,
-              sampleSize: true,
+    const [normSets, interpretationSets, publishedCareerFitModels, careerFitRun] =
+      await Promise.all([
+        this.prisma.assessmentNormSet.findMany({
+          where: {
+            assessmentVersionId: version.id,
+            normVersion: version.normVersion,
+            status: AssessmentNormSetStatus.PUBLISHED,
+          },
+          orderBy: {
+            publishedAt: "desc",
+          },
+          select: {
+            id: true,
+            name: true,
+            normVersion: true,
+            sourceReference: true,
+            groups: {
+              orderBy: {
+                code: "asc",
+              },
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                description: true,
+                sampleSize: true,
+              },
             },
           },
-        },
-      }),
-      this.prisma.assessmentInterpretationSet.findMany({
-        where: {
-          assessmentVersionId: version.id,
-          status: AssessmentInterpretationSetStatus.PUBLISHED,
-        },
-        orderBy: {
-          publishedAt: "desc",
-        },
-        select: {
-          id: true,
-          version: true,
-          name: true,
-          description: true,
-          sourceReference: true,
-        },
-      }),
-    ]);
+        }),
+        this.prisma.assessmentInterpretationSet.findMany({
+          where: {
+            assessmentVersionId: version.id,
+            status: AssessmentInterpretationSetStatus.PUBLISHED,
+          },
+          orderBy: {
+            publishedAt: "desc",
+          },
+          select: {
+            id: true,
+            version: true,
+            name: true,
+            description: true,
+            sourceReference: true,
+          },
+        }),
+        this.prisma.careerFitModel.findMany({
+          where: {
+            assessmentVersionId: version.id,
+            status: CareerFitModelStatus.PUBLISHED,
+          },
+          orderBy: [{ publishedAt: "desc" }, { version: "desc" }],
+          select: {
+            id: true,
+            version: true,
+            name: true,
+            description: true,
+            algorithmKey: true,
+            algorithmVersion: true,
+            sourceReference: true,
+          },
+        }),
+        this.prisma.careerFitRun.findFirst({
+          where: { scoringRunId: scoringRun.id },
+          orderBy: { calculatedAt: "desc" },
+          select: {
+            id: true,
+            careerFitModelId: true,
+            algorithmKey: true,
+            algorithmVersion: true,
+            calculatedAt: true,
+            metadata: true,
+          },
+        }),
+      ]);
 
     const publishedNormGroups = normSets.flatMap((normSet) =>
       normSet.groups.map((group) => ({
@@ -120,8 +161,21 @@ export class AssessmentReportWorkflowService {
     );
 
     const latestSnapshot = scoringRun.reportDataSnapshots[0] ?? null;
+    const latestCareerFitRun = careerFitRun
+      ? {
+          id: careerFitRun.id,
+          careerFitModelId: careerFitRun.careerFitModelId,
+          algorithmKey: careerFitRun.algorithmKey,
+          algorithmVersion: careerFitRun.algorithmVersion,
+          calculatedAt: careerFitRun.calculatedAt,
+          normGroupId: metadataString(careerFitRun.metadata, "normGroupId"),
+        }
+      : null;
 
-    const canGenerate = publishedNormGroups.length > 0 && interpretationSets.length > 0;
+    const canGenerate =
+      publishedNormGroups.length > 0 &&
+      interpretationSets.length > 0 &&
+      publishedCareerFitModels.length > 0;
 
     return {
       status: latestSnapshot
@@ -132,6 +186,8 @@ export class AssessmentReportWorkflowService {
       scoringRunId: scoringRun.id,
       publishedNormGroups,
       publishedInterpretationSets: interpretationSets,
+      publishedCareerFitModels,
+      latestCareerFitRun,
       latestSnapshot,
       latestRelease,
       canGenerate,
@@ -155,6 +211,27 @@ export class AssessmentReportWorkflowService {
       throw new ConflictException({
         code: "ASSESSMENT_REPORT_SCORING_UNAVAILABLE",
         message: "A deterministic scoring run is required before report data can be generated.",
+      });
+    }
+
+    const careerFitRun = await this.prisma.careerFitRun.findFirst({
+      where: { scoringRunId: scoringRun.id },
+      orderBy: { calculatedAt: "desc" },
+      select: { id: true, metadata: true },
+    });
+
+    if (!careerFitRun) {
+      throw new ConflictException({
+        code: "ASSESSMENT_REPORT_CAREER_FIT_REQUIRED",
+        message: "Calculate deterministic CareerFit before generating the governed report.",
+      });
+    }
+
+    if (metadataString(careerFitRun.metadata, "normGroupId") !== normGroupId) {
+      throw new ConflictException({
+        code: "ASSESSMENT_REPORT_CAREER_FIT_NORM_MISMATCH",
+        message:
+          "CareerFit must be calculated with the same published norm group used for the report.",
       });
     }
 

@@ -49,6 +49,12 @@ function createPrisma() {
     assessmentInterpretationSet: {
       findMany: vi.fn(),
     },
+    careerFitModel: {
+      findMany: vi.fn(),
+    },
+    careerFitRun: {
+      findFirst: vi.fn(),
+    },
   };
 }
 
@@ -97,6 +103,8 @@ describe("AssessmentReportWorkflowService", () => {
     reportData = {
       createSnapshot: vi.fn(),
     };
+    prisma.careerFitModel.findMany.mockResolvedValue([]);
+    prisma.careerFitRun.findFirst.mockResolvedValue(null);
 
     service = new AssessmentReportWorkflowService(
       prisma as unknown as PrismaClient,
@@ -156,6 +164,17 @@ describe("AssessmentReportWorkflowService", () => {
         sourceReference: "approved-source",
       },
     ]);
+    prisma.careerFitModel.findMany.mockResolvedValue([
+      {
+        id: "12121212-1212-4212-8212-121212121212",
+        version: "1.0.0",
+        name: "Approved CareerFit",
+        description: null,
+        algorithmKey: "weighted-percentile",
+        algorithmVersion: "1.0.0",
+        sourceReference: "approved-source",
+      },
+    ]);
 
     const result = await service.getReadiness(counsellorContext, attemptId);
 
@@ -163,6 +182,8 @@ describe("AssessmentReportWorkflowService", () => {
     expect(result.canGenerate).toBe(true);
     expect(result.publishedNormGroups).toHaveLength(1);
     expect(result.publishedInterpretationSets).toHaveLength(1);
+    expect(result.publishedCareerFitModels).toHaveLength(1);
+    expect(result.latestCareerFitRun).toBeNull();
   });
 
   it("rejects report generation when scoring is unavailable", async () => {
@@ -173,8 +194,21 @@ describe("AssessmentReportWorkflowService", () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it("requires deterministic CareerFit before report generation", async () => {
+    prisma.assessmentAttempt.findFirst.mockResolvedValue(submittedAttempt());
+    prisma.careerFitRun.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.generate(counsellorContext, attemptId, normGroupId, interpretationSetId),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
   it("runs norm, interpretation, and snapshot stages in governed order", async () => {
     prisma.assessmentAttempt.findFirst.mockResolvedValue(submittedAttempt());
+    prisma.careerFitRun.findFirst.mockResolvedValue({
+      id: "13131313-1313-4313-8313-131313131313",
+      metadata: { normGroupId },
+    });
 
     norms.applyPublishedNormGroup.mockResolvedValue([]);
     interpretations.applyPublishedInterpretationSet.mockResolvedValue([]);
