@@ -61,6 +61,7 @@ function submittedAttempt(withScoring = true) {
         normVersion: "norm-v1",
       },
     },
+    reportReleases: [],
     scoringRuns: withScoring
       ? [
           {

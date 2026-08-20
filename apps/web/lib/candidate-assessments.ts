@@ -1,4 +1,4 @@
-import { apiRequest } from "./api";
+import { API_BASE_URL, ApiError, apiRequest } from "./api";
 
 export type AssessmentAssignmentStatus = "ACTIVE" | "CANCELLED" | "EXPIRED";
 export type AssessmentAttemptStatus = "IN_PROGRESS" | "SUBMITTED" | "ABANDONED";
@@ -14,6 +14,13 @@ export interface CandidateAttemptSummary {
   lastActivityAt: string;
   submittedAt: string | null;
   abandonedAt: string | null;
+  reportReleases?: Array<{
+    id: string;
+    releasedAt: string;
+    reportDataSnapshot: {
+      reportVersion: string;
+    };
+  }>;
 }
 
 export interface CandidateAssignment {
@@ -135,4 +142,40 @@ export function submitCandidateAttempt(
       method: "POST",
     },
   );
+}
+
+export async function downloadCandidateReleasedReportPdf(
+  attemptId: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/assessments/attempts/${attemptId}/released-report.pdf`,
+    {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+      headers: {
+        accept: "application/pdf",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    let body: { code?: string; message?: string } | undefined;
+
+    try {
+      body = (await response.json()) as { code?: string; message?: string };
+    } catch {
+      body = undefined;
+    }
+
+    throw new ApiError(response.status, body);
+  }
+
+  const disposition = response.headers.get("content-disposition");
+  const match = disposition?.match(/filename="?([^";]+)"?/i);
+
+  return {
+    blob: await response.blob(),
+    filename: match?.[1] ?? `career-intelligence-report-${attemptId}.pdf`,
+  };
 }

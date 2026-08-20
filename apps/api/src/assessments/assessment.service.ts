@@ -69,6 +69,21 @@ export class AssessmentService {
             lastActivityAt: true,
             submittedAt: true,
             abandonedAt: true,
+            reportReleases: {
+              orderBy: {
+                releasedAt: "desc",
+              },
+              take: 1,
+              select: {
+                id: true,
+                releasedAt: true,
+                reportDataSnapshot: {
+                  select: {
+                    reportVersion: true,
+                  },
+                },
+              },
+            },
           },
         },
       },

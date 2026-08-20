@@ -23,6 +23,7 @@ import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { AssessmentAssignmentOrganizationQueryDto } from "./assessment-assignment-admin.types";
 import { AssessmentReportPdfService } from "./assessment-report-pdf.service";
+import { AssessmentReportReleaseService } from "./assessment-report-release.service";
 import { AssessmentReportWorkflowService } from "./assessment-report-workflow.service";
 import { GenerateAssessmentReportDto } from "./assessment-report-workflow.types";
 import { AssessmentResultsService } from "./assessment-results.service";
@@ -36,6 +37,8 @@ export class AssessmentResultsController {
     private readonly results: AssessmentResultsService,
     @Inject(AssessmentReportWorkflowService)
     private readonly reports: AssessmentReportWorkflowService,
+    @Inject(AssessmentReportReleaseService)
+    private readonly releases: AssessmentReportReleaseService,
     @Inject(AssessmentReportPdfService)
     private readonly pdf: AssessmentReportPdfService,
   ) {}
@@ -75,6 +78,17 @@ export class AssessmentResultsController {
       body.interpretationSetId,
       query.organizationId,
     );
+  }
+
+  @Post(":attemptId/report-release")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public releaseReport(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+    @Query() query: AssessmentAssignmentOrganizationQueryDto,
+  ) {
+    return this.releases.release(context, attemptId, query.organizationId);
   }
 
   @Get(":attemptId/report.pdf")
