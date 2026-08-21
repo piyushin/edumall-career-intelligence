@@ -56,6 +56,7 @@ export interface AssessmentReportCompositionConfiguration {
   locale: string;
   productSegment?: AssessmentProductSegment;
   reportNotice?: string;
+  careerFitNotice?: string;
   employmentDecisionNotice?: string | null;
   enabledSections?: AssessmentReportSectionKey[];
 }

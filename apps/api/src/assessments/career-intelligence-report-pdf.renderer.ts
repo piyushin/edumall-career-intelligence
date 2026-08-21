@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import PDFDocument from "pdfkit";
 import type { AssessmentReportPayloadV3 } from "./assessment-report-composition.types";
 import {
+  CAREER_FIT_VALIDATION_NOTICE,
   COUNSELOR_VALIDATION_NOTICE,
   EMPLOYMENT_DECISION_NOTICE,
   assessmentProductSegmentProfile,
@@ -159,6 +160,11 @@ function productSegment(payload: AssessmentReportPayloadV3): AssessmentProductSe
 function reportNotice(payload: AssessmentReportPayloadV3): string {
   const composition = asRecord(payload.reportComposition);
   return asString(composition?.reportNotice) ?? COUNSELOR_VALIDATION_NOTICE;
+}
+
+function careerFitValidationNotice(payload: AssessmentReportPayloadV3): string {
+  const composition = asRecord(payload.reportComposition);
+  return asString(composition?.careerFitNotice) ?? CAREER_FIT_VALIDATION_NOTICE;
 }
 
 function employmentDecisionNotice(payload: AssessmentReportPayloadV3): string | null {
@@ -428,6 +434,9 @@ export class CareerIntelligenceReportPdfRenderer {
     } else {
       careerPaths.slice(0, 5).forEach((path) => this.careerRankCard(document, path));
     }
+
+    document.moveDown(0.6);
+    this.mutedText(document, careerFitValidationNotice(payload));
 
     const composition = asRecord(payload.reportComposition);
     document.moveDown(0.8);
@@ -753,6 +762,8 @@ export class CareerIntelligenceReportPdfRenderer {
           ? "Deterministic ranked CareerFit outputs"
           : "Deterministic ranked CareerFit outputs — continued",
       );
+      this.mutedText(document, careerFitValidationNotice(payload));
+      document.moveDown(0.4);
       careerPaths
         .slice(offset, offset + 6)
         .forEach((path) => this.careerRankCard(document, path, true));
@@ -952,6 +963,8 @@ export class CareerIntelligenceReportPdfRenderer {
       "90-Day Development Plan",
       "Move from assessment insight to observable action",
     );
+    this.mutedText(document, careerFitValidationNotice(payload));
+    document.moveDown(0.6);
     const guidance = asRecord(payload.guidanceContent);
     const text = narrative(guidance?.developmentPlan);
     if (text) this.paragraph(document, text);
