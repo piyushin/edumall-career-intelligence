@@ -199,6 +199,29 @@ describe("AssessmentReportDataService", () => {
         templateVersion: "1",
         audience: "CANDIDATE",
         locale: "en-IN",
+        productSegment: "SCHOOL_11_12",
+        reportNotice: expect.stringContaining("validated by your Counselor"),
+        employmentDecisionNotice: null,
+      },
+    });
+  });
+
+  it("routes professional assessments to the professional report contract", async () => {
+    const professionalRun = createScoringRun();
+    professionalRun.attempt.assignment.assessmentVersion.assessmentDefinition.code =
+      "EDUMALL_PROFESSIONAL_CAREER_INTELLIGENCE";
+    professionalRun.attempt.assignment.assessmentVersion.edition = "Professional Pilot";
+    prisma.assessmentScoringRun.findUnique.mockResolvedValue(professionalRun);
+
+    await service.createSnapshot(scoringRunId, normGroupId, interpretationSetId);
+
+    const createCall = prisma.assessmentReportDataSnapshot.create.mock.calls[0]?.[0];
+    expect(createCall?.data.payload).toMatchObject({
+      assessment: { productSegment: "PROFESSIONAL" },
+      reportComposition: {
+        templateId: "career-intelligence-professional",
+        productSegment: "PROFESSIONAL",
+        employmentDecisionNotice: expect.stringContaining("sole basis for recruitment"),
       },
     });
   });

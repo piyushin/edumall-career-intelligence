@@ -2,6 +2,13 @@ import { ConflictException, Inject, Injectable, NotFoundException } from "@nestj
 import { AssessmentInterpretationSetStatus, Prisma, type PrismaClient } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { DATABASE_PRISMA } from "../database/database.tokens";
+import {
+  COUNSELOR_VALIDATION_NOTICE,
+  EMPLOYMENT_DECISION_NOTICE,
+  assessmentProductSegmentProfile,
+  isEmploymentProductSegment,
+  resolveAssessmentProductSegment,
+} from "./assessment-product-segment";
 
 function canonicalize(value: unknown): string {
   if (value === null || typeof value !== "object") {
@@ -117,6 +124,11 @@ export class AssessmentReportDataService {
       }
 
       const version = scoringRun.attempt.assignment.assessmentVersion;
+      const productSegment = resolveAssessmentProductSegment(
+        version.assessmentDefinition.code,
+        version.edition,
+      );
+      const segmentProfile = assessmentProductSegmentProfile(productSegment);
 
       const interpretationSet = await tx.assessmentInterpretationSet.findUnique({
         where: {
@@ -320,6 +332,7 @@ export class AssessmentReportDataService {
           scoringVersion: version.scoringVersion,
           normVersion: version.normVersion,
           reportVersion: version.reportVersion,
+          productSegment,
         },
         scoring: {
           scoringRunId: scoringRun.id,
@@ -420,10 +433,15 @@ export class AssessmentReportDataService {
             }
           : {}),
         reportComposition: {
-          templateId: "career-intelligence-student",
+          templateId: segmentProfile.templateId,
           templateVersion: "1",
           audience: "CANDIDATE",
           locale: resolveIndiaLocale(version.language),
+          productSegment,
+          reportNotice: COUNSELOR_VALIDATION_NOTICE,
+          employmentDecisionNotice: isEmploymentProductSegment(productSegment)
+            ? EMPLOYMENT_DECISION_NOTICE
+            : null,
         },
         provenance: {
           snapshotPolicy: "immutable-v3",

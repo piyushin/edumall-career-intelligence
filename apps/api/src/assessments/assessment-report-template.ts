@@ -133,7 +133,54 @@ export const CAREER_INTELLIGENCE_STUDENT_TEMPLATE_V1 = {
   ],
 } as const satisfies AssessmentReportTemplateDefinition;
 
+export const CAREER_INTELLIGENCE_COLLEGE_TEMPLATE_V1 = {
+  ...CAREER_INTELLIGENCE_STUDENT_TEMPLATE_V1,
+  templateId: "career-intelligence-college",
+  sections: CAREER_INTELLIGENCE_STUDENT_TEMPLATE_V1.sections
+    .filter((section) => section.key !== "SUBJECT_STREAM_GUIDANCE")
+    .map((section) =>
+      section.key === "EDUCATION_ROADMAP"
+        ? { ...section, title: "Career & Employability Roadmap" }
+        : section,
+    ),
+} as const satisfies AssessmentReportTemplateDefinition;
+
+export const CAREER_INTELLIGENCE_PROFESSIONAL_TEMPLATE_V1 = {
+  ...CAREER_INTELLIGENCE_STUDENT_TEMPLATE_V1,
+  templateId: "career-intelligence-professional",
+  sections: CAREER_INTELLIGENCE_STUDENT_TEMPLATE_V1.sections
+    .filter((section) => section.key !== "SUBJECT_STREAM_GUIDANCE")
+    .map((section) => {
+      if (section.key === "EDUCATION_ROADMAP") {
+        return { ...section, title: "Career Growth & Transition Roadmap" };
+      }
+      if (section.key === "CAREER_PATHS") {
+        return { ...section, title: "Career Direction Recommendations" };
+      }
+      return section;
+    }),
+} as const satisfies AssessmentReportTemplateDefinition;
+
+export const CAREER_INTELLIGENCE_SKILLED_WORKFORCE_TEMPLATE_V1 = {
+  ...CAREER_INTELLIGENCE_STUDENT_TEMPLATE_V1,
+  templateId: "career-intelligence-skilled-workforce",
+  sections: CAREER_INTELLIGENCE_STUDENT_TEMPLATE_V1.sections
+    .filter((section) => section.key !== "SUBJECT_STREAM_GUIDANCE")
+    .map((section) => {
+      if (section.key === "EDUCATION_ROADMAP") {
+        return { ...section, title: "Job-Fit & Skill-Upgradation Roadmap" };
+      }
+      if (section.key === "CAREER_PATHS") {
+        return { ...section, title: "Job-Family & Role-Fit Recommendations" };
+      }
+      return section;
+    }),
+} as const satisfies AssessmentReportTemplateDefinition;
+
 export const ASSESSMENT_REPORT_TEMPLATES = [
   LEGACY_GOVERNED_REPORT_TEMPLATE_V1,
   CAREER_INTELLIGENCE_STUDENT_TEMPLATE_V1,
+  CAREER_INTELLIGENCE_COLLEGE_TEMPLATE_V1,
+  CAREER_INTELLIGENCE_PROFESSIONAL_TEMPLATE_V1,
+  CAREER_INTELLIGENCE_SKILLED_WORKFORCE_TEMPLATE_V1,
 ] as const;

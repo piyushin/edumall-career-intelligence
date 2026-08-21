@@ -1,3 +1,5 @@
+import type { AssessmentProductSegment } from "./assessment-product-segment";
+
 export type AssessmentReportSchemaVersion =
   "assessment-report-data-v1" | "assessment-report-data-v2" | "assessment-report-data-v3";
 
@@ -52,6 +54,9 @@ export interface AssessmentReportCompositionConfiguration {
   templateVersion: string;
   audience: AssessmentReportAudience;
   locale: string;
+  productSegment?: AssessmentProductSegment;
+  reportNotice?: string;
+  employmentDecisionNotice?: string | null;
   enabledSections?: AssessmentReportSectionKey[];
 }
 
