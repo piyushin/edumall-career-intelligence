@@ -2,6 +2,15 @@ import { ConflictException } from "@nestjs/common";
 import { readFileSync } from "node:fs";
 import PDFDocument from "pdfkit";
 import type { AssessmentReportPayloadV3 } from "./assessment-report-composition.types";
+import {
+  COUNSELOR_VALIDATION_NOTICE,
+  EMPLOYMENT_DECISION_NOTICE,
+  assessmentProductSegmentProfile,
+  isAssessmentProductSegment,
+  isEmploymentProductSegment,
+  resolveAssessmentProductSegment,
+  type AssessmentProductSegment,
+} from "./assessment-product-segment";
 
 interface ReportSnapshot {
   id: string;
@@ -135,6 +144,31 @@ function compactLines(value: unknown, limit = 8): string[] {
     .slice(0, limit);
 }
 
+function productSegment(payload: AssessmentReportPayloadV3): AssessmentProductSegment {
+  const composition = asRecord(payload.reportComposition);
+  const frozenSegment = composition?.productSegment;
+  if (isAssessmentProductSegment(frozenSegment)) return frozenSegment;
+
+  const assessment = asRecord(payload.assessment);
+  return resolveAssessmentProductSegment(
+    asString(assessment?.assessmentDefinitionCode) ?? "",
+    asString(assessment?.edition) ?? "",
+  );
+}
+
+function reportNotice(payload: AssessmentReportPayloadV3): string {
+  const composition = asRecord(payload.reportComposition);
+  return asString(composition?.reportNotice) ?? COUNSELOR_VALIDATION_NOTICE;
+}
+
+function employmentDecisionNotice(payload: AssessmentReportPayloadV3): string | null {
+  const segment = productSegment(payload);
+  if (!isEmploymentProductSegment(segment)) return null;
+
+  const composition = asRecord(payload.reportComposition);
+  return asString(composition?.employmentDecisionNotice) ?? EMPLOYMENT_DECISION_NOTICE;
+}
+
 export class CareerIntelligenceReportPdfRenderer {
   public async render(snapshot: ReportSnapshot): Promise<Buffer> {
     const payload = this.parsePayload(snapshot.payload);
@@ -163,16 +197,16 @@ export class CareerIntelligenceReportPdfRenderer {
 
       this.renderCover(document, payload, snapshot);
       this.renderExecutiveSnapshot(document, payload, constructs, careerPaths);
-      this.renderHowToUse(document);
+      this.renderHowToUse(document, payload);
       this.renderMethodology(document, payload);
       this.renderScoreGuide(document);
       this.renderProfileOverview(document, constructs);
       this.renderDimensionPages(document, constructs);
       this.renderIntegratedStrengthMap(document, constructs, careerPaths);
       this.renderCareerClusters(document, careerPaths);
-      this.renderCareerPathOverview(document, careerPaths);
-      this.renderCareerDeepDives(document, careerPaths.slice(0, 10));
-      this.renderDecisionMatrix(document, careerPaths.slice(0, 6));
+      this.renderCareerPathOverview(document, payload, careerPaths);
+      this.renderCareerDeepDives(document, payload, careerPaths.slice(0, 10));
+      this.renderDecisionMatrix(document, payload, careerPaths.slice(0, 6));
       this.renderEducationRoadmap(document, payload);
       this.renderDevelopmentPlan(document, payload);
       this.renderCounselorDiscussion(document, payload);
@@ -296,7 +330,12 @@ export class CareerIntelligenceReportPdfRenderer {
         width: CONTENT_WIDTH,
         lineGap: 4,
       });
-    document.font("Helvetica").fontSize(17).fillColor("#DCE8F8").text("Next Generation", LEFT, 160);
+    const segmentProfile = assessmentProductSegmentProfile(productSegment(payload));
+    document
+      .font("Helvetica")
+      .fontSize(14)
+      .fillColor("#DCE8F8")
+      .text(`Next Generation • ${segmentProfile.label}`, LEFT, 160, { width: CONTENT_WIDTH });
     document
       .font("Helvetica-Bold")
       .fontSize(7.8)
@@ -336,11 +375,7 @@ export class CareerIntelligenceReportPdfRenderer {
     this.keyValue(document, "Report generated", this.formatDate(snapshot.generatedAt));
 
     document.moveDown(1.1);
-    this.noteBox(
-      document,
-      "REPORT PRINCIPLE",
-      "The conclusions in this report are reproduced from frozen assessment, norm, interpretation and CareerFit records. The PDF renderer does not invent scores, norms, diagnoses or career-fit conclusions.",
-    );
+    this.noteBox(document, "COUNSELOR VALIDATION", reportNotice(payload));
 
     document.moveDown(0.25);
     this.contactBlock(document);
@@ -370,7 +405,10 @@ export class CareerIntelligenceReportPdfRenderer {
       .text("Highest observed construct percentiles");
     document.moveDown(0.7);
     if (topPercentiles.length === 0) {
-      this.mutedText(document, "No percentile values were frozen into this snapshot.");
+      this.mutedText(
+        document,
+        "This report uses response-based profile evidence. Population percentiles are shown only when a governed reference norm has been supplied; no percentile is inferred or fabricated.",
+      );
     } else {
       for (const construct of topPercentiles) {
         this.percentileBar(document, construct.name, Number(construct.percentile));
@@ -398,7 +436,7 @@ export class CareerIntelligenceReportPdfRenderer {
     this.keyValue(document, "Locale", asString(composition?.locale) ?? "—");
   }
 
-  private renderHowToUse(document: PDFKit.PDFDocument): void {
+  private renderHowToUse(document: PDFKit.PDFDocument, payload: AssessmentReportPayloadV3): void {
     this.newPage(
       document,
       "How to Use This Report",
@@ -436,10 +474,17 @@ export class CareerIntelligenceReportPdfRenderer {
     );
 
     document.moveDown(1.2);
+    const employmentNotice = employmentDecisionNotice(payload);
     this.noteBox(
       document,
-      "IMPORTANT",
-      "This report supports career planning. It is not a clinical diagnosis and does not replace qualified professional judgment where such judgment is required.",
+      "COUNSELOR VALIDATION",
+      [
+        reportNotice(payload),
+        "This report supports career planning and is not a clinical diagnosis.",
+        employmentNotice,
+      ]
+        .filter(Boolean)
+        .join(" "),
     );
   }
 
@@ -696,12 +741,14 @@ export class CareerIntelligenceReportPdfRenderer {
 
   private renderCareerPathOverview(
     document: PDFKit.PDFDocument,
+    payload: AssessmentReportPayloadV3,
     careerPaths: CareerPathView[],
   ): void {
+    const segmentProfile = assessmentProductSegmentProfile(productSegment(payload));
     for (let offset = 0; offset < Math.min(careerPaths.length, 12); offset += 6) {
       this.newPage(
         document,
-        "Career Path Recommendations",
+        segmentProfile.recommendationTitle,
         offset === 0
           ? "Deterministic ranked CareerFit outputs"
           : "Deterministic ranked CareerFit outputs — continued",
@@ -714,7 +761,7 @@ export class CareerIntelligenceReportPdfRenderer {
     if (careerPaths.length === 0) {
       this.newPage(
         document,
-        "Career Path Recommendations",
+        segmentProfile.recommendationTitle,
         "Deterministic ranked CareerFit outputs",
       );
       this.noteBox(
@@ -725,11 +772,16 @@ export class CareerIntelligenceReportPdfRenderer {
     }
   }
 
-  private renderCareerDeepDives(document: PDFKit.PDFDocument, careerPaths: CareerPathView[]): void {
+  private renderCareerDeepDives(
+    document: PDFKit.PDFDocument,
+    payload: AssessmentReportPayloadV3,
+    careerPaths: CareerPathView[],
+  ): void {
+    const segmentProfile = assessmentProductSegmentProfile(productSegment(payload));
     for (const path of careerPaths) {
       this.newPage(
         document,
-        `Career Deep Dive #${path.rank}`,
+        `${segmentProfile.deepDiveTitle} #${path.rank}`,
         `${path.clusterName} • ${path.code}`,
       );
       document.font("Helvetica-Bold").fontSize(24).fillColor(INK).text(path.name);
@@ -777,15 +829,20 @@ export class CareerIntelligenceReportPdfRenderer {
       this.noteBox(
         document,
         "DISCUSSION PROMPT",
-        "What attracts you to this path? What assumptions should be tested through projects, conversations, observation or counseling before making an education decision?",
+        `What attracts you to this option? What assumptions should be tested through projects, conversations, observation, work exposure or counseling before making a ${segmentProfile.decisionPhrase}?`,
       );
     }
   }
 
-  private renderDecisionMatrix(document: PDFKit.PDFDocument, careerPaths: CareerPathView[]): void {
+  private renderDecisionMatrix(
+    document: PDFKit.PDFDocument,
+    payload: AssessmentReportPayloadV3,
+    careerPaths: CareerPathView[],
+  ): void {
+    const segmentProfile = assessmentProductSegmentProfile(productSegment(payload));
     this.newPage(
       document,
-      "Career Decision Matrix",
+      segmentProfile.decisionMatrixTitle,
       "A worksheet for combining CareerFit evidence with human priorities",
     );
     document
@@ -838,11 +895,8 @@ export class CareerIntelligenceReportPdfRenderer {
     document: PDFKit.PDFDocument,
     payload: AssessmentReportPayloadV3,
   ): void {
-    this.newPage(
-      document,
-      "Education Roadmap",
-      "Translate the assessment into informed education exploration",
-    );
+    const segmentProfile = assessmentProductSegmentProfile(productSegment(payload));
+    this.newPage(document, segmentProfile.roadmapTitle, segmentProfile.roadmapSubtitle);
     const guidance = asRecord(payload.guidanceContent);
     const text = narrative(
       guidance?.educationRoadmap ?? guidance?.subjectStreamGuidance ?? guidance,
@@ -879,12 +933,12 @@ export class CareerIntelligenceReportPdfRenderer {
         document,
         5,
         "Review with a counselor",
-        "Convert the evidence into a documented subject/stream or education decision only after reviewing constraints and aspirations.",
+        `Convert the evidence into a documented ${segmentProfile.decisionPhrase} only after reviewing constraints, aspirations and counselor feedback.`,
       );
       document.moveDown(1);
       this.mutedText(
         document,
-        "No individualized education-guidance content was frozen into this snapshot; this page is a planning framework only.",
+        "No individualized guidance content was frozen into this snapshot; this page is a planning framework only.",
       );
     }
   }
@@ -936,6 +990,9 @@ export class CareerIntelligenceReportPdfRenderer {
       "Counselor Discussion Page",
       "Capture human interpretation, questions and agreed actions",
     );
+    this.noteBox(document, "VALIDATION REQUIRED", reportNotice(payload));
+    document.moveDown(0.8);
+
     const annotation = narrative(payload.counselorAnnotation);
     if (annotation) {
       document
@@ -950,7 +1007,7 @@ export class CareerIntelligenceReportPdfRenderer {
     for (const title of [
       "Key patterns we agree are meaningful",
       "Contradictions or uncertainties to investigate",
-      "Priority career/education options for exploration",
+      "Priority education, career, job or development options for exploration",
       "Agreed next actions and review date",
     ]) {
       const y = document.y;
@@ -981,6 +1038,11 @@ export class CareerIntelligenceReportPdfRenderer {
     const taxonomy = asRecord(careerFit?.taxonomy);
 
     this.keyValue(document, "Snapshot schema", "assessment-report-data-v3");
+    this.keyValue(
+      document,
+      "Product segment",
+      assessmentProductSegmentProfile(productSegment(payload)).label,
+    );
     this.keyValue(
       document,
       "Assessment version ID",

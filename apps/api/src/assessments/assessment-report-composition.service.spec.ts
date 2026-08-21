@@ -57,6 +57,30 @@ describe("AssessmentReportCompositionService", () => {
     ]);
   });
 
+  it("supports the skilled-workforce governed template without school-only stream guidance", () => {
+    const plan = service.compose({
+      schemaVersion: "assessment-report-data-v3",
+      assessment: {},
+      scoring: {},
+      norms: [],
+      interpretation: {},
+      careerFit: { modelVersion: "pilot" },
+      reportComposition: {
+        templateId: "career-intelligence-skilled-workforce",
+        templateVersion: "1",
+        audience: "CANDIDATE",
+        locale: "en-IN",
+        productSegment: "SKILLED_WORKFORCE",
+      },
+    });
+
+    expect(plan.templateId).toBe("career-intelligence-skilled-workforce");
+    expect(plan.sections.some((section) => section.key === "SUBJECT_STREAM_GUIDANCE")).toBe(false);
+    expect(plan.sections.find((section) => section.key === "CAREER_PATHS")?.title).toBe(
+      "Job-Family & Role-Fit Recommendations",
+    );
+  });
+
   it("does not include time-sensitive market content without a market snapshot", () => {
     const plan = service.compose({
       schemaVersion: "assessment-report-data-v3",

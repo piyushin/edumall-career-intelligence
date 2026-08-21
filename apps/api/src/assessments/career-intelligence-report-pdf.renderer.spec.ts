@@ -113,6 +113,10 @@ describe("CareerIntelligenceReportPdfRenderer", () => {
           templateVersion: "1",
           audience: "CANDIDATE",
           locale: "en-IN",
+          productSegment: "SCHOOL_11_12",
+          reportNotice:
+            "This inference is based on your responses to this assessment. Please get these findings validated by your Counselor before making important educational, career or employment decisions.",
+          employmentDecisionNotice: null,
         },
       },
     });
