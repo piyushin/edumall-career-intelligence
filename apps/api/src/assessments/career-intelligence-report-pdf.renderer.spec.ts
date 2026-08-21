@@ -115,7 +115,9 @@ describe("CareerIntelligenceReportPdfRenderer", () => {
           locale: "en-IN",
           productSegment: "SCHOOL_11_12",
           reportNotice:
-            "This inference is based on your responses to this assessment. Please get these findings validated by your Counselor before making important educational, career or employment decisions.",
+            "Important: This inference is based on your responses to this assessment and the assessment model used for interpretation. Please get these findings validated by your Counselor before making important educational, career or employment decisions.",
+          careerFitNotice:
+            "Career recommendations are indicative, not prescriptive. They are derived from your assessment responses and should be discussed and validated with your Counselor.",
           employmentDecisionNotice: null,
         },
       },

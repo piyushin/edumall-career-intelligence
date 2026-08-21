@@ -3,6 +3,7 @@ import { AssessmentInterpretationSetStatus, Prisma, type PrismaClient } from "@p
 import { createHash } from "node:crypto";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import {
+  CAREER_FIT_VALIDATION_NOTICE,
   COUNSELOR_VALIDATION_NOTICE,
   EMPLOYMENT_DECISION_NOTICE,
   assessmentProductSegmentProfile,
@@ -439,6 +440,7 @@ export class AssessmentReportDataService {
           locale: resolveIndiaLocale(version.language),
           productSegment,
           reportNotice: COUNSELOR_VALIDATION_NOTICE,
+          careerFitNotice: CAREER_FIT_VALIDATION_NOTICE,
           employmentDecisionNotice: isEmploymentProductSegment(productSegment)
             ? EMPLOYMENT_DECISION_NOTICE
             : null,

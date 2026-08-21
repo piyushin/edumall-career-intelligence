@@ -2,7 +2,10 @@ export type AssessmentProductSegment =
   "SCHOOL_6_8" | "SCHOOL_9_10" | "SCHOOL_11_12" | "COLLEGE" | "PROFESSIONAL" | "SKILLED_WORKFORCE";
 
 export const COUNSELOR_VALIDATION_NOTICE =
-  "This inference is based on your responses to this assessment. Please get these findings validated by your Counselor before making important educational, career or employment decisions.";
+  "Important: This inference is based on your responses to this assessment and the assessment model used for interpretation. Please get these findings validated by your Counselor before making important educational, career or employment decisions.";
+
+export const CAREER_FIT_VALIDATION_NOTICE =
+  "Career recommendations are indicative, not prescriptive. They are derived from your assessment responses and should be discussed and validated with your Counselor.";
 
 export const EMPLOYMENT_DECISION_NOTICE =
   "These results must not be used as the sole basis for recruitment, rejection, promotion, termination or any other employment decision.";
@@ -113,9 +116,7 @@ export function resolveAssessmentProductSegment(
     return "PROFESSIONAL";
   }
 
-  if (
-    /COLLEGE|UNIVERSITY|GRADUATE|UNDERGRADUATE|POSTGRADUATE|\\bUG\\b|\\bPG\\b/.test(fingerprint)
-  ) {
+  if (/COLLEGE|UNIVERSITY|GRADUATE|UNDERGRADUATE|POSTGRADUATE|\bUG\b|\bPG\b/.test(fingerprint)) {
     return "COLLEGE";
   }
 
