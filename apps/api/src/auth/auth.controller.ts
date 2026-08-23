@@ -18,7 +18,7 @@ import { APP_CONFIG } from "../config/app-config.token";
 import { authenticationHttpError } from "./auth-http";
 import { AuthGuard } from "./auth.guard";
 import { AuthService } from "./auth.service";
-import { CredentialDto, type AuthContext, LoginDto } from "./auth.types";
+import { CredentialDto, type AuthContext, LoginDto, SignupDto } from "./auth.types";
 import { CsrfGuard } from "./csrf.guard";
 import { CsrfService } from "./csrf.service";
 import { CurrentAuthContext } from "./current-auth-context.decorator";
@@ -73,6 +73,40 @@ export class AuthController {
     } catch (error) {
       throw authenticationHttpError(error, "login");
     }
+  }
+
+  @Post("signup")
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(ThrottlerGuard, CsrfGuard)
+  public async signup(
+    @Body() body: SignupDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.signup(body, {
+      ipAddress: request.ip,
+      userAgent: request.get("user-agent"),
+    });
+
+    response.cookie(this.config.authCookieName, result.rawToken, {
+      expires: result.expiresAt,
+      httpOnly: true,
+      path: "/",
+      sameSite: "lax",
+      secure: this.config.authCookieSecure,
+    });
+    response.setHeader("cache-control", "no-store");
+
+    return {
+      session: {
+        expiresAt: result.expiresAt.toISOString(),
+        membershipId: result.context.membershipId,
+        organizationId: result.context.organizationId,
+        role: result.context.role,
+        userId: result.context.userId,
+      },
+      user: result.user,
+    };
   }
 
   @Get("session")

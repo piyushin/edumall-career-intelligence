@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { BrandLogo } from "./brand-logo";
 import { ApiError } from "../lib/api";
 import { getSession, logout, type AuthSession } from "../lib/auth";
 
@@ -118,11 +119,11 @@ export function CandidateShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-4">
-          <div>
-            <Link href="/candidate/assessments" className="text-lg font-semibold text-slate-950">
-              EduMall Career
+          <div className="flex items-center gap-4">
+            <Link href="/candidate/assessments">
+              <BrandLogo className="h-auto w-[118px]" />
             </Link>
-            <p className="text-xs text-slate-500">Candidate assessment workspace</p>
+            <p className="hidden text-xs text-slate-500 sm:block">Candidate assessment workspace</p>
           </div>
 
           <div className="flex items-center gap-4">

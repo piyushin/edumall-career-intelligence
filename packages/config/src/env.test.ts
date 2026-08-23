@@ -70,4 +70,16 @@ describe("loadConfig", () => {
       ),
     ).toThrow(/AUTH_COOKIE_SECURE/);
   });
+
+  it("requires an explicit organization when public registration is enabled", () => {
+    expect(() =>
+      loadConfig(
+        {
+          ...validEnv,
+          PUBLIC_REGISTRATION_ENABLED: "true",
+        },
+        { serviceName: "api" },
+      ),
+    ).toThrow(/PUBLIC_SIGNUP_ORGANIZATION_ID/);
+  });
 });

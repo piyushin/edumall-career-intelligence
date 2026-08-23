@@ -24,6 +24,8 @@ export interface AppConfig {
   authLoginRateWindowSeconds: number;
   authCsrfSecret: string;
   authCsrfCookieName: string;
+  publicRegistrationEnabled: boolean;
+  publicSignupOrganizationId?: string;
 }
 
 export interface LoadConfigOptions {
@@ -65,6 +67,8 @@ const rawEnvSchema = z
       .string()
       .regex(/^[A-Za-z0-9_-]+$/, "must contain only cookie-safe characters")
       .default("edumall_csrf"),
+    PUBLIC_REGISTRATION_ENABLED: z.enum(["true", "false"]).default("false"),
+    PUBLIC_SIGNUP_ORGANIZATION_ID: z.string().uuid().optional(),
   })
   .superRefine((value, context) => {
     const origins = parseCorsOrigins(value.CORS_ALLOWED_ORIGINS);
@@ -92,6 +96,14 @@ const rawEnvSchema = z
         code: z.ZodIssueCode.custom,
         message: "AUTH_COOKIE_SECURE must not be disabled in production",
         path: ["AUTH_COOKIE_SECURE"],
+      });
+    }
+
+    if (value.PUBLIC_REGISTRATION_ENABLED === "true" && !value.PUBLIC_SIGNUP_ORGANIZATION_ID) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "PUBLIC_SIGNUP_ORGANIZATION_ID is required when public registration is enabled",
+        path: ["PUBLIC_SIGNUP_ORGANIZATION_ID"],
       });
     }
   });
@@ -135,6 +147,10 @@ export function loadConfig(source: NodeJS.ProcessEnv, options: LoadConfigOptions
     authLoginRateWindowSeconds: value.AUTH_LOGIN_RATE_WINDOW_SECONDS,
     authCsrfSecret: value.AUTH_CSRF_SECRET,
     authCsrfCookieName: value.AUTH_CSRF_COOKIE_NAME,
+    publicRegistrationEnabled: value.PUBLIC_REGISTRATION_ENABLED === "true",
+    ...(value.PUBLIC_SIGNUP_ORGANIZATION_ID
+      ? { publicSignupOrganizationId: value.PUBLIC_SIGNUP_ORGANIZATION_ID }
+      : {}),
   };
 }
 
