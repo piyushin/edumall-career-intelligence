@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { BrandLogo } from "./brand-logo";
 import { ApiError } from "../lib/api";
 import { getSession, logout, type AuthSession } from "../lib/auth";
 
@@ -100,11 +101,14 @@ export function StaffShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
-              The EduMall
-            </p>
-            <p className="text-lg font-semibold text-slate-950">Assessment Results</p>
+          <div className="flex items-center gap-4">
+            <BrandLogo className="h-auto w-[118px]" />
+            <div className="hidden sm:block">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-600">
+                Counsellor workspace
+              </p>
+              <p className="text-lg font-semibold text-slate-950">Assessment Results</p>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">

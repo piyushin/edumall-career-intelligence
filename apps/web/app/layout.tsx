@@ -5,8 +5,8 @@ export const metadata: Metadata = {
   description:
     "The EduMall Career Intelligence Platform for assessment administration, delivery and reporting.",
   title: {
-    default: "EduMall Career Intelligence",
-    template: "%s | EduMall Career Intelligence",
+    default: "The EduMall Career Intelligence",
+    template: "%s | The EduMall Career Intelligence",
   },
 };
 

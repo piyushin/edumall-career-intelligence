@@ -62,6 +62,12 @@ function createAuthService() {
       user: safeUser,
     }),
     logout: vi.fn().mockResolvedValue(undefined),
+    signup: vi.fn().mockResolvedValue({
+      context: { ...authContext, role: MembershipRole.STUDENT },
+      expiresAt,
+      rawToken: "raw-signup-session-token",
+      user: safeUser,
+    }),
     validateSession: vi.fn().mockResolvedValue(authContext),
   };
 }
@@ -132,6 +138,38 @@ describe("authentication HTTP API", () => {
       },
       user: safeUser,
     });
+  });
+
+  it("creates a candidate account only with CSRF protection and returns a secure session cookie", async () => {
+    const csrfResponse = await request(app.getHttpServer()).get("/auth/csrf").expect(200);
+    const csrfCookie = (csrfResponse.headers["set-cookie"] as unknown as string[])[0]!.split(
+      ";",
+    )[0]!;
+    const csrfToken = csrfResponse.body.csrfToken as string;
+
+    const response = await request(app.getHttpServer())
+      .post("/auth/signup")
+      .set("Cookie", csrfCookie)
+      .set("x-csrf-token", csrfToken)
+      .send({
+        firstName: "Asha",
+        lastName: "Patel",
+        email: "asha@example.com",
+        password: "long-enough-password",
+        segment: "SCHOOL_9_10",
+      })
+      .expect(201);
+
+    expect(authService.signup).toHaveBeenCalledWith(
+      expect.objectContaining({ segment: "SCHOOL_9_10" }),
+      expect.objectContaining({ ipAddress: expect.any(String) }),
+    );
+    const cookies = response.headers["set-cookie"] as unknown as string[];
+    expect(cookies[0]).toContain("edumall_session=raw-signup-session-token");
+    expect(cookies[0]).toContain("HttpOnly");
+    expect(cookies[0]).toContain("Secure");
+    expect(JSON.stringify(response.body)).not.toContain("raw-signup-session-token");
+    expect(response.body.session.role).toBe("STUDENT");
   });
 
   it("returns the current validated session and user without a token", async () => {

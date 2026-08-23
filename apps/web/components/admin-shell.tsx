@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@edumall/ui";
+import { BrandLogo } from "./brand-logo";
 import { ApiError } from "../lib/api";
 import { getSession, logout, type AuthSession } from "../lib/auth";
 
@@ -100,11 +101,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
-              The EduMall
-            </p>
-            <p className="text-lg font-semibold text-slate-950">Career Intelligence Admin</p>
+          <div className="flex items-center gap-4">
+            <BrandLogo className="h-auto w-[118px]" />
+            <div className="hidden sm:block">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-600">
+                Secure workspace
+              </p>
+              <p className="text-lg font-semibold text-slate-950">Career Intelligence Admin</p>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -127,7 +131,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <Link
               href="/admin"
               className={`block rounded-lg px-3 py-2 text-sm font-medium ${
-                pathname === "/admin" ? "bg-blue-50 text-blue-800" : "text-slate-700 hover:bg-white"
+                pathname === "/admin"
+                  ? "bg-orange-50 text-red-700"
+                  : "text-slate-700 hover:bg-white"
               }`}
             >
               Dashboard
@@ -136,7 +142,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
               href="/admin/assessments"
               className={`block rounded-lg px-3 py-2 text-sm font-medium ${
                 pathname.startsWith("/admin/assessments")
-                  ? "bg-blue-50 text-blue-800"
+                  ? "bg-orange-50 text-red-700"
                   : "text-slate-700 hover:bg-white"
               }`}
             >
@@ -146,7 +152,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
               href="/admin/assignments"
               className={`block rounded-lg px-3 py-2 text-sm font-medium ${
                 pathname.startsWith("/admin/assignments")
-                  ? "bg-blue-50 text-blue-800"
+                  ? "bg-orange-50 text-red-700"
                   : "text-slate-700 hover:bg-white"
               }`}
             >

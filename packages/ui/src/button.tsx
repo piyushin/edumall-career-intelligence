@@ -8,8 +8,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export function Button({ children, className = "", variant = "primary", ...props }: ButtonProps) {
   const variantClass =
     variant === "primary"
-      ? "bg-blue-700 text-white hover:bg-blue-800 focus-visible:ring-blue-700"
-      : "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 focus-visible:ring-slate-600";
+      ? "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600"
+      : "border border-slate-300 bg-white text-slate-900 hover:bg-orange-50 focus-visible:ring-orange-500";
 
   return (
     <button
