@@ -985,14 +985,25 @@ export class CommerceService {
       });
     }
 
+    // Coupon usage limits are consumed only by completed/paid orders.
+    // Applying a coupon to a pending or abandoned checkout must not burn
+    // organisation-wide or per-user redemption capacity.
     const [totalRedemptions, userRedemptions] = await Promise.all([
       tx.commerceCouponRedemption.count({
-        where: { couponId: coupon.id },
+        where: {
+          couponId: coupon.id,
+          order: {
+            status: CommerceOrderStatus.PAID,
+          },
+        },
       }),
       tx.commerceCouponRedemption.count({
         where: {
           couponId: coupon.id,
           userId,
+          order: {
+            status: CommerceOrderStatus.PAID,
+          },
         },
       }),
     ]);

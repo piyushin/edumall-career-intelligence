@@ -1,32 +1,45 @@
-FROM node:24-bookworm-slim AS base
+FROM node:24-bookworm-slim AS build
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+ENV CI="true"
+
 RUN corepack enable
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml turbo.json tsconfig.base.json ./
-COPY apps/web/package.json apps/web/package.json
-COPY packages/shared-types/package.json packages/shared-types/package.json
-COPY packages/ui/package.json packages/ui/package.json
-COPY packages/eslint-config/package.json packages/eslint-config/package.json
-COPY packages/typescript-config/package.json packages/typescript-config/package.json
+COPY . .
 
 RUN pnpm install --frozen-lockfile
 
-COPY . .
-ENV NEXT_OUTPUT=standalone
+ARG NEXT_PUBLIC_APP_ENV
+ARG NEXT_PUBLIC_APP_VERSION
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_PILOT_MODE
+ARG NEXT_PUBLIC_REGISTRATION_ENABLED
+ARG NEXT_PUBLIC_ASSESSMENT_DELIVERY_ENABLED
+
+ENV NEXT_OUTPUT="standalone"
+ENV NEXT_PUBLIC_APP_ENV="${NEXT_PUBLIC_APP_ENV}"
+ENV NEXT_PUBLIC_APP_VERSION="${NEXT_PUBLIC_APP_VERSION}"
+ENV NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL}"
+ENV NEXT_PUBLIC_PILOT_MODE="${NEXT_PUBLIC_PILOT_MODE}"
+ENV NEXT_PUBLIC_REGISTRATION_ENABLED="${NEXT_PUBLIC_REGISTRATION_ENABLED}"
+ENV NEXT_PUBLIC_ASSESSMENT_DELIVERY_ENABLED="${NEXT_PUBLIC_ASSESSMENT_DELIVERY_ENABLED}"
+
 RUN pnpm --filter @edumall/web build
 
 FROM node:24-bookworm-slim AS runtime
 
-ENV NODE_ENV=production
+ENV NODE_ENV="production"
+ENV HOSTNAME="0.0.0.0"
+ENV PORT="3000"
+
 WORKDIR /app
 
-COPY --from=base /app/apps/web/.next/standalone ./
-COPY --from=base /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=base /app/apps/web/public ./apps/web/public
+COPY --from=build /app/apps/web/.next/standalone ./
+COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build /app/apps/web/public ./apps/web/public
 
 USER node
 
