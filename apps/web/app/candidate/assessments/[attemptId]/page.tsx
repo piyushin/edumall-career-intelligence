@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "../../../../lib/api";
+import { SubmittedCommerce } from "./submitted-commerce";
 import {
   getCandidateAttempt,
   saveCandidateResponse,
@@ -46,7 +47,6 @@ function isAnswered(
 
 export default function CandidateAttemptPage() {
   const params = useParams<{ attemptId: string }>();
-  const router = useRouter();
   const attemptId = params.attemptId;
 
   const [attempt, setAttempt] = useState<CandidateAttempt | null>(null);
@@ -196,30 +196,7 @@ export default function CandidateAttemptPage() {
   const progress = items.length > 0 ? Math.round((answeredCount / items.length) * 100) : 0;
 
   if (attempt.status === "SUBMITTED") {
-    return (
-      <main className="mx-auto max-w-4xl px-6 py-12">
-        <div className="rounded-3xl border border-emerald-200 bg-white p-8 shadow-sm sm:p-10">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-xl text-emerald-700">
-            ✓
-          </div>
-          <h1 className="mt-6 text-3xl font-semibold text-slate-950">Assessment submitted</h1>
-          <p className="mt-3 text-base leading-7 text-slate-600">
-            Your responses for <strong>{version.title}</strong> have been submitted successfully.
-          </p>
-          <p className="mt-4 text-sm leading-6 text-slate-500">
-            Scoring and report processing occur through the secured assessment pipeline. Candidate
-            result presentation will only display approved report information when available.
-          </p>
-          <button
-            type="button"
-            onClick={() => router.push("/candidate/assessments")}
-            className="mt-8 rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-600"
-          >
-            Back to My Assessments
-          </button>
-        </div>
-      </main>
-    );
+    return <SubmittedCommerce attemptId={attempt.id} title={version.title} />;
   }
 
   return (

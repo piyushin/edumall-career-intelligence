@@ -151,6 +151,10 @@ model Organization {
   assessmentDefinitions    AssessmentDefinition[]
   assessmentAssignments    AssessmentAssignment[]
   assessmentReportReleases AssessmentReportRelease[]
+  commerceProducts         CommerceProduct[]         @relation("CommerceProductOrganization")
+  commerceCoupons          CommerceCoupon[]          @relation("CommerceCouponOrganization")
+  commerceOrders           CommerceOrder[]           @relation("CommerceOrderOrganization")
+  commerceEntitlements     CommerceEntitlement[]     @relation("CommerceEntitlementOrganization")
 
   @@index([status])
   @@index([type, status])
@@ -158,31 +162,37 @@ model Organization {
 }
 
 model User {
-  id                           String                    @id @default(uuid()) @db.Uuid
-  email                        String                    @db.VarChar(320)
-  normalizedEmail              String                    @unique @map("normalized_email") @db.VarChar(320)
-  passwordHash                 String?                   @map("password_hash") @db.VarChar(255)
-  firstName                    String                    @map("first_name") @db.VarChar(100)
-  lastName                     String                    @map("last_name") @db.VarChar(100)
-  status                       UserStatus                @default(INVITED)
-  emailVerifiedAt              DateTime?                 @map("email_verified_at")
-  lastLoginAt                  DateTime?                 @map("last_login_at")
-  failedLoginCount             Int                       @default(0) @map("failed_login_count")
-  lockedUntil                  DateTime?                 @map("locked_until")
-  createdAt                    DateTime                  @default(now()) @map("created_at")
-  updatedAt                    DateTime                  @updatedAt @map("updated_at")
-  deletedAt                    DateTime?                 @map("deleted_at")
+  id                           String                     @id @default(uuid()) @db.Uuid
+  email                        String                     @db.VarChar(320)
+  normalizedEmail              String                     @unique @map("normalized_email") @db.VarChar(320)
+  passwordHash                 String?                    @map("password_hash") @db.VarChar(255)
+  firstName                    String                     @map("first_name") @db.VarChar(100)
+  lastName                     String                     @map("last_name") @db.VarChar(100)
+  status                       UserStatus                 @default(INVITED)
+  emailVerifiedAt              DateTime?                  @map("email_verified_at")
+  lastLoginAt                  DateTime?                  @map("last_login_at")
+  failedLoginCount             Int                        @default(0) @map("failed_login_count")
+  lockedUntil                  DateTime?                  @map("locked_until")
+  createdAt                    DateTime                   @default(now()) @map("created_at")
+  updatedAt                    DateTime                   @updatedAt @map("updated_at")
+  deletedAt                    DateTime?                  @map("deleted_at")
   memberships                  OrganizationMembership[]
   sessions                     Session[]
   passwordResetTokens          PasswordResetToken[]
   invitationTokens             InvitationToken[]
-  auditLogs                    AuditLog[]                @relation("ActorAuditLogs")
-  createdAssessmentDefinitions AssessmentDefinition[]    @relation("AssessmentDefinitionCreatedBy")
-  createdAssessmentVersions    AssessmentVersion[]       @relation("AssessmentVersionCreatedBy")
-  publishedAssessmentVersions  AssessmentVersion[]       @relation("AssessmentVersionPublishedBy")
-  assignedAssessments          AssessmentAssignment[]    @relation("AssessmentAssignmentCandidate")
-  createdAssessmentAssignments AssessmentAssignment[]    @relation("AssessmentAssignmentAssignedBy")
-  releasedAssessmentReports    AssessmentReportRelease[] @relation("AssessmentReportReleaseReleasedBy")
+  auditLogs                    AuditLog[]                 @relation("ActorAuditLogs")
+  createdAssessmentDefinitions AssessmentDefinition[]     @relation("AssessmentDefinitionCreatedBy")
+  createdAssessmentVersions    AssessmentVersion[]        @relation("AssessmentVersionCreatedBy")
+  publishedAssessmentVersions  AssessmentVersion[]        @relation("AssessmentVersionPublishedBy")
+  assignedAssessments          AssessmentAssignment[]     @relation("AssessmentAssignmentCandidate")
+  createdAssessmentAssignments AssessmentAssignment[]     @relation("AssessmentAssignmentAssignedBy")
+  releasedAssessmentReports    AssessmentReportRelease[]  @relation("AssessmentReportReleaseReleasedBy")
+  createdCommerceProducts      CommerceProduct[]          @relation("CommerceProductCreatedBy")
+  createdCommerceCoupons       CommerceCoupon[]           @relation("CommerceCouponCreatedBy")
+  commerceOrders               CommerceOrder[]            @relation("CommerceOrderUser")
+  commercePaymentsApproved     CommercePayment[]          @relation("CommercePaymentApprovedBy")
+  commerceCouponRedemptions    CommerceCouponRedemption[] @relation("CommerceCouponRedemptionUser")
+  commerceEntitlements         CommerceEntitlement[]      @relation("CommerceEntitlementUser")
 
   @@index([status])
   @@index([status, lockedUntil])
@@ -312,6 +322,7 @@ model AssessmentVersion {
   interpretationSets     AssessmentInterpretationSet[]
   reportDataSnapshots    AssessmentReportDataSnapshot[]
   careerFitModels        CareerFitModel[]
+  commerceProducts       CommerceProduct[]              @relation("CommerceProductAssessmentVersion")
 
   @@unique([assessmentDefinitionId, versionNumber])
   @@index([assessmentDefinitionId, status])
@@ -446,19 +457,21 @@ model AssessmentAssignment {
 
 /// One actual sitting/attempt under an assignment.
 model AssessmentAttempt {
-  id             String                    @id @default(uuid()) @db.Uuid
-  assignmentId   String                    @map("assignment_id") @db.Uuid
-  attemptNumber  Int                       @map("attempt_number")
-  status         AssessmentAttemptStatus   @default(IN_PROGRESS)
-  startedAt      DateTime                  @default(now()) @map("started_at")
-  lastActivityAt DateTime                  @default(now()) @map("last_activity_at")
-  submittedAt    DateTime?                 @map("submitted_at")
-  abandonedAt    DateTime?                 @map("abandoned_at")
-  metadata       Json?                     @db.JsonB
-  assignment     AssessmentAssignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
-  responses      AssessmentResponse[]
-  scoringRuns    AssessmentScoringRun[]
-  reportReleases AssessmentReportRelease[]
+  id                   String                    @id @default(uuid()) @db.Uuid
+  assignmentId         String                    @map("assignment_id") @db.Uuid
+  attemptNumber        Int                       @map("attempt_number")
+  status               AssessmentAttemptStatus   @default(IN_PROGRESS)
+  startedAt            DateTime                  @default(now()) @map("started_at")
+  lastActivityAt       DateTime                  @default(now()) @map("last_activity_at")
+  submittedAt          DateTime?                 @map("submitted_at")
+  abandonedAt          DateTime?                 @map("abandoned_at")
+  metadata             Json?                     @db.JsonB
+  assignment           AssessmentAssignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  responses            AssessmentResponse[]
+  scoringRuns          AssessmentScoringRun[]
+  reportReleases       AssessmentReportRelease[]
+  commerceOrders       CommerceOrder[]           @relation("CommerceOrderAttempt")
+  commerceEntitlements CommerceEntitlement[]     @relation("CommerceEntitlementAttempt")
 
   @@unique([assignmentId, attemptNumber])
   @@index([assignmentId, status])
@@ -991,4 +1004,227 @@ model AuditLog {
   @@index([action, createdAt])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+enum CommerceProductKind {
+  REPORT
+  COUNSELLING
+  REPORT_AND_COUNSELLING
+}
+
+enum CommerceProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CommerceCouponDiscountType {
+  FREE
+  PERCENTAGE
+  FIXED
+}
+
+enum CommerceCouponStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CommerceOrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum CommercePaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  MANUAL_APPROVED
+  REFUNDED
+}
+
+enum CommercePaymentMethod {
+  ONLINE_GATEWAY
+  BANK_TRANSFER
+  UPI
+  CASH
+  COUPON
+  SPONSORED
+  COMPLIMENTARY
+}
+
+enum CommerceEntitlementType {
+  REPORT
+  COUNSELLING
+}
+
+enum CommerceEntitlementStatus {
+  ACTIVE
+  CONSUMED
+  REVOKED
+}
+
+model CommerceProduct {
+  id                  String                @id @default(uuid()) @db.Uuid
+  organizationId      String?               @map("organization_id") @db.Uuid
+  assessmentVersionId String?               @map("assessment_version_id") @db.Uuid
+  code                String                @unique @db.VarChar(120)
+  name                String                @db.VarChar(200)
+  description         String?               @db.Text
+  kind                CommerceProductKind
+  currency            String                @default("INR") @db.Char(3)
+  priceMinor          Int                   @map("price_minor")
+  status              CommerceProductStatus @default(ACTIVE)
+  createdByUserId     String?               @map("created_by_user_id") @db.Uuid
+  metadata            Json?                 @db.JsonB
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+
+  organization      Organization?      @relation("CommerceProductOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  assessmentVersion AssessmentVersion? @relation("CommerceProductAssessmentVersion", fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  createdByUser     User?              @relation("CommerceProductCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  coupons           CommerceCoupon[]
+  orders            CommerceOrder[]
+
+  @@index([organizationId, status])
+  @@index([assessmentVersionId, status])
+  @@index([kind, status])
+  @@map("commerce_products")
+}
+
+model CommerceCoupon {
+  id               String                     @id @default(uuid()) @db.Uuid
+  organizationId   String?                    @map("organization_id") @db.Uuid
+  productId        String?                    @map("product_id") @db.Uuid
+  code             String                     @unique @db.VarChar(80)
+  description      String?                    @db.Text
+  discountType     CommerceCouponDiscountType @map("discount_type")
+  percentageBps    Int?                       @map("percentage_bps")
+  fixedAmountMinor Int?                       @map("fixed_amount_minor")
+  validFrom        DateTime                   @default(now()) @map("valid_from")
+  validUntil       DateTime?                  @map("valid_until")
+  maxRedemptions   Int?                       @map("max_redemptions")
+  perUserLimit     Int                        @default(1) @map("per_user_limit")
+  status           CommerceCouponStatus       @default(ACTIVE)
+  createdByUserId  String?                    @map("created_by_user_id") @db.Uuid
+  metadata         Json?                      @db.JsonB
+  createdAt        DateTime                   @default(now()) @map("created_at")
+  updatedAt        DateTime                   @updatedAt @map("updated_at")
+
+  organization  Organization?              @relation("CommerceCouponOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  product       CommerceProduct?           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  createdByUser User?                      @relation("CommerceCouponCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  orders        CommerceOrder[]
+  redemptions   CommerceCouponRedemption[]
+
+  @@index([organizationId, status])
+  @@index([productId, status])
+  @@index([validFrom, validUntil])
+  @@map("commerce_coupons")
+}
+
+model CommerceOrder {
+  id                 String              @id @default(uuid()) @db.Uuid
+  organizationId     String              @map("organization_id") @db.Uuid
+  userId             String              @map("user_id") @db.Uuid
+  attemptId          String              @map("attempt_id") @db.Uuid
+  productId          String              @map("product_id") @db.Uuid
+  couponId           String?             @map("coupon_id") @db.Uuid
+  status             CommerceOrderStatus @default(PENDING)
+  currency           String              @db.Char(3)
+  subtotalMinor      Int                 @map("subtotal_minor")
+  discountMinor      Int                 @default(0) @map("discount_minor")
+  totalMinor         Int                 @map("total_minor")
+  couponCodeSnapshot String?             @map("coupon_code_snapshot") @db.VarChar(80)
+  metadata           Json?               @db.JsonB
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  paidAt             DateTime?           @map("paid_at")
+  cancelledAt        DateTime?           @map("cancelled_at")
+
+  organization      Organization               @relation("CommerceOrderOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  user              User                       @relation("CommerceOrderUser", fields: [userId], references: [id], onDelete: Restrict)
+  attempt           AssessmentAttempt          @relation("CommerceOrderAttempt", fields: [attemptId], references: [id], onDelete: Restrict)
+  product           CommerceProduct            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  coupon            CommerceCoupon?            @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  payments          CommercePayment[]
+  couponRedemptions CommerceCouponRedemption[]
+  entitlements      CommerceEntitlement[]
+
+  @@index([organizationId, createdAt])
+  @@index([userId, createdAt])
+  @@index([attemptId, createdAt])
+  @@index([status, createdAt])
+  @@map("commerce_orders")
+}
+
+model CommercePayment {
+  id                String                @id @default(uuid()) @db.Uuid
+  orderId           String                @map("order_id") @db.Uuid
+  provider          String                @db.VarChar(50)
+  providerOrderId   String?               @unique @map("provider_order_id") @db.VarChar(120)
+  providerPaymentId String?               @unique @map("provider_payment_id") @db.VarChar(120)
+  method            CommercePaymentMethod
+  status            CommercePaymentStatus @default(PENDING)
+  amountMinor       Int                   @map("amount_minor")
+  currency          String                @db.Char(3)
+  reference         String?               @db.VarChar(200)
+  approvedByUserId  String?               @map("approved_by_user_id") @db.Uuid
+  metadata          Json?                 @db.JsonB
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  completedAt       DateTime?             @map("completed_at")
+
+  order          CommerceOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  approvedByUser User?         @relation("CommercePaymentApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, status])
+  @@index([status, createdAt])
+  @@map("commerce_payments")
+}
+
+model CommerceCouponRedemption {
+  id            String   @id @default(uuid()) @db.Uuid
+  couponId      String   @map("coupon_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  orderId       String   @map("order_id") @db.Uuid
+  discountMinor Int      @map("discount_minor")
+  redeemedAt    DateTime @default(now()) @map("redeemed_at")
+  metadata      Json?    @db.JsonB
+
+  coupon CommerceCoupon @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  user   User           @relation("CommerceCouponRedemptionUser", fields: [userId], references: [id], onDelete: Restrict)
+  order  CommerceOrder  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([couponId, userId, orderId])
+  @@index([couponId, redeemedAt])
+  @@index([userId, redeemedAt])
+  @@map("commerce_coupon_redemptions")
+}
+
+model CommerceEntitlement {
+  id             String                    @id @default(uuid()) @db.Uuid
+  organizationId String                    @map("organization_id") @db.Uuid
+  userId         String                    @map("user_id") @db.Uuid
+  attemptId      String                    @map("attempt_id") @db.Uuid
+  orderId        String?                   @map("order_id") @db.Uuid
+  type           CommerceEntitlementType
+  status         CommerceEntitlementStatus @default(ACTIVE)
+  source         String                    @db.VarChar(50)
+  grantedAt      DateTime                  @default(now()) @map("granted_at")
+  consumedAt     DateTime?                 @map("consumed_at")
+  revokedAt      DateTime?                 @map("revoked_at")
+  expiresAt      DateTime?                 @map("expires_at")
+  metadata       Json?                     @db.JsonB
+
+  organization Organization      @relation("CommerceEntitlementOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User              @relation("CommerceEntitlementUser", fields: [userId], references: [id], onDelete: Restrict)
+  attempt      AssessmentAttempt @relation("CommerceEntitlementAttempt", fields: [attemptId], references: [id], onDelete: Restrict)
+  order        CommerceOrder?    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, attemptId, type])
+  @@index([organizationId, status])
+  @@index([userId, status])
+  @@index([attemptId, status])
+  @@map("commerce_entitlements")
 }

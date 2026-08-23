@@ -138,6 +138,9 @@ export default function CandidateAssessmentsPage() {
               (attempt) => (attempt.reportReleases?.length ?? 0) > 0,
             );
             const completed = submittedCount(assignment);
+            const latestSubmitted = assignment.attempts.find(
+              (attempt) => attempt.status === "SUBMITTED",
+            );
             const attemptLimitReached = !inProgress && completed >= assignment.maxAttempts;
             const now = Date.now();
             const notYetAvailable =
@@ -232,6 +235,16 @@ export default function CandidateAssessmentsPage() {
                                 ? "Expired"
                                 : "Start assessment"}
                     </button>
+
+                    {latestSubmitted ? (
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/candidate/assessments/${latestSubmitted.id}`)}
+                        className="inline-flex min-h-11 items-center justify-center rounded-lg border border-blue-300 bg-blue-50 px-5 py-2.5 text-sm font-semibold text-blue-800 transition hover:bg-blue-100"
+                      >
+                        View result & report
+                      </button>
+                    ) : null}
 
                     {releasedAttempt ? (
                       <button

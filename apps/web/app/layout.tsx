@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   description:
-    "The EduMall Career Intelligence Platform for assessment administration, delivery and reporting.",
+    "Career assessment and Career Intelligence for school students, college learners, professionals and skilled workers, with structured CareerFit insights and counsellor-guided direction.",
   title: {
     default: "The EduMall Career Intelligence",
     template: "%s | The EduMall Career Intelligence",

@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { CommerceModule } from "../commerce/commerce.module";
 import { AssessmentAssignmentAdminController } from "./assessment-assignment-admin.controller";
 import { AssessmentAssignmentAdminService } from "./assessment-assignment-admin.service";
 import { AssessmentAdminController } from "./assessment-admin.controller";
@@ -17,6 +18,7 @@ import { AssessmentScoringService } from "./assessment-scoring.service";
 import { AssessmentService } from "./assessment.service";
 
 @Module({
+  imports: [CommerceModule],
   controllers: [
     AssessmentController,
     AssessmentAdminController,

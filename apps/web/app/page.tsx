@@ -189,15 +189,15 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-12 px-6 py-16 sm:py-20 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-24">
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-orange-700">
-              Controlled Pilot • Research Edition 2026
+              Career Assessment • CareerFit • Counsellor-Guided Clarity
             </div>
             <h1 className="mt-7 max-w-4xl text-5xl font-black tracking-[-0.04em] text-slate-950 sm:text-6xl lg:text-7xl">
-              Discover who you are. <span className="text-red-600">Choose your direction.</span>
+              Discover your strengths. <span className="text-red-600">Find your direction.</span>
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl">
               The EduMall Career Intelligence helps school students, college learners, professionals
-              and skilled workers understand their profile, explore CareerFit directions and move
-              forward with counsellor-guided clarity.
+              and skilled workers understand themselves better, explore relevant CareerFit
+              directions and move forward with structured, counsellor-guided clarity.
             </p>
             <div className="mt-9 flex flex-wrap gap-3">
               {registrationEnabled ? (
@@ -205,7 +205,7 @@ export default function HomePage() {
                   href="/signup"
                   className="rounded-2xl bg-gradient-to-r from-red-600 via-red-500 to-orange-500 px-6 py-3.5 text-base font-extrabold text-white shadow-xl shadow-red-200 transition hover:-translate-y-0.5"
                 >
-                  Start my assessment
+                  Start my Career Assessment
                 </Link>
               ) : null}
               <Link
@@ -216,7 +216,7 @@ export default function HomePage() {
               </Link>
             </div>
             <div className="mt-8 flex flex-wrap gap-x-7 gap-y-2 text-sm font-medium text-slate-600">
-              <span>✓ Six age/career segments</span>
+              <span>✓ Six career-stage segments</span>
               <span>✓ Secure candidate workspace</span>
               <span>✓ Counsellor-reviewed report workflow</span>
             </div>
@@ -227,7 +227,7 @@ export default function HomePage() {
             <div className="relative overflow-hidden rounded-[36px] border border-orange-100 bg-[#fff7ef] p-7 shadow-2xl shadow-orange-100 sm:p-9">
               <BrandLogo className="h-auto w-[230px]" />
               <p className="mt-6 text-sm font-extrabold uppercase tracking-[0.18em] text-red-600">
-                Career Intelligence Journey
+                Your Career Intelligence Journey
               </p>
               <div className="mt-6 space-y-3">
                 {[
@@ -263,11 +263,11 @@ export default function HomePage() {
             Find your assessment
           </p>
           <h2 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl">
-            Which Career Intelligence journey is right for you?
+            Choose the assessment that matches where you are today.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-600">
-            Choose the segment that matches where you are today. Each battery is designed around a
-            different educational or work-life decision.
+            Career decisions change with age, education and work experience. Choose the assessment
+            designed around your present educational or professional decision point.
           </p>
         </div>
         <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -453,9 +453,10 @@ export default function HomePage() {
           <div>
             <BrandLogo className="h-auto w-[160px]" />
             <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
-              Career Intelligence is an initiative of Meetium Pvt. Ltd. This public experience is
-              currently a controlled pilot/research edition and does not claim
-              population-standardised norms.
+              Career Intelligence is an initiative of Meetium Pvt. Ltd. Assessment findings and
+              career recommendations are indicative and should be interpreted with appropriate
+              educational, career or professional guidance. The current public edition does not
+              claim population-standardised norms.
             </p>
           </div>
           <div className="text-sm leading-6 text-slate-600 md:text-right">

@@ -18,6 +18,7 @@ import { AuthGuard } from "../auth/auth.guard";
 import type { AuthContext } from "../auth/auth.types";
 import { CsrfGuard } from "../auth/csrf.guard";
 import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
+import { CommerceService } from "../commerce/commerce.service";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { AssessmentReportPdfService } from "./assessment-report-pdf.service";
@@ -36,6 +37,8 @@ export class AssessmentController {
     private readonly releases: AssessmentReportReleaseService,
     @Inject(AssessmentReportPdfService)
     private readonly pdf: AssessmentReportPdfService,
+    @Inject(CommerceService)
+    private readonly commerce: CommerceService,
   ) {}
 
   @Get("assignments")
@@ -62,6 +65,7 @@ export class AssessmentController {
     @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
     @Res({ passthrough: true }) response: Response,
   ) {
+    await this.commerce.assertReportAccess(context, attemptId);
     const release = await this.releases.getCandidateReleasedSnapshot(context, attemptId);
     const pdf = await this.pdf.render(release.reportDataSnapshot);
 
