@@ -6,6 +6,7 @@ import { CareerIntelligenceModule } from "./career-intelligence/career-intellige
 import { APP_CONFIG } from "./config/app-config.token";
 import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health/health.controller";
+import { PlatformAdminModule } from "./platform-admin/platform-admin.module";
 import { ReadinessService } from "./health/readiness.service";
 
 @Module({})
@@ -18,6 +19,7 @@ export class AppModule {
         AuthModule.register(config),
         AssessmentModule,
         CareerIntelligenceModule,
+        PlatformAdminModule,
       ],
       module: AppModule,
       providers: [

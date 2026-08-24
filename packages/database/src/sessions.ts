@@ -1,6 +1,10 @@
 import { SessionScope, type MembershipRole, type PrismaClient } from "@prisma/client";
 import { asAuthenticationError, AuthenticationError, AuthenticationErrorCode } from "./auth-errors";
-import { requireActiveOrganizationMembership, requirePlatformAuthorization } from "./authorization";
+import {
+  requireActiveOrganizationMembership,
+  requirePlatformAuthorization,
+  resolveEffectiveAdminPermissions,
+} from "./authorization";
 import { hashOpaqueToken } from "./tokens";
 
 export interface AuthContext {
@@ -9,6 +13,7 @@ export interface AuthContext {
   membershipId: string | null;
   role: MembershipRole;
   sessionId: string;
+  permissions?: string[];
 }
 
 export interface SessionValidationOptions {
@@ -51,6 +56,14 @@ export async function validateSessionToken(
         membershipId: authorization.membership.id,
         role: authorization.role,
         sessionId: session.id,
+        permissions:
+          authorization.role === "SUPER_ADMIN"
+            ? ["*"]
+            : await resolveEffectiveAdminPermissions(
+                prisma,
+                authorization.user.id,
+                authorization.organization.id,
+              ),
       };
     }
 
@@ -66,6 +79,10 @@ export async function validateSessionToken(
       membershipId: authorization.membership.id,
       role: authorization.role,
       sessionId: session.id,
+      permissions:
+        authorization.role === "SUPER_ADMIN"
+          ? ["*"]
+          : await resolveEffectiveAdminPermissions(prisma, authorization.user.id, null),
     };
   } catch (error) {
     throw asAuthenticationError(error);

@@ -1,0 +1,103 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
+import { MembershipRole } from "@prisma/client";
+import { AuthGuard } from "../auth/auth.guard";
+import type { AuthContext } from "../auth/auth.types";
+import { CsrfGuard } from "../auth/csrf.guard";
+import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
+import { PlatformAdminService } from "./platform-admin.service";
+import { AssignAdminRoleDto, CreatePlatformAdminDto } from "./platform-admin.types";
+
+@Controller("admin/platform")
+@UseGuards(AuthGuard, RolesGuard)
+@Roles(MembershipRole.SUPER_ADMIN)
+export class PlatformAdminController {
+  public constructor(
+    @Inject(PlatformAdminService)
+    private readonly admins: PlatformAdminService,
+  ) {}
+
+  @Get("admins")
+  @Header("cache-control", "no-store")
+  public listAdmins(@CurrentAuthContext() context: AuthContext) {
+    return this.admins.listAdmins(context);
+  }
+
+  @Get("role-templates")
+  @Header("cache-control", "no-store")
+  public listRoleTemplates(@CurrentAuthContext() context: AuthContext) {
+    return this.admins.listRoleTemplates(context);
+  }
+
+  @Get("permissions")
+  @Header("cache-control", "no-store")
+  public listPermissions(@CurrentAuthContext() context: AuthContext) {
+    return this.admins.listPermissions(context);
+  }
+
+  @Post("admins")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public createAdmin(
+    @CurrentAuthContext() context: AuthContext,
+    @Body() body: CreatePlatformAdminDto,
+  ) {
+    return this.admins.createAdmin(context, body);
+  }
+
+  @Post("admins/:adminProfileId/assignments")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public assignRole(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("adminProfileId", new ParseUUIDPipe())
+    adminProfileId: string,
+    @Body() body: AssignAdminRoleDto,
+  ) {
+    return this.admins.assignRole(context, adminProfileId, body);
+  }
+
+  @Post("assignments/:assignmentId/revoke")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public revokeAssignment(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("assignmentId", new ParseUUIDPipe())
+    assignmentId: string,
+  ) {
+    return this.admins.revokeAssignment(context, assignmentId);
+  }
+
+  @Post("admins/:adminProfileId/suspend")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public suspend(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("adminProfileId", new ParseUUIDPipe())
+    adminProfileId: string,
+  ) {
+    return this.admins.suspendAdmin(context, adminProfileId);
+  }
+
+  @Post("admins/:adminProfileId/reactivate")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public reactivate(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("adminProfileId", new ParseUUIDPipe())
+    adminProfileId: string,
+  ) {
+    return this.admins.reactivateAdmin(context, adminProfileId);
+  }
+}

@@ -1,4 +1,6 @@
 import {
+  AdminProfileStatus,
+  AdminScopeType,
   MembershipRole,
   MembershipStatus,
   OrganizationStatus,
@@ -52,10 +54,81 @@ export async function requireActiveOrganizationMembership(
       throw new AuthenticationError(AuthenticationErrorCode.INACTIVE_MEMBERSHIP);
     }
 
+    if (membership.role === MembershipRole.PLATFORM_ADMIN) {
+      const profile = await prisma.adminProfile.findUnique({
+        where: { userId },
+        select: { status: true },
+      });
+
+      if (!profile || profile.status !== AdminProfileStatus.ACTIVE) {
+        throw new AuthenticationError(AuthenticationErrorCode.FORBIDDEN_ORGANIZATION_ACCESS);
+      }
+    }
+
     return { user, organization, membership, role: membership.role };
   } catch (error) {
     throw asAuthenticationError(error);
   }
+}
+
+export async function resolveEffectiveAdminPermissions(
+  prisma: PrismaClient,
+  userId: string,
+  organizationId: string | null,
+): Promise<string[]> {
+  const profile = await prisma.adminProfile.findUnique({
+    where: { userId },
+    select: {
+      status: true,
+      assignments: {
+        where: {
+          revokedAt: null,
+          roleTemplate: {
+            isActive: true,
+          },
+          OR:
+            organizationId === null
+              ? [{ scopeType: AdminScopeType.PLATFORM }]
+              : [
+                  { scopeType: AdminScopeType.PLATFORM },
+                  {
+                    scopeType: AdminScopeType.ORGANIZATION,
+                    organizationId,
+                  },
+                ],
+        },
+        select: {
+          roleTemplate: {
+            select: {
+              permissions: {
+                select: {
+                  permission: {
+                    select: {
+                      code: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!profile || profile.status !== AdminProfileStatus.ACTIVE) {
+    return [];
+  }
+
+  const permissions = new Set<string>();
+
+  for (const assignment of profile.assignments) {
+    for (const link of assignment.roleTemplate.permissions) {
+      permissions.add(link.permission.code);
+    }
+  }
+
+  return [...permissions].sort();
 }
 
 export interface PlatformAuthorizationContext {
@@ -78,7 +151,9 @@ export async function requirePlatformAuthorization(
     const membership = await prisma.organizationMembership.findFirst({
       where: {
         userId,
-        role: MembershipRole.SUPER_ADMIN,
+        role: {
+          in: [MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN],
+        },
         status: MembershipStatus.ACTIVE,
         organization: {
           status: OrganizationStatus.ACTIVE,
@@ -91,7 +166,18 @@ export async function requirePlatformAuthorization(
       throw new AuthenticationError(AuthenticationErrorCode.FORBIDDEN_ORGANIZATION_ACCESS);
     }
 
-    return { user, membership, role: MembershipRole.SUPER_ADMIN };
+    if (membership.role === MembershipRole.PLATFORM_ADMIN) {
+      const profile = await prisma.adminProfile.findUnique({
+        where: { userId },
+        select: { status: true },
+      });
+
+      if (!profile || profile.status !== AdminProfileStatus.ACTIVE) {
+        throw new AuthenticationError(AuthenticationErrorCode.FORBIDDEN_ORGANIZATION_ACCESS);
+      }
+    }
+
+    return { user, membership, role: membership.role };
   } catch (error) {
     throw asAuthenticationError(error);
   }

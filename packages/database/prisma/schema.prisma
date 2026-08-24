@@ -41,11 +41,22 @@ enum MembershipStatus {
 
 enum MembershipRole {
   SUPER_ADMIN
+  PLATFORM_ADMIN
   ORGANIZATION_ADMIN
   COUNSELLOR
   ASSESSOR
   STUDENT
   EMPLOYEE
+}
+
+enum AdminProfileStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum AdminScopeType {
+  PLATFORM
+  ORGANIZATION
 }
 
 enum SessionScope {
@@ -156,6 +167,8 @@ model Organization {
   commerceOrders           CommerceOrder[]           @relation("CommerceOrderOrganization")
   commerceEntitlements     CommerceEntitlement[]     @relation("CommerceEntitlementOrganization")
 
+  adminRoleAssignments AdminRoleAssignment[]
+
   @@index([status])
   @@index([type, status])
   @@map("organizations")
@@ -193,6 +206,11 @@ model User {
   commercePaymentsApproved     CommercePayment[]          @relation("CommercePaymentApprovedBy")
   commerceCouponRedemptions    CommerceCouponRedemption[] @relation("CommerceCouponRedemptionUser")
   commerceEntitlements         CommerceEntitlement[]      @relation("CommerceEntitlementUser")
+
+  adminProfile                AdminProfile?         @relation("AdminProfileUser")
+  createdAdminProfiles        AdminProfile[]        @relation("AdminProfileCreatedBy")
+  createdAdminRoleTemplates   AdminRoleTemplate[]   @relation("AdminRoleTemplateCreatedBy")
+  grantedAdminRoleAssignments AdminRoleAssignment[] @relation("AdminRoleAssignmentGrantedBy")
 
   @@index([status])
   @@index([status, lockedUntil])
@@ -983,6 +1001,94 @@ model AssessmentReportRelease {
   @@index([reportDataSnapshotId])
   @@index([releasedByUserId, releasedAt])
   @@map("assessment_report_releases")
+}
+
+model AdminProfile {
+  id              String             @id @default(uuid()) @db.Uuid
+  userId          String             @unique @map("user_id") @db.Uuid
+  status          AdminProfileStatus @default(ACTIVE)
+  title           String?            @db.VarChar(160)
+  responsibility  String?            @db.VarChar(200)
+  createdByUserId String             @map("created_by_user_id") @db.Uuid
+  suspendedAt     DateTime?          @map("suspended_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  user          User                  @relation("AdminProfileUser", fields: [userId], references: [id], onDelete: Restrict)
+  createdByUser User                  @relation("AdminProfileCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assignments   AdminRoleAssignment[]
+
+  @@index([status])
+  @@index([createdByUserId, createdAt])
+  @@map("admin_profiles")
+}
+
+model AdminPermission {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(120)
+  module      String   @db.VarChar(80)
+  action      String   @db.VarChar(80)
+  description String   @db.VarChar(300)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  roleTemplates AdminRoleTemplatePermission[]
+
+  @@index([module, action])
+  @@map("admin_permissions")
+}
+
+model AdminRoleTemplate {
+  id              String   @id @default(uuid()) @db.Uuid
+  code            String   @unique @db.VarChar(100)
+  name            String   @db.VarChar(160)
+  description     String?  @db.VarChar(400)
+  isSystem        Boolean  @default(false) @map("is_system")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdByUserId String?  @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  createdByUser User?                         @relation("AdminRoleTemplateCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  permissions   AdminRoleTemplatePermission[]
+  assignments   AdminRoleAssignment[]
+
+  @@index([isActive])
+  @@index([createdByUserId, createdAt])
+  @@map("admin_role_templates")
+}
+
+model AdminRoleTemplatePermission {
+  roleTemplateId String @map("role_template_id") @db.Uuid
+  permissionId   String @map("permission_id") @db.Uuid
+
+  roleTemplate AdminRoleTemplate @relation(fields: [roleTemplateId], references: [id], onDelete: Cascade)
+  permission   AdminPermission   @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleTemplateId, permissionId])
+  @@index([permissionId])
+  @@map("admin_role_template_permissions")
+}
+
+model AdminRoleAssignment {
+  id              String         @id @default(uuid()) @db.Uuid
+  adminProfileId  String         @map("admin_profile_id") @db.Uuid
+  roleTemplateId  String         @map("role_template_id") @db.Uuid
+  scopeType       AdminScopeType @map("scope_type")
+  organizationId  String?        @map("organization_id") @db.Uuid
+  grantedByUserId String         @map("granted_by_user_id") @db.Uuid
+  grantedAt       DateTime       @default(now()) @map("granted_at")
+  revokedAt       DateTime?      @map("revoked_at")
+
+  adminProfile  AdminProfile      @relation(fields: [adminProfileId], references: [id], onDelete: Restrict)
+  roleTemplate  AdminRoleTemplate @relation(fields: [roleTemplateId], references: [id], onDelete: Restrict)
+  organization  Organization?     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  grantedByUser User              @relation("AdminRoleAssignmentGrantedBy", fields: [grantedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([adminProfileId, revokedAt])
+  @@index([roleTemplateId, revokedAt])
+  @@index([organizationId, revokedAt])
+  @@index([grantedByUserId, grantedAt])
+  @@map("admin_role_assignments")
 }
 
 model AuditLog {

@@ -8,6 +8,7 @@ import { AuthService } from "./auth.service";
 import { CsrfGuard } from "./csrf.guard";
 import { CsrfService } from "./csrf.service";
 import { RolesGuard } from "./roles.guard";
+import { PermissionsGuard } from "./permissions.guard";
 
 @Global()
 @Module({})
@@ -15,7 +16,7 @@ export class AuthModule {
   public static register(config: AppConfig): DynamicModule {
     return {
       controllers: [AuthController],
-      exports: [AuthGuard, AuthService, CsrfGuard, CsrfService, RolesGuard],
+      exports: [AuthGuard, AuthService, CsrfGuard, CsrfService, RolesGuard, PermissionsGuard],
       imports: [
         ThrottlerModule.forRoot([
           {
@@ -32,6 +33,7 @@ export class AuthModule {
         CsrfGuard,
         CsrfService,
         RolesGuard,
+        PermissionsGuard,
       ],
     };
   }
