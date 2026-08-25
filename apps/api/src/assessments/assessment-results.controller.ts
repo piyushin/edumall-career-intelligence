@@ -12,6 +12,7 @@ import {
   Res,
   StreamableFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import { MembershipRole } from "@prisma/client";
 import type { Response } from "express";
@@ -19,6 +20,10 @@ import { AuthGuard } from "../auth/auth.guard";
 import type { AuthContext } from "../auth/auth.types";
 import { CsrfGuard } from "../auth/csrf.guard";
 import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
+import { Permissions } from "../auth/permissions.decorator";
+import { PermissionsGuard } from "../auth/permissions.guard";
+import { PrivilegedMutationAuditInterceptor } from "../auth/privileged-mutation-audit.interceptor";
+import { SensitiveRead } from "../auth/sensitive-read.decorator";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { AssessmentAssignmentOrganizationQueryDto } from "./assessment-assignment-admin.types";
@@ -29,8 +34,16 @@ import { GenerateAssessmentReportDto } from "./assessment-report-workflow.types"
 import { AssessmentResultsService } from "./assessment-results.service";
 
 @Controller("staff/assessment-results")
-@UseGuards(AuthGuard, RolesGuard)
-@Roles(MembershipRole.SUPER_ADMIN, MembershipRole.ORGANIZATION_ADMIN, MembershipRole.COUNSELLOR)
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
+@Roles(
+  MembershipRole.SUPER_ADMIN,
+  MembershipRole.PLATFORM_ADMIN,
+  MembershipRole.ORGANIZATION_ADMIN,
+  MembershipRole.COUNSELLOR,
+)
+@Permissions("candidate.view")
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
+@SensitiveRead()
 export class AssessmentResultsController {
   public constructor(
     @Inject(AssessmentResultsService)
@@ -63,6 +76,7 @@ export class AssessmentResultsController {
   }
 
   @Post(":attemptId/report-snapshot")
+  @Permissions("candidate.view", "report.release")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public generateReportSnapshot(
@@ -81,6 +95,7 @@ export class AssessmentResultsController {
   }
 
   @Post(":attemptId/report-release")
+  @Permissions("report.release")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public releaseReport(

@@ -840,3 +840,13 @@ Only unresolved matters are recorded in `docs/OPEN_QUESTIONS.md`. Approved decis
 ## 56. Recommended Immediate Next Step
 
 Begin Phase 0 with documentation and foundation PRs only. Before application code begins, create ADRs for managed identity, tenant isolation/RLS, data classification, consent/minor-data policy, secrets management, object storage, PDF worker, observability, and environment strategy.
+
+## 57. R19.1A Administrative Security Boundary
+
+Privileged requests pass four independent server-side checks: authenticated session, permitted membership role, server-resolved scope, and effective permission. Platform-wide controllers require a platform-scoped session. Organization-scoped identifiers supplied by a caller may narrow a request but service-layer resource resolution prevents them from expanding the authenticated scope.
+
+`SUPER_ADMIN` receives wildcard authorization only when its validated session has platform scope. `PLATFORM_ADMIN` never receives wildcard authorization; active role-template assignments are resolved on every session validation. Existing organization administrators retain a finite compatibility permission matrix for their pre-R19 operational endpoints during the multi-role migration window.
+
+New sessions persist membership, privilege type, and delegated `AdminProfile` attribution. R19.1 migration backfills compatible sessions without replacing their IDs. Suspending delegated administrative privilege revokes only sessions attributed to that profile, preserving unrelated employee, candidate, counsellor, and student sessions.
+
+System role templates are protected against routine update, permission replacement, activation changes, and deactivation. Administrative audit browsing uses stable `(created_at, id)` cursor pagination and records actor, server-authorized scope, purpose, redacted filters, result count, request ID, and correlation ID. A privileged sensitive read fails closed when its mandatory evidence cannot be stored; health, readiness, authentication failure telemetry, and public operations do not depend on that fail-closed path.

@@ -10,14 +10,20 @@ import {
   Post,
   Put,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import { MembershipRole } from "@prisma/client";
 import { AuthGuard } from "../auth/auth.guard";
 import type { AuthContext } from "../auth/auth.types";
 import { CsrfGuard } from "../auth/csrf.guard";
 import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
+import { Permissions } from "../auth/permissions.decorator";
+import { PermissionsGuard } from "../auth/permissions.guard";
+import { PlatformScope } from "../auth/platform-scope.decorator";
+import { PrivilegedMutationAuditInterceptor } from "../auth/privileged-mutation-audit.interceptor";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { ScopeGuard } from "../auth/scope.guard";
 import { CareerIntelligenceAdminService } from "./career-intelligence-admin.service";
 import {
   CreateCareerClusterDto,
@@ -37,8 +43,11 @@ import {
 } from "./career-intelligence-admin.types";
 
 @Controller("admin/career-intelligence")
-@UseGuards(AuthGuard, RolesGuard)
-@Roles(MembershipRole.SUPER_ADMIN)
+@UseGuards(AuthGuard, RolesGuard, ScopeGuard, PermissionsGuard)
+@Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+@PlatformScope()
+@Permissions("career.view")
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
 export class CareerIntelligenceAdminController {
   public constructor(
     @Inject(CareerIntelligenceAdminService)
@@ -52,6 +61,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Post("taxonomies")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createTaxonomy(
@@ -62,6 +72,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Put("taxonomies/:taxonomyId")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public updateTaxonomy(
@@ -73,6 +84,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Post("taxonomies/:taxonomyId/versions")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createTaxonomyVersion(
@@ -94,6 +106,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Put("taxonomies/:taxonomyId/versions/:versionId")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public updateTaxonomyVersion(
@@ -106,6 +119,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Post("taxonomies/:taxonomyId/versions/:versionId/clusters")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createCluster(
@@ -118,6 +132,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Put("taxonomies/:taxonomyId/versions/:versionId/clusters/:clusterId")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public updateCluster(
@@ -131,6 +146,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Delete("taxonomies/:taxonomyId/versions/:versionId/clusters/:clusterId")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public deleteCluster(
@@ -143,6 +159,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Post("taxonomies/:taxonomyId/versions/:versionId/paths")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createPath(
@@ -155,6 +172,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Put("taxonomies/:taxonomyId/versions/:versionId/paths/:pathId")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public updatePath(
@@ -168,6 +186,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Delete("taxonomies/:taxonomyId/versions/:versionId/paths/:pathId")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public deletePath(
@@ -190,6 +209,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Post("taxonomies/:taxonomyId/versions/:versionId/publish")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public publishTaxonomyVersion(
@@ -201,6 +221,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Post("taxonomies/:taxonomyId/versions/:versionId/retire")
+  @Permissions("career.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public retireTaxonomyVersion(
@@ -218,6 +239,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Post("fit-models")
+  @Permissions("career.mapping.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createFitModel(
@@ -237,6 +259,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Put("fit-models/:modelId")
+  @Permissions("career.mapping.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public updateFitModel(
@@ -248,6 +271,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Post("fit-models/:modelId/factors")
+  @Permissions("career.mapping.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createFitFactor(
@@ -259,6 +283,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Put("fit-models/:modelId/factors/:factorId")
+  @Permissions("career.mapping.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public updateFitFactor(
@@ -271,6 +296,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Delete("fit-models/:modelId/factors/:factorId")
+  @Permissions("career.mapping.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public deleteFitFactor(
@@ -282,6 +308,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Post("fit-models/:modelId/recommendation-bands")
+  @Permissions("career.mapping.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createRecommendationBand(
@@ -293,6 +320,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Put("fit-models/:modelId/recommendation-bands/:bandId")
+  @Permissions("career.mapping.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public updateRecommendationBand(
@@ -305,6 +333,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Delete("fit-models/:modelId/recommendation-bands/:bandId")
+  @Permissions("career.mapping.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public deleteRecommendationBand(
@@ -325,6 +354,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Post("fit-models/:modelId/publish")
+  @Permissions("career.mapping.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public publishFitModel(
@@ -335,6 +365,7 @@ export class CareerIntelligenceAdminController {
   }
 
   @Post("fit-models/:modelId/retire")
+  @Permissions("career.mapping.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public retireFitModel(

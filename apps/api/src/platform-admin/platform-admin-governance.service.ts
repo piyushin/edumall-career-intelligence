@@ -1,12 +1,15 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { MembershipRole, Prisma, type PrismaClient } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
+import type { RequestContext } from "@edumall/shared-types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import type {
   AdminAuditQueryDto,
@@ -27,6 +30,7 @@ export class PlatformAdminGovernanceService {
 
     const code = input.code.trim().toUpperCase();
     const permissionCodes = this.normalizePermissionCodes(input.permissionCodes);
+    this.assertDelegatedPermissionSubset(context, permissionCodes);
 
     try {
       return await this.prisma.$transaction(async (transaction) => {
@@ -118,6 +122,8 @@ export class PlatformAdminGovernanceService {
       });
     }
 
+    this.assertCustomTemplate(current);
+
     const data: Prisma.AdminRoleTemplateUpdateInput = {};
 
     if (input.name !== undefined) {
@@ -176,6 +182,7 @@ export class PlatformAdminGovernanceService {
     this.assertSuperAdmin(context);
 
     const permissionCodes = this.normalizePermissionCodes(input.permissionCodes);
+    this.assertDelegatedPermissionSubset(context, permissionCodes);
 
     return this.prisma.$transaction(async (transaction) => {
       const template = await transaction.adminRoleTemplate.findUnique({
@@ -187,6 +194,7 @@ export class PlatformAdminGovernanceService {
           code: true,
           name: true,
           isActive: true,
+          isSystem: true,
           permissions: {
             select: {
               permission: {
@@ -205,6 +213,8 @@ export class PlatformAdminGovernanceService {
           message: "Administrative role template not found.",
         });
       }
+
+      this.assertCustomTemplate(template);
 
       const permissions = await this.requirePermissions(transaction, permissionCodes);
 
@@ -257,13 +267,24 @@ export class PlatformAdminGovernanceService {
     return this.setRoleTemplateStatus(context, roleTemplateId, false);
   }
 
-  public listAuditLogs(context: AuthContext, query: AdminAuditQueryDto) {
+  public async listAuditLogs(
+    context: AuthContext,
+    query: AdminAuditQueryDto,
+    requestContext?: RequestContext,
+  ) {
     this.assertSuperAdmin(context);
 
     const where: Prisma.AuditLogWhereInput = {};
 
     if (query.actorUserId) {
       where.actorUserId = query.actorUserId;
+    }
+
+    if (query.subjectUserId) where.subjectUserId = query.subjectUserId;
+    if (query.organizationId) where.organizationId = query.organizationId;
+    if (query.outcome) where.outcome = query.outcome;
+    if (query.purpose?.trim()) {
+      where.purpose = { contains: query.purpose.trim(), mode: "insensitive" };
     }
 
     if (query.action?.trim()) {
@@ -298,20 +319,30 @@ export class PlatformAdminGovernanceService {
       where.createdAt = createdAt;
     }
 
-    const requestedTake = query.take === undefined ? 100 : Number.parseInt(query.take, 10);
+    const requestedLimit = Number.parseInt(query.limit ?? query.take ?? "100", 10);
+    const limit = Math.max(1, Math.min(requestedLimit, 200));
+    const cursor = query.cursor ? this.decodeCursor(query.cursor) : null;
 
-    const take = Math.max(1, Math.min(requestedTake, 200));
+    if (cursor) {
+      where.OR = [
+        { createdAt: { lt: cursor.createdAt } },
+        { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+      ];
+    }
 
-    return this.prisma.auditLog.findMany({
+    const rows = await this.prisma.auditLog.findMany({
       where,
-      take,
-      orderBy: {
-        createdAt: "desc",
-      },
+      take: limit + 1,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
         organizationId: true,
         actorUserId: true,
+        subjectUserId: true,
+        requestId: true,
+        correlationId: true,
+        purpose: true,
+        outcome: true,
         action: true,
         entityType: true,
         entityId: true,
@@ -336,6 +367,49 @@ export class PlatformAdminGovernanceService {
         },
       },
     });
+
+    const hasNext = rows.length > limit;
+    const items = hasNext ? rows.slice(0, limit) : rows;
+    const last = items.at(-1);
+
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorUserId: context.userId,
+          action: "admin.audit.searched",
+          entityType: "AuditLog",
+          requestId: requestContext?.requestId ?? null,
+          correlationId: requestContext?.correlationId ?? null,
+          purpose: query.purpose?.trim() || "administrative_audit_review",
+          metadata: {
+            authorizedScope: "PLATFORM",
+            filters: {
+              actorUserId: query.actorUserId ?? null,
+              subjectUserId: query.subjectUserId ?? null,
+              organizationId: query.organizationId ?? null,
+              action: query.action?.trim() || null,
+              entityType: query.entityType?.trim() || null,
+              entityId: query.entityId ?? null,
+              outcome: query.outcome ?? null,
+              from: query.from ?? null,
+              to: query.to ?? null,
+            },
+            resultCount: items.length,
+          },
+        },
+      });
+    } catch {
+      throw new ServiceUnavailableException({
+        code: "MANDATORY_AUDIT_UNAVAILABLE",
+        message: "Privileged audit evidence could not be persisted.",
+      });
+    }
+
+    return {
+      items,
+      hasNext,
+      nextCursor: hasNext && last ? this.encodeCursor(last.createdAt, last.id) : null,
+    };
   }
 
   private async setRoleTemplateStatus(
@@ -354,6 +428,7 @@ export class PlatformAdminGovernanceService {
         code: true,
         name: true,
         isActive: true,
+        isSystem: true,
       },
     });
 
@@ -363,6 +438,8 @@ export class PlatformAdminGovernanceService {
         message: "Administrative role template not found.",
       });
     }
+
+    this.assertCustomTemplate(template);
 
     if (template.isActive === isActive) {
       throw new ConflictException({
@@ -415,6 +492,59 @@ export class PlatformAdminGovernanceService {
     return [...new Set(input.map((code) => code.trim().toLowerCase()))].sort();
   }
 
+  private assertCustomTemplate(template: { isSystem: boolean }): void {
+    if (template.isSystem) {
+      throw new ForbiddenException({
+        code: "SYSTEM_ROLE_TEMPLATE_PROTECTED",
+        message: "Protected system role templates cannot be modified.",
+      });
+    }
+  }
+
+  private assertDelegatedPermissionSubset(context: AuthContext, permissionCodes: string[]): void {
+    if (context.role === MembershipRole.SUPER_ADMIN && context.organizationId === null) return;
+
+    const effective = new Set(context.permissions ?? []);
+    const unauthorized = permissionCodes.filter((code) => !effective.has(code));
+    if (unauthorized.length > 0) {
+      throw new ForbiddenException({
+        code: "ADMIN_PERMISSION_ESCALATION_DENIED",
+        message: "Delegated administrators cannot grant permissions they do not hold.",
+        unauthorized,
+      });
+    }
+  }
+
+  private encodeCursor(createdAt: Date, id: string): string {
+    return Buffer.from(JSON.stringify({ createdAt: createdAt.toISOString(), id }), "utf8").toString(
+      "base64url",
+    );
+  }
+
+  private decodeCursor(cursor: string): { createdAt: Date; id: string } {
+    try {
+      const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
+        createdAt?: unknown;
+        id?: unknown;
+      };
+      const createdAt = new Date(String(parsed.createdAt));
+      if (
+        typeof parsed.id !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          parsed.id,
+        ) ||
+        !Number.isFinite(createdAt.getTime())
+      )
+        throw new Error();
+      return { createdAt, id: parsed.id };
+    } catch {
+      throw new BadRequestException({
+        code: "INVALID_AUDIT_CURSOR",
+        message: "Audit cursor is invalid.",
+      });
+    }
+  }
+
   private async requirePermissions(
     transaction: Prisma.TransactionClient,
     permissionCodes: string[],
@@ -447,7 +577,11 @@ export class PlatformAdminGovernanceService {
   }
 
   private assertSuperAdmin(context: AuthContext): void {
-    if (context.role !== MembershipRole.SUPER_ADMIN || context.organizationId !== null) {
+    if (
+      (context.role !== MembershipRole.SUPER_ADMIN &&
+        context.role !== MembershipRole.PLATFORM_ADMIN) ||
+      context.organizationId !== null
+    ) {
       throw new ForbiddenException({
         code: "SUPER_ADMIN_REQUIRED",
         message: "Platform Super Admin authorization is required.",

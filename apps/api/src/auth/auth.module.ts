@@ -9,6 +9,8 @@ import { CsrfGuard } from "./csrf.guard";
 import { CsrfService } from "./csrf.service";
 import { RolesGuard } from "./roles.guard";
 import { PermissionsGuard } from "./permissions.guard";
+import { ScopeGuard } from "./scope.guard";
+import { PrivilegedMutationAuditInterceptor } from "./privileged-mutation-audit.interceptor";
 
 @Global()
 @Module({})
@@ -16,7 +18,16 @@ export class AuthModule {
   public static register(config: AppConfig): DynamicModule {
     return {
       controllers: [AuthController],
-      exports: [AuthGuard, AuthService, CsrfGuard, CsrfService, RolesGuard, PermissionsGuard],
+      exports: [
+        AuthGuard,
+        AuthService,
+        CsrfGuard,
+        CsrfService,
+        RolesGuard,
+        PermissionsGuard,
+        ScopeGuard,
+        PrivilegedMutationAuditInterceptor,
+      ],
       imports: [
         ThrottlerModule.forRoot([
           {
@@ -34,6 +45,8 @@ export class AuthModule {
         CsrfService,
         RolesGuard,
         PermissionsGuard,
+        ScopeGuard,
+        PrivilegedMutationAuditInterceptor,
       ],
     };
   }

@@ -6,8 +6,9 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { MembershipRole, Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
+import { isPlatformAdministrator } from "../auth/authorization-context";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import { AssessmentReportWorkflowService } from "./assessment-report-workflow.service";
 
@@ -197,7 +198,7 @@ export class AssessmentReportReleaseService {
     context: AuthContext,
     requestedOrganizationId?: string,
   ): string {
-    if (context.role === MembershipRole.SUPER_ADMIN) {
+    if (isPlatformAdministrator(context)) {
       if (!requestedOrganizationId) {
         throw new BadRequestException({
           code: "ORGANIZATION_ID_REQUIRED",

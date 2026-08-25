@@ -31,6 +31,7 @@ import {
   OrganizationStatus,
   Prisma,
   SessionScope,
+  SessionPrivilegeType,
   UserStatus,
   type PrismaClient,
   type User,
@@ -421,6 +422,13 @@ export class AuthService {
       organizationId: authorization.organization.id,
       role: authorization.role,
       userId,
+      adminProfileId: authorization.adminProfileId,
+      privilegeType:
+        authorization.role === MembershipRole.SUPER_ADMIN
+          ? SessionPrivilegeType.SUPER_ADMIN
+          : authorization.role === MembershipRole.PLATFORM_ADMIN
+            ? SessionPrivilegeType.DELEGATED_ADMIN
+            : SessionPrivilegeType.STANDARD,
     };
   }
 
@@ -432,6 +440,11 @@ export class AuthService {
       organizationId: null,
       role: authorization.role,
       userId,
+      adminProfileId: authorization.adminProfileId,
+      privilegeType:
+        authorization.role === MembershipRole.SUPER_ADMIN
+          ? SessionPrivilegeType.SUPER_ADMIN
+          : SessionPrivilegeType.DELEGATED_ADMIN,
     };
   }
 
@@ -447,6 +460,9 @@ export class AuthService {
         expiresAt,
         ipAddress: metadata.ipAddress ?? null,
         organizationId: scope === SessionScope.ORGANIZATION ? context.organizationId : null,
+        membershipId: context.membershipId,
+        adminProfileId: context.adminProfileId ?? null,
+        privilegeType: context.privilegeType ?? SessionPrivilegeType.STANDARD,
         scope,
         tokenHash: hashOpaqueToken(rawToken),
         userAgent: metadata.userAgent ?? null,

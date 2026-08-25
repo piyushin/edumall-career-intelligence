@@ -18,6 +18,7 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
+import { isPlatformAdministrator } from "../auth/authorization-context";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import type { CreateAssessmentAssignmentDto } from "./assessment-assignment-admin.types";
 
@@ -270,8 +271,9 @@ export class AssessmentAssignmentAdminService {
   }
 
   public async cancelAssignment(context: AuthContext, assignmentId: string) {
-    const contextOrganizationId =
-      context.role === MembershipRole.SUPER_ADMIN ? null : this.requireOrganizationContext(context);
+    const contextOrganizationId = isPlatformAdministrator(context)
+      ? null
+      : this.requireOrganizationContext(context);
 
     const assignment = await this.prisma.assessmentAssignment.findFirst({
       where: {
@@ -327,7 +329,7 @@ export class AssessmentAssignmentAdminService {
     context: AuthContext,
     requestedOrganizationId?: string,
   ): Promise<string> {
-    if (context.role !== MembershipRole.SUPER_ADMIN) {
+    if (!isPlatformAdministrator(context)) {
       const organizationId = this.requireOrganizationContext(context);
 
       if (requestedOrganizationId && requestedOrganizationId !== organizationId) {

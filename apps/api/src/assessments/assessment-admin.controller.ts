@@ -9,12 +9,16 @@ import {
   Post,
   Put,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import { MembershipRole } from "@prisma/client";
 import { AuthGuard } from "../auth/auth.guard";
 import type { AuthContext } from "../auth/auth.types";
 import { CsrfGuard } from "../auth/csrf.guard";
 import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
+import { Permissions } from "../auth/permissions.decorator";
+import { PermissionsGuard } from "../auth/permissions.guard";
+import { PrivilegedMutationAuditInterceptor } from "../auth/privileged-mutation-audit.interceptor";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { AssessmentAdminService } from "./assessment-admin.service";
@@ -30,8 +34,10 @@ import {
 } from "./assessment-admin.types";
 
 @Controller("admin/assessments")
-@UseGuards(AuthGuard, RolesGuard)
-@Roles(MembershipRole.SUPER_ADMIN, MembershipRole.ORGANIZATION_ADMIN)
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
+@Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN, MembershipRole.ORGANIZATION_ADMIN)
+@Permissions("assessment.view")
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
 export class AssessmentAdminController {
   public constructor(
     @Inject(AssessmentAdminService)
@@ -54,6 +60,7 @@ export class AssessmentAdminController {
   }
 
   @Post()
+  @Permissions("assessment.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public create(
@@ -64,6 +71,7 @@ export class AssessmentAdminController {
   }
 
   @Post(":definitionId/versions")
+  @Permissions("assessment.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createVersion(
@@ -74,6 +82,7 @@ export class AssessmentAdminController {
     return this.assessments.createDraftVersion(context, definitionId, body);
   }
   @Put(":definitionId/versions/:versionId")
+  @Permissions("assessment.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public updateVersion(
@@ -95,6 +104,7 @@ export class AssessmentAdminController {
   }
 
   @Post(":definitionId/versions/:versionId/constructs")
+  @Permissions("assessment.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createConstruct(
@@ -107,6 +117,7 @@ export class AssessmentAdminController {
   }
 
   @Post(":definitionId/versions/:versionId/items")
+  @Permissions("assessment.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createItem(
@@ -119,6 +130,7 @@ export class AssessmentAdminController {
   }
 
   @Post(":definitionId/versions/:versionId/items/:itemId/options")
+  @Permissions("assessment.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createItemOption(
@@ -132,6 +144,7 @@ export class AssessmentAdminController {
   }
 
   @Post(":definitionId/versions/:versionId/items/:itemId/constructs")
+  @Permissions("assessment.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createItemConstructLink(
@@ -145,6 +158,7 @@ export class AssessmentAdminController {
   }
 
   @Post(":definitionId/versions/:versionId/items/:itemId/options/:optionId/scores")
+  @Permissions("assessment.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createOptionScore(
@@ -176,6 +190,7 @@ export class AssessmentAdminController {
   }
 
   @Post(":definitionId/versions/:versionId/publish")
+  @Permissions("assessment.publish")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public publishVersion(
@@ -187,6 +202,7 @@ export class AssessmentAdminController {
   }
 
   @Post(":definitionId/versions/:versionId/retire")
+  @Permissions("assessment.publish")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public retireVersion(

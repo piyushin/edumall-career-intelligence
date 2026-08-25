@@ -3,6 +3,7 @@ import {
   MembershipRole,
   MembershipStatus,
   SessionScope,
+  SessionPrivilegeType,
   type PrismaClient,
   type Session,
 } from "@prisma/client";
@@ -25,7 +26,10 @@ function session(overrides: Partial<Session> = {}): Session {
     id: "11111111-1111-4111-8111-111111111111",
     userId: "22222222-2222-4222-8222-222222222222",
     organizationId: "33333333-3333-4333-8333-333333333333",
+    membershipId: null,
+    adminProfileId: null,
     scope: SessionScope.ORGANIZATION,
+    privilegeType: SessionPrivilegeType.STANDARD,
     tokenHash: hashOpaqueToken(rawSessionToken),
     expiresAt: new Date(now.getTime() + 60_000),
     revokedAt: null,

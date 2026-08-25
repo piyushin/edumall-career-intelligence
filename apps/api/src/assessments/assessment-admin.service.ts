@@ -8,11 +8,11 @@ import {
 import {
   AssessmentItemType,
   AssessmentVersionStatus,
-  MembershipRole,
   Prisma,
   type PrismaClient,
 } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
+import { isPlatformAdministrator } from "../auth/authorization-context";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import type {
   CreateAssessmentConstructDto,
@@ -33,12 +33,11 @@ export class AssessmentAdminService {
   ) {}
 
   public async listDefinitions(context: AuthContext) {
-    const where =
-      context.role === MembershipRole.SUPER_ADMIN
-        ? {}
-        : {
-            OR: [{ organizationId: null }, { organizationId: this.requireOrganization(context) }],
-          };
+    const where = isPlatformAdministrator(context)
+      ? {}
+      : {
+          OR: [{ organizationId: null }, { organizationId: this.requireOrganization(context) }],
+        };
 
     return this.prisma.assessmentDefinition.findMany({
       where,
@@ -123,8 +122,9 @@ export class AssessmentAdminService {
   }
 
   public async createDefinition(context: AuthContext, body: CreateAssessmentDefinitionDto) {
-    const organizationId =
-      context.role === MembershipRole.SUPER_ADMIN ? null : this.requireOrganization(context);
+    const organizationId = isPlatformAdministrator(context)
+      ? null
+      : this.requireOrganization(context);
 
     try {
       return await this.prisma.assessmentDefinition.create({
@@ -968,7 +968,7 @@ export class AssessmentAdminService {
   }
 
   private readScope(context: AuthContext) {
-    if (context.role === MembershipRole.SUPER_ADMIN) {
+    if (isPlatformAdministrator(context)) {
       return {};
     }
 
@@ -980,7 +980,7 @@ export class AssessmentAdminService {
   }
 
   private assertWriteAccess(context: AuthContext, definitionOrganizationId: string | null): void {
-    if (context.role === MembershipRole.SUPER_ADMIN) {
+    if (isPlatformAdministrator(context)) {
       if (definitionOrganizationId !== null) {
         throw new ForbiddenException({
           code: "ASSESSMENT_ADMIN_SCOPE_FORBIDDEN",

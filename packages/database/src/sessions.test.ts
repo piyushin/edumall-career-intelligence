@@ -4,6 +4,7 @@ import {
   OrganizationStatus,
   OrganizationType,
   SessionScope,
+  SessionPrivilegeType,
   type Organization,
   type OrganizationMembership,
   type PrismaClient,
@@ -75,7 +76,10 @@ function session(overrides: Partial<Session> = {}): Session {
     id: sessionId,
     userId,
     organizationId,
+    membershipId,
+    adminProfileId: null,
     scope: SessionScope.ORGANIZATION,
+    privilegeType: SessionPrivilegeType.STANDARD,
     tokenHash: hashOpaqueToken(rawToken),
     expiresAt: new Date(now.getTime() + 60_000),
     revokedAt: null,
@@ -122,6 +126,9 @@ function sessionPrisma(
         ),
       findFirst: vi.fn().mockResolvedValue(overrides.platformMembership ?? null),
     },
+    adminProfile: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
   } as unknown as PrismaClient;
 }
 
@@ -137,6 +144,9 @@ describe("session validation", () => {
       membershipId,
       role: MembershipRole.COUNSELLOR,
       sessionId,
+      adminProfileId: null,
+      privilegeType: SessionPrivilegeType.STANDARD,
+      permissions: [],
     });
     expect(context).not.toHaveProperty("tokenHash");
     expect(context).not.toHaveProperty("passwordHash");
@@ -204,11 +214,16 @@ describe("session validation", () => {
       membershipId,
       role: MembershipRole.SUPER_ADMIN,
       sessionId,
+      adminProfileId: null,
+      privilegeType: SessionPrivilegeType.SUPER_ADMIN,
+      permissions: ["*"],
     });
     expect(prisma.organizationMembership.findFirst).toHaveBeenCalledWith({
       where: {
         userId,
-        role: MembershipRole.SUPER_ADMIN,
+        role: {
+          in: [MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN],
+        },
         status: MembershipStatus.ACTIVE,
         organization: {
           status: OrganizationStatus.ACTIVE,

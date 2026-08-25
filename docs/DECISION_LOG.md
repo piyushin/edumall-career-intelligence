@@ -388,3 +388,13 @@
 - **Consequences:** Content sourcing, licensing, and approval evidence are mandatory.
 - **Status:** Approved
 - **Revisit trigger:** Legal approves a licensed content arrangement with documented usage rights.
+
+## D-036 - R19.1 Administrative Authorization And Session Attribution
+
+- **Decision ID:** D-036
+- **Date:** 2026-08-25
+- **Decision:** Every privileged operational controller requires server-resolved role, effective permission, and scope authorization. `SUPER_ADMIN` wildcard applies only to a platform-scoped session. Delegated privilege sessions are attributed to an `AdminProfile`; suspending that profile revokes only those sessions. Protected system role templates are immutable through routine administration.
+- **Reason:** Delegated administration must not inherit a wildcard, expand tenant scope, mutate security baselines, or terminate unrelated candidate/employee sessions.
+- **Consequences:** R19.1 adds backward-compatible nullable attribution columns, explicit permission metadata, platform-scope enforcement, deterministic audit cursors, and mandatory audit evidence for sensitive administrative reads. Public health/status paths remain independent of audit persistence.
+- **Status:** Approved and implemented in R19.1A
+- **Revisit trigger:** Multi-role `RoleAssignment`/`ScopeGrant` consumer cutover in R19.5.

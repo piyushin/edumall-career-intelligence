@@ -19,12 +19,12 @@ import {
   CommercePaymentStatus,
   CommerceProductKind,
   CommerceProductStatus,
-  MembershipRole,
   Prisma,
   type PrismaClient,
 } from "@prisma/client";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { AuthContext } from "../auth/auth.types";
+import { isPlatformAdministrator } from "../auth/authorization-context";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import type {
   CreateCandidateOrderDto,
@@ -1221,7 +1221,7 @@ export class CommerceService {
     context: AuthContext,
     requestedOrganizationId?: string,
   ): string | null {
-    if (context.role === MembershipRole.SUPER_ADMIN) {
+    if (isPlatformAdministrator(context)) {
       return requestedOrganizationId ?? null;
     }
 
@@ -1238,7 +1238,7 @@ export class CommerceService {
   }
 
   private adminOrganizationFilter(context: AuthContext): string | null {
-    if (context.role === MembershipRole.SUPER_ADMIN) {
+    if (isPlatformAdministrator(context)) {
       return null;
     }
 
@@ -1246,7 +1246,7 @@ export class CommerceService {
   }
 
   private assertAdminScope(context: AuthContext, organizationId: string | null): void {
-    if (context.role === MembershipRole.SUPER_ADMIN) {
+    if (isPlatformAdministrator(context)) {
       return;
     }
 

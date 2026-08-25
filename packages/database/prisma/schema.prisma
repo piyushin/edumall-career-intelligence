@@ -64,6 +64,19 @@ enum SessionScope {
   PLATFORM
 }
 
+enum SessionPrivilegeType {
+  STANDARD
+  SUPER_ADMIN
+  DELEGATED_ADMIN
+}
+
+enum AuditOutcome {
+  ATTEMPTED
+  SUCCEEDED
+  DENIED
+  FAILED
+}
+
 enum AssessmentDefinitionStatus {
   ACTIVE
   ARCHIVED
@@ -194,6 +207,7 @@ model User {
   passwordResetTokens          PasswordResetToken[]
   invitationTokens             InvitationToken[]
   auditLogs                    AuditLog[]                 @relation("ActorAuditLogs")
+  subjectAuditLogs             AuditLog[]                 @relation("SubjectAuditLogs")
   createdAssessmentDefinitions AssessmentDefinition[]     @relation("AssessmentDefinitionCreatedBy")
   createdAssessmentVersions    AssessmentVersion[]        @relation("AssessmentVersionCreatedBy")
   publishedAssessmentVersions  AssessmentVersion[]        @relation("AssessmentVersionPublishedBy")
@@ -227,6 +241,7 @@ model OrganizationMembership {
   updatedAt      DateTime         @updatedAt @map("updated_at")
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   user           User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  sessions       Session[]
 
   @@unique([organizationId, userId])
   @@index([organizationId, status])
@@ -236,25 +251,33 @@ model OrganizationMembership {
 }
 
 model Session {
-  id             String        @id @default(uuid()) @db.Uuid
-  userId         String        @map("user_id") @db.Uuid
-  organizationId String?       @map("organization_id") @db.Uuid
-  scope          SessionScope  @default(ORGANIZATION)
-  tokenHash      String        @unique @map("token_hash") @db.Char(64)
-  expiresAt      DateTime      @map("expires_at")
-  revokedAt      DateTime?     @map("revoked_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  lastSeenAt     DateTime      @default(now()) @map("last_seen_at")
-  ipAddress      String?       @map("ip_address") @db.VarChar(45)
-  userAgent      String?       @map("user_agent") @db.Text
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  id             String                  @id @default(uuid()) @db.Uuid
+  userId         String                  @map("user_id") @db.Uuid
+  organizationId String?                 @map("organization_id") @db.Uuid
+  membershipId   String?                 @map("membership_id") @db.Uuid
+  adminProfileId String?                 @map("admin_profile_id") @db.Uuid
+  scope          SessionScope            @default(ORGANIZATION)
+  privilegeType  SessionPrivilegeType    @default(STANDARD) @map("privilege_type")
+  tokenHash      String                  @unique @map("token_hash") @db.Char(64)
+  expiresAt      DateTime                @map("expires_at")
+  revokedAt      DateTime?               @map("revoked_at")
+  createdAt      DateTime                @default(now()) @map("created_at")
+  lastSeenAt     DateTime                @default(now()) @map("last_seen_at")
+  ipAddress      String?                 @map("ip_address") @db.VarChar(45)
+  userAgent      String?                 @map("user_agent") @db.Text
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization?           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  membership     OrganizationMembership? @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+  adminProfile   AdminProfile?           @relation(fields: [adminProfileId], references: [id], onDelete: Restrict)
 
   @@index([expiresAt])
   @@index([userId, expiresAt])
   @@index([organizationId, expiresAt])
   @@index([userId, revokedAt])
   @@index([scope, expiresAt])
+  @@index([membershipId, revokedAt])
+  @@index([adminProfileId, revokedAt])
+  @@index([privilegeType, revokedAt])
   @@map("sessions")
 }
 
@@ -1017,6 +1040,7 @@ model AdminProfile {
   user          User                  @relation("AdminProfileUser", fields: [userId], references: [id], onDelete: Restrict)
   createdByUser User                  @relation("AdminProfileCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   assignments   AdminRoleAssignment[]
+  sessions      Session[]
 
   @@index([status])
   @@index([createdByUserId, createdAt])
@@ -1095,6 +1119,11 @@ model AuditLog {
   id             String        @id @default(uuid()) @db.Uuid
   organizationId String?       @map("organization_id") @db.Uuid
   actorUserId    String?       @map("actor_user_id") @db.Uuid
+  subjectUserId  String?       @map("subject_user_id") @db.Uuid
+  requestId      String?       @map("request_id") @db.VarChar(120)
+  correlationId  String?       @map("correlation_id") @db.VarChar(120)
+  purpose        String?       @db.VarChar(200)
+  outcome        AuditOutcome  @default(SUCCEEDED)
   action         String        @db.VarChar(120)
   entityType     String        @map("entity_type") @db.VarChar(120)
   entityId       String?       @map("entity_id") @db.Uuid
@@ -1103,12 +1132,17 @@ model AuditLog {
   createdAt      DateTime      @default(now()) @map("created_at")
   organization   Organization? @relation("OrganizationAuditLogs", fields: [organizationId], references: [id], onDelete: Restrict)
   actorUser      User?         @relation("ActorAuditLogs", fields: [actorUserId], references: [id], onDelete: Restrict)
+  subjectUser    User?         @relation("SubjectAuditLogs", fields: [subjectUserId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, createdAt])
   @@index([actorUserId, createdAt])
   @@index([entityType, entityId, createdAt])
   @@index([action, createdAt])
   @@index([createdAt])
+  @@index([createdAt, id])
+  @@index([subjectUserId, createdAt])
+  @@index([outcome, createdAt])
+  @@index([correlationId])
   @@map("audit_logs")
 }
 

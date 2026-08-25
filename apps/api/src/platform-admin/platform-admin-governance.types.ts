@@ -9,7 +9,9 @@ import {
   Length,
   Matches,
   MaxLength,
+  IsEnum,
 } from "class-validator";
+import { AuditOutcome } from "@prisma/client";
 
 export class CreateAdminRoleTemplateDto {
   @IsString()
@@ -59,6 +61,14 @@ export class AdminAuditQueryDto {
   actorUserId?: string;
 
   @IsOptional()
+  @IsUUID()
+  subjectUserId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  organizationId?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(120)
   action?: string;
@@ -73,6 +83,15 @@ export class AdminAuditQueryDto {
   entityId?: string;
 
   @IsOptional()
+  @IsEnum(AuditOutcome)
+  outcome?: AuditOutcome;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  purpose?: string;
+
+  @IsOptional()
   @IsISO8601()
   from?: string;
 
@@ -83,5 +102,16 @@ export class AdminAuditQueryDto {
   @IsOptional()
   @IsString()
   @Matches(/^\d{1,3}$/)
+  limit?: string;
+
+  /** @deprecated Use limit. Retained through the R19 rollback window. */
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,3}$/)
   take?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  cursor?: string;
 }

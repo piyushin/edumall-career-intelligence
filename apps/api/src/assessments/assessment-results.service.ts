@@ -5,8 +5,9 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AssessmentAttemptStatus, MembershipRole, type PrismaClient } from "@prisma/client";
+import { AssessmentAttemptStatus, type PrismaClient } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
+import { isPlatformAdministrator } from "../auth/authorization-context";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 
 @Injectable()
@@ -274,7 +275,7 @@ export class AssessmentResultsService {
     context: AuthContext,
     requestedOrganizationId?: string,
   ): Promise<string> {
-    if (context.role !== MembershipRole.SUPER_ADMIN) {
+    if (!isPlatformAdministrator(context)) {
       if (!context.organizationId) {
         throw new ForbiddenException({
           code: "ORGANIZATION_CONTEXT_REQUIRED",

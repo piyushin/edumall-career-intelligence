@@ -11,11 +11,11 @@ import {
   CareerFitModelStatus,
   CareerTaxonomyStatus,
   CareerTaxonomyVersionStatus,
-  MembershipRole,
   Prisma,
   type PrismaClient,
 } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
+import { isPlatformAdministrator } from "../auth/authorization-context";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import { CareerFitAlgorithmRegistry } from "./career-fit-algorithm.registry";
 import type {
@@ -1676,7 +1676,7 @@ export class CareerIntelligenceAdminService {
   }
 
   private assertPlatformAdmin(context: AuthContext): void {
-    if (context.role !== MembershipRole.SUPER_ADMIN) {
+    if (!isPlatformAdministrator(context)) {
       throw new ForbiddenException({
         code: "CAREER_INTELLIGENCE_PLATFORM_ADMIN_REQUIRED",
         message:

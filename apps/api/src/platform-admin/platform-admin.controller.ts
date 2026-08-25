@@ -8,20 +8,28 @@ import {
   ParseUUIDPipe,
   Post,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import { MembershipRole } from "@prisma/client";
 import { AuthGuard } from "../auth/auth.guard";
 import type { AuthContext } from "../auth/auth.types";
 import { CsrfGuard } from "../auth/csrf.guard";
 import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
+import { Permissions } from "../auth/permissions.decorator";
+import { PermissionsGuard } from "../auth/permissions.guard";
+import { PlatformScope } from "../auth/platform-scope.decorator";
+import { PrivilegedMutationAuditInterceptor } from "../auth/privileged-mutation-audit.interceptor";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { ScopeGuard } from "../auth/scope.guard";
 import { PlatformAdminService } from "./platform-admin.service";
 import { AssignAdminRoleDto, CreatePlatformAdminDto } from "./platform-admin.types";
 
 @Controller("admin/platform")
-@UseGuards(AuthGuard, RolesGuard)
-@Roles(MembershipRole.SUPER_ADMIN)
+@UseGuards(AuthGuard, RolesGuard, ScopeGuard, PermissionsGuard)
+@Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+@PlatformScope()
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
 export class PlatformAdminController {
   public constructor(
     @Inject(PlatformAdminService)
@@ -29,24 +37,28 @@ export class PlatformAdminController {
   ) {}
 
   @Get("admins")
+  @Permissions("admin.view")
   @Header("cache-control", "no-store")
   public listAdmins(@CurrentAuthContext() context: AuthContext) {
     return this.admins.listAdmins(context);
   }
 
   @Get("role-templates")
+  @Permissions("admin.view")
   @Header("cache-control", "no-store")
   public listRoleTemplates(@CurrentAuthContext() context: AuthContext) {
     return this.admins.listRoleTemplates(context);
   }
 
   @Get("permissions")
+  @Permissions("admin.view")
   @Header("cache-control", "no-store")
   public listPermissions(@CurrentAuthContext() context: AuthContext) {
     return this.admins.listPermissions(context);
   }
 
   @Post("admins")
+  @Permissions("admin.create")
   @UseGuards(CsrfGuard)
   @Header("cache-control", "no-store")
   public createAdmin(
@@ -57,6 +69,7 @@ export class PlatformAdminController {
   }
 
   @Post("admins/:adminProfileId/assignments")
+  @Permissions("admin.permission.manage")
   @UseGuards(CsrfGuard)
   @Header("cache-control", "no-store")
   public assignRole(
@@ -69,6 +82,7 @@ export class PlatformAdminController {
   }
 
   @Post("assignments/:assignmentId/revoke")
+  @Permissions("admin.permission.manage")
   @UseGuards(CsrfGuard)
   @Header("cache-control", "no-store")
   public revokeAssignment(
@@ -80,6 +94,7 @@ export class PlatformAdminController {
   }
 
   @Post("admins/:adminProfileId/suspend")
+  @Permissions("admin.suspend")
   @UseGuards(CsrfGuard)
   @Header("cache-control", "no-store")
   public suspend(
@@ -91,6 +106,7 @@ export class PlatformAdminController {
   }
 
   @Post("admins/:adminProfileId/reactivate")
+  @Permissions("admin.suspend")
   @UseGuards(CsrfGuard)
   @Header("cache-control", "no-store")
   public reactivate(

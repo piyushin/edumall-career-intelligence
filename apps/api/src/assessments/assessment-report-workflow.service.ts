@@ -11,10 +11,10 @@ import {
   AssessmentInterpretationSetStatus,
   AssessmentNormSetStatus,
   CareerFitModelStatus,
-  MembershipRole,
   type PrismaClient,
 } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
+import { isPlatformAdministrator } from "../auth/authorization-context";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import { AssessmentInterpretationService } from "./assessment-interpretation.service";
 import { AssessmentNormService } from "./assessment-norm.service";
@@ -337,7 +337,7 @@ export class AssessmentReportWorkflowService {
     context: AuthContext,
     requestedOrganizationId?: string,
   ): Promise<string> {
-    if (context.role !== MembershipRole.SUPER_ADMIN) {
+    if (!isPlatformAdministrator(context)) {
       if (!context.organizationId) {
         throw new ForbiddenException({
           code: "ORGANIZATION_CONTEXT_REQUIRED",

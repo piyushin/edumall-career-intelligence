@@ -9,12 +9,16 @@ import {
   Post,
   Put,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import { MembershipRole } from "@prisma/client";
 import { AuthGuard } from "../auth/auth.guard";
 import type { AuthContext } from "../auth/auth.types";
 import { CsrfGuard } from "../auth/csrf.guard";
 import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
+import { Permissions } from "../auth/permissions.decorator";
+import { PermissionsGuard } from "../auth/permissions.guard";
+import { PrivilegedMutationAuditInterceptor } from "../auth/privileged-mutation-audit.interceptor";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { CommerceService } from "./commerce.service";
@@ -26,8 +30,9 @@ import {
 } from "./commerce.types";
 
 @Controller("admin/commerce")
-@UseGuards(AuthGuard, RolesGuard)
-@Roles(MembershipRole.SUPER_ADMIN, MembershipRole.ORGANIZATION_ADMIN)
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
+@Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN, MembershipRole.ORGANIZATION_ADMIN)
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
 export class CommerceAdminController {
   public constructor(
     @Inject(CommerceService)
@@ -35,12 +40,14 @@ export class CommerceAdminController {
   ) {}
 
   @Get("products")
+  @Permissions("commerce.view")
   @Header("cache-control", "no-store")
   public products(@CurrentAuthContext() context: AuthContext) {
     return this.commerce.listProducts(context);
   }
 
   @Post("products")
+  @Permissions("commerce.product.manage", "commerce.price.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createProduct(
@@ -51,6 +58,7 @@ export class CommerceAdminController {
   }
 
   @Put("products/:productId")
+  @Permissions("commerce.product.manage", "commerce.price.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public updateProduct(
@@ -62,12 +70,14 @@ export class CommerceAdminController {
   }
 
   @Get("coupons")
+  @Permissions("commerce.view")
   @Header("cache-control", "no-store")
   public coupons(@CurrentAuthContext() context: AuthContext) {
     return this.commerce.listCoupons(context);
   }
 
   @Post("coupons")
+  @Permissions("commerce.coupon.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public createCoupon(
@@ -78,12 +88,14 @@ export class CommerceAdminController {
   }
 
   @Get("orders")
+  @Permissions("commerce.view")
   @Header("cache-control", "no-store")
   public orders(@CurrentAuthContext() context: AuthContext) {
     return this.commerce.listOrders(context);
   }
 
   @Post("orders/:orderId/manual-approve")
+  @Permissions("commerce.payment.approve")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public manualApprove(

@@ -9,12 +9,16 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import { MembershipRole } from "@prisma/client";
 import { AuthGuard } from "../auth/auth.guard";
 import type { AuthContext } from "../auth/auth.types";
 import { CsrfGuard } from "../auth/csrf.guard";
 import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
+import { Permissions } from "../auth/permissions.decorator";
+import { PermissionsGuard } from "../auth/permissions.guard";
+import { PrivilegedMutationAuditInterceptor } from "../auth/privileged-mutation-audit.interceptor";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { AssessmentAssignmentAdminService } from "./assessment-assignment-admin.service";
@@ -24,8 +28,10 @@ import {
 } from "./assessment-assignment-admin.types";
 
 @Controller("admin/assessment-assignments")
-@UseGuards(AuthGuard, RolesGuard)
-@Roles(MembershipRole.SUPER_ADMIN, MembershipRole.ORGANIZATION_ADMIN)
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
+@Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN, MembershipRole.ORGANIZATION_ADMIN)
+@Permissions("assessment.view", "candidate.view")
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
 export class AssessmentAssignmentAdminController {
   public constructor(
     @Inject(AssessmentAssignmentAdminService)
@@ -51,6 +57,7 @@ export class AssessmentAssignmentAdminController {
   }
 
   @Post()
+  @Permissions("assessment.manage", "candidate.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public create(
@@ -61,6 +68,7 @@ export class AssessmentAssignmentAdminController {
   }
 
   @Post(":assignmentId/cancel")
+  @Permissions("assessment.manage", "candidate.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public cancel(

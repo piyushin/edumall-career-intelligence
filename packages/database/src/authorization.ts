@@ -18,6 +18,7 @@ export interface OrganizationAuthorizationContext {
   organization: Organization;
   membership: OrganizationMembership;
   role: MembershipRole;
+  adminProfileId: string | null;
 }
 
 export async function requireActiveOrganizationMembership(
@@ -54,18 +55,22 @@ export async function requireActiveOrganizationMembership(
       throw new AuthenticationError(AuthenticationErrorCode.INACTIVE_MEMBERSHIP);
     }
 
+    let adminProfileId: string | null = null;
+
     if (membership.role === MembershipRole.PLATFORM_ADMIN) {
       const profile = await prisma.adminProfile.findUnique({
         where: { userId },
-        select: { status: true },
+        select: { id: true, status: true },
       });
 
       if (!profile || profile.status !== AdminProfileStatus.ACTIVE) {
         throw new AuthenticationError(AuthenticationErrorCode.FORBIDDEN_ORGANIZATION_ACCESS);
       }
+
+      adminProfileId = profile.id;
     }
 
-    return { user, organization, membership, role: membership.role };
+    return { user, organization, membership, role: membership.role, adminProfileId };
   } catch (error) {
     throw asAuthenticationError(error);
   }
@@ -135,6 +140,7 @@ export interface PlatformAuthorizationContext {
   user: User;
   membership: OrganizationMembership;
   role: MembershipRole;
+  adminProfileId: string | null;
 }
 
 export async function requirePlatformAuthorization(
@@ -166,18 +172,22 @@ export async function requirePlatformAuthorization(
       throw new AuthenticationError(AuthenticationErrorCode.FORBIDDEN_ORGANIZATION_ACCESS);
     }
 
+    let adminProfileId: string | null = null;
+
     if (membership.role === MembershipRole.PLATFORM_ADMIN) {
       const profile = await prisma.adminProfile.findUnique({
         where: { userId },
-        select: { status: true },
+        select: { id: true, status: true },
       });
 
       if (!profile || profile.status !== AdminProfileStatus.ACTIVE) {
         throw new AuthenticationError(AuthenticationErrorCode.FORBIDDEN_ORGANIZATION_ACCESS);
       }
+
+      adminProfileId = profile.id;
     }
 
-    return { user, membership, role: membership.role };
+    return { user, membership, role: membership.role, adminProfileId };
   } catch (error) {
     throw asAuthenticationError(error);
   }

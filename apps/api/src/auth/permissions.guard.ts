@@ -10,6 +10,24 @@ import { Reflector } from "@nestjs/core";
 import { AUTH_PERMISSIONS_KEY } from "./auth.tokens";
 import type { RequestWithAuth } from "./auth.types";
 
+// Compatibility is deliberately finite: legacy organization administrators retain
+// only the operational permissions exposed to them before delegated R19 roles.
+const LEGACY_ORGANIZATION_ADMIN_PERMISSIONS = new Set([
+  "assessment.view",
+  "assessment.manage",
+  "assessment.publish",
+  "candidate.view",
+  "candidate.manage",
+  "report.release",
+  "commerce.view",
+  "commerce.product.manage",
+  "commerce.price.manage",
+  "commerce.coupon.manage",
+  "commerce.payment.approve",
+]);
+
+const LEGACY_COUNSELLOR_PERMISSIONS = new Set(["candidate.view", "report.release"]);
+
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   public constructor(
@@ -52,6 +70,16 @@ export class PermissionsGuard implements CanActivate {
     }
 
     const effective = new Set(auth.permissions ?? []);
+
+    if (auth.role === "ORGANIZATION_ADMIN" && auth.organizationId !== null) {
+      for (const permission of LEGACY_ORGANIZATION_ADMIN_PERMISSIONS) {
+        effective.add(permission);
+      }
+    }
+
+    if (auth.role === "COUNSELLOR" && auth.organizationId !== null) {
+      for (const permission of LEGACY_COUNSELLOR_PERMISSIONS) effective.add(permission);
+    }
 
     if (effective.has("*")) {
       return true;

@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import {
   AdminProfileStatus,
@@ -31,10 +32,10 @@ export class PlatformAdminService {
     private readonly prisma: PrismaClient,
   ) {}
 
-  public listAdmins(context: AuthContext) {
+  public async listAdmins(context: AuthContext) {
     this.assertSuperAdmin(context);
 
-    return this.prisma.adminProfile.findMany({
+    const result = await this.prisma.adminProfile.findMany({
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       select: {
         id: true,
@@ -85,12 +86,19 @@ export class PlatformAdminService {
         },
       },
     });
+    await this.recordSensitiveRead(
+      context,
+      "admin.directory.viewed",
+      "AdminProfile",
+      result.length,
+    );
+    return result;
   }
 
-  public listRoleTemplates(context: AuthContext) {
+  public async listRoleTemplates(context: AuthContext) {
     this.assertSuperAdmin(context);
 
-    return this.prisma.adminRoleTemplate.findMany({
+    const result = await this.prisma.adminRoleTemplate.findMany({
       where: {
         isActive: true,
       },
@@ -115,14 +123,28 @@ export class PlatformAdminService {
         },
       },
     });
+    await this.recordSensitiveRead(
+      context,
+      "admin.role_templates.viewed",
+      "AdminRoleTemplate",
+      result.length,
+    );
+    return result;
   }
 
-  public listPermissions(context: AuthContext) {
+  public async listPermissions(context: AuthContext) {
     this.assertSuperAdmin(context);
 
-    return this.prisma.adminPermission.findMany({
+    const result = await this.prisma.adminPermission.findMany({
       orderBy: [{ module: "asc" }, { action: "asc" }],
     });
+    await this.recordSensitiveRead(
+      context,
+      "admin.permissions.viewed",
+      "AdminPermission",
+      result.length,
+    );
+    return result;
   }
 
   public async createAdmin(context: AuthContext, input: CreatePlatformAdminDto) {
@@ -149,6 +171,7 @@ export class PlatformAdminService {
           code: true,
           name: true,
           isActive: true,
+          permissions: { select: { permission: { select: { code: true } } } },
         },
       });
 
@@ -158,6 +181,10 @@ export class PlatformAdminService {
           message: "Administrative role template not found.",
         });
       }
+      this.assertCanGrantRole(
+        context,
+        roleTemplate.permissions.map((link) => link.permission.code),
+      );
 
       let user = await transaction.user.findUnique({
         where: {
@@ -328,6 +355,7 @@ export class PlatformAdminService {
           id: true,
           code: true,
           isActive: true,
+          permissions: { select: { permission: { select: { code: true } } } },
         },
       });
 
@@ -337,6 +365,10 @@ export class PlatformAdminService {
           message: "Administrative role template not found.",
         });
       }
+      this.assertCanGrantRole(
+        context,
+        roleTemplate.permissions.map((link) => link.permission.code),
+      );
 
       const scopes = await this.prepareScopes(
         transaction,
@@ -536,7 +568,7 @@ export class PlatformAdminService {
       if (status === AdminProfileStatus.SUSPENDED) {
         await transaction.session.updateMany({
           where: {
-            userId: profile.userId,
+            adminProfileId: profile.id,
             revokedAt: null,
           },
           data: {
@@ -555,6 +587,7 @@ export class PlatformAdminService {
             userId: profile.userId,
             previousStatus: profile.status,
             newStatus: status,
+            revokedPrivilegeSessionsOnly: true,
           },
         },
       });
@@ -688,8 +721,50 @@ export class PlatformAdminService {
     }
   }
 
+  private async recordSensitiveRead(
+    context: AuthContext,
+    action: string,
+    entityType: string,
+    resultCount: number,
+  ): Promise<void> {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorUserId: context.userId,
+          action,
+          entityType,
+          purpose: "administrative_access_management",
+          metadata: { authorizedScope: "PLATFORM", resultCount },
+        },
+      });
+    } catch {
+      throw new ServiceUnavailableException({
+        code: "MANDATORY_AUDIT_UNAVAILABLE",
+        message: "Privileged audit evidence could not be persisted.",
+      });
+    }
+  }
+
+  private assertCanGrantRole(context: AuthContext, permissionCodes: string[]): void {
+    if (context.role === MembershipRole.SUPER_ADMIN && context.organizationId === null) return;
+
+    const effective = new Set(context.permissions ?? []);
+    const unauthorized = permissionCodes.filter((code) => !effective.has(code));
+    if (unauthorized.length > 0) {
+      throw new ForbiddenException({
+        code: "ADMIN_PERMISSION_ESCALATION_DENIED",
+        message: "Delegated administrators cannot assign permissions they do not hold.",
+        unauthorized,
+      });
+    }
+  }
+
   private assertSuperAdmin(context: AuthContext): void {
-    if (context.role !== MembershipRole.SUPER_ADMIN || context.organizationId !== null) {
+    if (
+      (context.role !== MembershipRole.SUPER_ADMIN &&
+        context.role !== MembershipRole.PLATFORM_ADMIN) ||
+      context.organizationId !== null
+    ) {
       throw new ForbiddenException({
         code: "SUPER_ADMIN_REQUIRED",
         message: "Platform Super Admin authorization is required.",

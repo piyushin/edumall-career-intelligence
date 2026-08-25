@@ -1,4 +1,9 @@
-import { SessionScope, type MembershipRole, type PrismaClient } from "@prisma/client";
+import {
+  SessionPrivilegeType,
+  SessionScope,
+  type MembershipRole,
+  type PrismaClient,
+} from "@prisma/client";
 import { asAuthenticationError, AuthenticationError, AuthenticationErrorCode } from "./auth-errors";
 import {
   requireActiveOrganizationMembership,
@@ -14,6 +19,8 @@ export interface AuthContext {
   role: MembershipRole;
   sessionId: string;
   permissions?: string[];
+  adminProfileId?: string | null;
+  privilegeType?: SessionPrivilegeType;
 }
 
 export interface SessionValidationOptions {
@@ -56,6 +63,8 @@ export async function validateSessionToken(
         membershipId: authorization.membership.id,
         role: authorization.role,
         sessionId: session.id,
+        adminProfileId: session.adminProfileId,
+        privilegeType: session.privilegeType,
         permissions:
           authorization.role === "SUPER_ADMIN"
             ? ["*"]
@@ -79,6 +88,13 @@ export async function validateSessionToken(
       membershipId: authorization.membership.id,
       role: authorization.role,
       sessionId: session.id,
+      adminProfileId: session.adminProfileId ?? authorization.adminProfileId,
+      privilegeType:
+        session.privilegeType === SessionPrivilegeType.STANDARD
+          ? authorization.role === "SUPER_ADMIN"
+            ? SessionPrivilegeType.SUPER_ADMIN
+            : SessionPrivilegeType.DELEGATED_ADMIN
+          : session.privilegeType,
       permissions:
         authorization.role === "SUPER_ADMIN"
           ? ["*"]

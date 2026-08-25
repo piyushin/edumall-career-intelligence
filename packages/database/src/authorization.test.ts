@@ -11,7 +11,10 @@ import {
 } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { AuthenticationErrorCode } from "./auth-errors";
-import { requireActiveOrganizationMembership } from "./authorization";
+import {
+  requireActiveOrganizationMembership,
+  resolveEffectiveAdminPermissions,
+} from "./authorization";
 
 const now = new Date("2026-08-07T00:00:00.000Z");
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -156,5 +159,40 @@ describe("active organization membership enforcement", () => {
         organizationId_userId: { organizationId: wrongOrganizationId, userId },
       },
     });
+  });
+});
+
+describe("delegated permission resolution", () => {
+  it("returns only active effective permissions for the server-resolved organization scope", async () => {
+    const findUnique = vi.fn().mockResolvedValue({
+      status: "ACTIVE",
+      assignments: [
+        {
+          roleTemplate: {
+            permissions: [
+              { permission: { code: "assessment.view" } },
+              { permission: { code: "candidate.view" } },
+            ],
+          },
+        },
+      ],
+    });
+    const prisma = { adminProfile: { findUnique } } as unknown as PrismaClient;
+
+    await expect(resolveEffectiveAdminPermissions(prisma, userId, organizationId)).resolves.toEqual(
+      ["assessment.view", "candidate.view"],
+    );
+    expect(findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId },
+        select: expect.objectContaining({
+          assignments: expect.objectContaining({
+            where: expect.objectContaining({
+              OR: [{ scopeType: "PLATFORM" }, { scopeType: "ORGANIZATION", organizationId }],
+            }),
+          }),
+        }),
+      }),
+    );
   });
 });

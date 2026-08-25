@@ -10,7 +10,13 @@ import {
   verifyPassword,
   verifyUserPassword,
 } from "@edumall/database";
-import { MembershipRole, SessionScope, type PrismaClient, UserStatus } from "@prisma/client";
+import {
+  MembershipRole,
+  SessionPrivilegeType,
+  SessionScope,
+  type PrismaClient,
+  UserStatus,
+} from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthService } from "./auth.service";
 
@@ -82,11 +88,13 @@ describe("AuthService", () => {
       organization: { id: organizationId },
       role: MembershipRole.ORGANIZATION_ADMIN,
       user: { id: userId },
+      adminProfileId: null,
     } as Awaited<ReturnType<typeof requireActiveOrganizationMembership>>);
     vi.mocked(requirePlatformAuthorization).mockResolvedValue({
       membership: { id: membershipId },
       role: MembershipRole.SUPER_ADMIN,
       user: { id: userId },
+      adminProfileId: null,
     } as Awaited<ReturnType<typeof requirePlatformAuthorization>>);
   });
 
@@ -116,6 +124,8 @@ describe("AuthService", () => {
     expect(prisma.session.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         organizationId,
+        membershipId,
+        privilegeType: SessionPrivilegeType.STANDARD,
         scope: SessionScope.ORGANIZATION,
         userId,
       }),
@@ -136,12 +146,36 @@ describe("AuthService", () => {
     expect(prisma.session.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         organizationId: null,
+        membershipId,
+        adminProfileId: null,
+        privilegeType: SessionPrivilegeType.SUPER_ADMIN,
         scope: SessionScope.PLATFORM,
       }),
     });
     expect(result.context).toMatchObject({
       organizationId: null,
       role: MembershipRole.SUPER_ADMIN,
+    });
+  });
+
+  it("attributes delegated platform sessions to the active admin profile", async () => {
+    const adminProfileId = "55555555-5555-4555-8555-555555555555";
+    vi.mocked(requirePlatformAuthorization).mockResolvedValueOnce({
+      membership: { id: membershipId },
+      role: MembershipRole.PLATFORM_ADMIN,
+      user: { id: userId },
+      adminProfileId,
+    } as Awaited<ReturnType<typeof requirePlatformAuthorization>>);
+
+    await service.login("user@example.com", "password");
+
+    expect(prisma.session.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        membershipId,
+        adminProfileId,
+        privilegeType: SessionPrivilegeType.DELEGATED_ADMIN,
+        scope: SessionScope.PLATFORM,
+      }),
     });
   });
 
