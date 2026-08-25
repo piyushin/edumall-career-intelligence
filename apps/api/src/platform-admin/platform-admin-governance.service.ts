@@ -308,6 +308,13 @@ export class PlatformAdminGovernanceService {
     if (query.from || query.to) {
       const createdAt: Prisma.DateTimeFilter = {};
 
+      if (query.from && query.to && new Date(query.from) > new Date(query.to)) {
+        throw new BadRequestException({
+          code: "INVALID_AUDIT_DATE_RANGE",
+          message: "Audit range start must not be after its end.",
+        });
+      }
+
       if (query.from) {
         createdAt.gte = new Date(query.from);
       }
@@ -319,7 +326,8 @@ export class PlatformAdminGovernanceService {
       where.createdAt = createdAt;
     }
 
-    const requestedLimit = Number.parseInt(query.limit ?? query.take ?? "100", 10);
+    const parsedLimit = Number.parseInt(query.limit ?? query.take ?? "100", 10);
+    const requestedLimit = Number.isFinite(parsedLimit) ? parsedLimit : 100;
     const limit = Math.max(1, Math.min(requestedLimit, 200));
     const cursor = query.cursor ? this.decodeCursor(query.cursor) : null;
 
@@ -346,7 +354,6 @@ export class PlatformAdminGovernanceService {
         action: true,
         entityType: true,
         entityId: true,
-        metadata: true,
         ipAddress: true,
         createdAt: true,
         actorUser: {
@@ -407,8 +414,10 @@ export class PlatformAdminGovernanceService {
 
     return {
       items,
-      hasNext,
-      nextCursor: hasNext && last ? this.encodeCursor(last.createdAt, last.id) : null,
+      pageInfo: {
+        hasNext,
+        nextCursor: hasNext && last ? this.encodeCursor(last.createdAt, last.id) : null,
+      },
     };
   }
 

@@ -23,7 +23,7 @@ function assertInvitationTokenUsable(token: InvitationToken | null, now: Date): 
     throw new AuthenticationError(AuthenticationErrorCode.INVALID_INVITATION);
   }
 
-  if (token.usedAt) {
+  if (token.usedAt || token.revokedAt) {
     throw new AuthenticationError(AuthenticationErrorCode.CONSUMED_INVITATION_TOKEN);
   }
 
@@ -56,7 +56,7 @@ async function consumeInvitationToken(
   now: Date,
 ): Promise<void> {
   const result = await transaction.invitationToken.updateMany({
-    where: { id: token.id, usedAt: null, expiresAt: { gt: now } },
+    where: { id: token.id, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
     data: { usedAt: now },
   });
 

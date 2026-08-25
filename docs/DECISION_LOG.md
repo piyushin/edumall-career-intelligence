@@ -398,3 +398,13 @@
 - **Consequences:** R19.1 adds backward-compatible nullable attribution columns, explicit permission metadata, platform-scope enforcement, deterministic audit cursors, and mandatory audit evidence for sensitive administrative reads. Public health/status paths remain independent of audit persistence.
 - **Status:** Approved and implemented in R19.1A
 - **Revisit trigger:** Multi-role `RoleAssignment`/`ScopeGrant` consumer cutover in R19.5.
+
+## D-037 - R19.1 Administrative Invitation Delivery Boundary
+
+- **Decision ID:** D-037
+- **Date:** 2026-08-25
+- **Decision:** Administrative invitations use hashed single-use invitation tokens, a durable notification-delivery record, and a transactionally-created outbox event with a unique idempotency key. Until an approved email provider is configured, delivery is recorded as `BLOCKED_CONFIGURATION`; APIs must never report a message as sent or expose the raw token.
+- **Reason:** Launch operations need observable invitation lifecycle and reliable delivery hand-off without inventing success or coupling database transactions to an external email provider.
+- **Consequences:** R19.1B adds backward-compatible invitation revocation, notification-delivery, and outbox tables. Resend rotates the invitation token, revoke cancels outstanding delivery work, and every lifecycle mutation is audited. Provider dispatch remains an explicitly configured operational integration.
+- **Status:** Approved architecture implemented in R19.1B source; not deployed
+- **Revisit trigger:** Approval and configuration of the production email provider and delivery worker.

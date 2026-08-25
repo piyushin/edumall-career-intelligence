@@ -13,6 +13,9 @@ import {
   MembershipStatus,
   OrganizationStatus,
   OrganizationType,
+  NotificationChannel,
+  NotificationDeliveryStatus,
+  OutboxEventStatus,
   Prisma,
   type PrismaClient,
   UserStatus,
@@ -21,7 +24,15 @@ import { hashOpaqueToken, normalizeEmail } from "@edumall/database";
 import { randomBytes } from "node:crypto";
 import type { AuthContext } from "../auth/auth.types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
-import type { AssignAdminRoleDto, CreatePlatformAdminDto } from "./platform-admin.types";
+import { boundedLimit, decodeCreatedCursor, pageResult } from "./platform-admin-pagination";
+import type {
+  AdminDirectoryQueryDto,
+  AssignAdminRoleDto,
+  CreatePlatformAdminDto,
+  CursorQueryDto,
+  RoleTemplateQueryDto,
+  UpdatePlatformAdminDto,
+} from "./platform-admin.types";
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -32,11 +43,59 @@ export class PlatformAdminService {
     private readonly prisma: PrismaClient,
   ) {}
 
-  public async listAdmins(context: AuthContext) {
+  public async listAdmins(context: AuthContext, query: AdminDirectoryQueryDto = {}) {
     this.assertSuperAdmin(context);
-
+    const limit = boundedLimit(query.limit);
+    const cursor = decodeCreatedCursor(query.cursor);
+    const search = query.search?.trim();
     const result = await this.prisma.adminProfile.findMany({
-      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      where: {
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.scopeType || query.organizationId
+          ? {
+              assignments: {
+                some: {
+                  revokedAt: null,
+                  ...(query.scopeType ? { scopeType: query.scopeType } : {}),
+                  ...(query.organizationId ? { organizationId: query.organizationId } : {}),
+                },
+              },
+            }
+          : {}),
+        AND: [
+          ...(search
+            ? [
+                {
+                  OR: [
+                    { title: { contains: search, mode: "insensitive" as const } },
+                    { responsibility: { contains: search, mode: "insensitive" as const } },
+                    {
+                      user: {
+                        OR: [
+                          { email: { contains: search, mode: "insensitive" as const } },
+                          { firstName: { contains: search, mode: "insensitive" as const } },
+                          { lastName: { contains: search, mode: "insensitive" as const } },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ]
+            : []),
+          ...(cursor
+            ? [
+                {
+                  OR: [
+                    { createdAt: { lt: cursor.createdAt } },
+                    { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+                  ],
+                },
+              ]
+            : []),
+        ],
+      },
+      take: limit + 1,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
         status: true,
@@ -53,12 +112,35 @@ export class PlatformAdminService {
             lastName: true,
             status: true,
             lastLoginAt: true,
+            invitationTokens: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: {
+                id: true,
+                expiresAt: true,
+                usedAt: true,
+                revokedAt: true,
+                createdAt: true,
+                deliveries: {
+                  take: 1,
+                  orderBy: { requestedAt: "desc" },
+                  select: {
+                    id: true,
+                    status: true,
+                    failureCode: true,
+                    requestedAt: true,
+                    sentAt: true,
+                  },
+                },
+              },
+            },
           },
         },
         assignments: {
           where: {
             revokedAt: null,
           },
+          take: 100,
           orderBy: {
             grantedAt: "desc",
           },
@@ -72,6 +154,12 @@ export class PlatformAdminService {
                 id: true,
                 code: true,
                 name: true,
+                isActive: true,
+                permissions: {
+                  take: 100,
+                  orderBy: { permission: { code: "asc" } },
+                  select: { permission: { select: { code: true } } },
+                },
               },
             },
             organization: {
@@ -90,26 +178,172 @@ export class PlatformAdminService {
       context,
       "admin.directory.viewed",
       "AdminProfile",
-      result.length,
+      Math.min(result.length, limit),
     );
-    return result;
+    const page = pageResult(result, limit);
+    return {
+      ...page,
+      items: page.items.map((admin) => ({
+        ...admin,
+        user: { ...admin.user, invitationTokens: undefined },
+        effectivePermissions: [
+          ...new Set(
+            admin.assignments
+              .filter((assignment) => assignment.roleTemplate.isActive)
+              .flatMap((assignment) =>
+                assignment.roleTemplate.permissions.map((link) => link.permission.code),
+              ),
+          ),
+        ].sort(),
+        invitation: this.projectInvitation(admin.user.invitationTokens[0]),
+      })),
+    };
   }
 
-  public async listRoleTemplates(context: AuthContext) {
+  public async getAdmin(context: AuthContext, id: string) {
     this.assertSuperAdmin(context);
+    const result = await this.prisma.adminProfile.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        title: true,
+        responsibility: true,
+        suspendedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            status: true,
+            emailVerifiedAt: true,
+            lastLoginAt: true,
+            invitationTokens: {
+              orderBy: { createdAt: "desc" },
+              take: 10,
+              select: {
+                id: true,
+                expiresAt: true,
+                usedAt: true,
+                revokedAt: true,
+                createdAt: true,
+                deliveries: {
+                  select: {
+                    id: true,
+                    status: true,
+                    failureCode: true,
+                    requestedAt: true,
+                    sentAt: true,
+                    cancelledAt: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        assignments: {
+          take: 200,
+          orderBy: { grantedAt: "desc" },
+          select: {
+            id: true,
+            scopeType: true,
+            organizationId: true,
+            grantedAt: true,
+            revokedAt: true,
+            roleTemplate: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                isSystem: true,
+                isActive: true,
+                permissions: {
+                  take: 100,
+                  orderBy: { permission: { code: "asc" } },
+                  select: { permission: { select: { code: true, module: true, action: true } } },
+                },
+              },
+            },
+            organization: {
+              select: { id: true, name: true, slug: true, type: true, status: true },
+            },
+          },
+        },
+      },
+    });
+    if (!result)
+      throw new NotFoundException({
+        code: "ADMIN_PROFILE_NOT_FOUND",
+        message: "Administrator profile not found.",
+      });
+    await this.recordSensitiveRead(context, "admin.detail.viewed", "AdminProfile", 1);
+    return {
+      ...result,
+      user: {
+        ...result.user,
+        invitationTokens: result.user.invitationTokens.map((invitation) =>
+          this.projectInvitation(invitation),
+        ),
+      },
+      effectivePermissions: [
+        ...new Set(
+          result.assignments
+            .filter((a) => !a.revokedAt && a.roleTemplate.isActive)
+            .flatMap((a) => a.roleTemplate.permissions.map((link) => link.permission.code)),
+        ),
+      ].sort(),
+    };
+  }
 
+  public async listRoleTemplates(context: AuthContext, query: RoleTemplateQueryDto = {}) {
+    this.assertSuperAdmin(context);
+    const limit = boundedLimit(query.limit);
+    const cursor = decodeCreatedCursor(query.cursor);
+    const search = query.search?.trim();
     const result = await this.prisma.adminRoleTemplate.findMany({
       where: {
-        isActive: true,
+        ...(query.isActive ? { isActive: query.isActive === "true" } : {}),
+        ...(query.isSystem ? { isSystem: query.isSystem === "true" } : {}),
+        AND: [
+          ...(search
+            ? [
+                {
+                  OR: [
+                    { code: { contains: search.toUpperCase() } },
+                    { name: { contains: search, mode: "insensitive" as const } },
+                  ],
+                },
+              ]
+            : []),
+          ...(cursor
+            ? [
+                {
+                  OR: [
+                    { createdAt: { lt: cursor.createdAt } },
+                    { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+                  ],
+                },
+              ]
+            : []),
+        ],
       },
-      orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+      take: limit + 1,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
         code: true,
         name: true,
         description: true,
         isSystem: true,
+        isActive: true,
+        createdAt: true,
+        _count: { select: { assignments: { where: { revokedAt: null } } } },
         permissions: {
+          take: 100,
+          orderBy: { permission: { code: "asc" } },
           select: {
             permission: {
               select: {
@@ -127,24 +361,34 @@ export class PlatformAdminService {
       context,
       "admin.role_templates.viewed",
       "AdminRoleTemplate",
-      result.length,
+      Math.min(result.length, limit),
     );
-    return result;
+    return pageResult(result, limit);
   }
 
-  public async listPermissions(context: AuthContext) {
+  public async listPermissions(context: AuthContext, query: CursorQueryDto = {}) {
     this.assertSuperAdmin(context);
-
+    const limit = boundedLimit(query.limit, 100);
+    const cursor = decodeCreatedCursor(query.cursor);
     const result = await this.prisma.adminPermission.findMany({
-      orderBy: [{ module: "asc" }, { action: "asc" }],
+      where: cursor
+        ? {
+            OR: [
+              { createdAt: { lt: cursor.createdAt } },
+              { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+            ],
+          }
+        : {},
+      take: limit + 1,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
     await this.recordSensitiveRead(
       context,
       "admin.permissions.viewed",
       "AdminPermission",
-      result.length,
+      Math.min(result.length, limit),
     );
-    return result;
+    return pageResult(result, limit);
   }
 
   public async createAdmin(context: AuthContext, input: CreatePlatformAdminDto) {
@@ -152,10 +396,6 @@ export class PlatformAdminService {
 
     const normalizedEmail = normalizeEmail(input.email);
     const roleCode = input.roleTemplateCode.trim().toUpperCase();
-
-    const rawInvitationToken = randomBytes(32).toString("base64url");
-
-    const invitationExpiresAt = new Date(Date.now() + INVITATION_TTL_MS);
 
     const organizationIds = input.organizationIds ?? [];
 
@@ -192,7 +432,11 @@ export class PlatformAdminService {
         },
       });
 
-      let invitationToken: string | null = null;
+      let invitation: {
+        id: string;
+        expiresAt: Date;
+        deliveryStatus: NotificationDeliveryStatus;
+      } | null = null;
 
       if (user) {
         if (user.status !== UserStatus.ACTIVE && user.status !== UserStatus.INVITED) {
@@ -262,22 +506,7 @@ export class PlatformAdminService {
       }
 
       if (user.status === UserStatus.INVITED) {
-        await transaction.invitationToken.deleteMany({
-          where: {
-            userId: user.id,
-            usedAt: null,
-          },
-        });
-
-        await transaction.invitationToken.create({
-          data: {
-            userId: user.id,
-            tokenHash: hashOpaqueToken(rawInvitationToken),
-            expiresAt: invitationExpiresAt,
-          },
-        });
-
-        invitationToken = rawInvitationToken;
+        invitation = await this.issueInvitation(transaction, user.id, user.email, profile.id);
       }
 
       await transaction.auditLog.create({
@@ -304,8 +533,7 @@ export class PlatformAdminService {
         roleTemplate: roleTemplate.code,
         scopeType: input.scopeType,
         organizationIds,
-        invitationToken,
-        invitationExpiresAt: invitationToken ? invitationExpiresAt : null,
+        invitation,
       };
     });
 
@@ -437,6 +665,143 @@ export class PlatformAdminService {
         roleTemplateCode: roleTemplate.code,
         assignmentIds: created,
       };
+    });
+  }
+
+  public async updateAdmin(
+    context: AuthContext,
+    adminProfileId: string,
+    input: UpdatePlatformAdminDto,
+  ) {
+    this.assertSuperAdmin(context);
+    const current = await this.prisma.adminProfile.findUnique({
+      where: { id: adminProfileId },
+      select: { id: true, title: true, responsibility: true },
+    });
+    if (!current)
+      throw new NotFoundException({
+        code: "ADMIN_PROFILE_NOT_FOUND",
+        message: "Administrator profile not found.",
+      });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.adminProfile.update({
+        where: { id: adminProfileId },
+        data: {
+          ...(input.title !== undefined ? { title: input.title.trim() || null } : {}),
+          ...(input.responsibility !== undefined
+            ? { responsibility: input.responsibility.trim() || null }
+            : {}),
+        },
+        select: { id: true, title: true, responsibility: true, status: true, updatedAt: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: context.userId,
+          action: "admin.profile.updated",
+          entityType: "AdminProfile",
+          entityId: adminProfileId,
+          metadata: { changedFields: Object.keys(input).sort() },
+        },
+      });
+      return updated;
+    });
+  }
+
+  public async resendInvitation(context: AuthContext, adminProfileId: string) {
+    this.assertSuperAdmin(context);
+    return this.prisma.$transaction(async (tx) => {
+      const profile = await tx.adminProfile.findUnique({
+        where: { id: adminProfileId },
+        select: { id: true, user: { select: { id: true, email: true, status: true } } },
+      });
+      if (!profile)
+        throw new NotFoundException({
+          code: "ADMIN_PROFILE_NOT_FOUND",
+          message: "Administrator profile not found.",
+        });
+      if (profile.user.status !== UserStatus.INVITED)
+        throw new ConflictException({
+          code: "ADMIN_INVITATION_NOT_APPLICABLE",
+          message: "Only invited administrators can be resent an invitation.",
+        });
+      const invitation = await this.issueInvitation(
+        tx,
+        profile.user.id,
+        profile.user.email,
+        profile.id,
+      );
+      await tx.auditLog.create({
+        data: {
+          actorUserId: context.userId,
+          subjectUserId: profile.user.id,
+          action: "admin.invitation.resent",
+          entityType: "AdminProfile",
+          entityId: profile.id,
+          metadata: { invitationTokenId: invitation.id, deliveryStatus: invitation.deliveryStatus },
+        },
+      });
+      return invitation;
+    });
+  }
+
+  public async revokeInvitation(context: AuthContext, adminProfileId: string) {
+    this.assertSuperAdmin(context);
+    const now = new Date();
+    return this.prisma.$transaction(async (tx) => {
+      const profile = await tx.adminProfile.findUnique({
+        where: { id: adminProfileId },
+        select: { id: true, userId: true },
+      });
+      if (!profile)
+        throw new NotFoundException({
+          code: "ADMIN_PROFILE_NOT_FOUND",
+          message: "Administrator profile not found.",
+        });
+      const tokens = await tx.invitationToken.findMany({
+        where: { userId: profile.userId, usedAt: null, revokedAt: null },
+        select: { id: true },
+      });
+      if (tokens.length === 0)
+        throw new ConflictException({
+          code: "ACTIVE_INVITATION_NOT_FOUND",
+          message: "No active invitation exists.",
+        });
+      const tokenIds = tokens.map((token) => token.id);
+      await tx.invitationToken.updateMany({
+        where: { id: { in: tokenIds } },
+        data: { revokedAt: now },
+      });
+      await tx.notificationDelivery.updateMany({
+        where: {
+          invitationTokenId: { in: tokenIds },
+          status: {
+            in: [
+              NotificationDeliveryStatus.PENDING,
+              NotificationDeliveryStatus.BLOCKED_CONFIGURATION,
+            ],
+          },
+        },
+        data: { status: NotificationDeliveryStatus.CANCELLED, cancelledAt: now },
+      });
+      await tx.outboxEvent.updateMany({
+        where: {
+          aggregateId: profile.id,
+          eventType: "admin.invitation.delivery.requested",
+          status: { in: [OutboxEventStatus.PENDING, OutboxEventStatus.BLOCKED_CONFIGURATION] },
+        },
+        data: { status: OutboxEventStatus.CANCELLED, processedAt: now },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: context.userId,
+          subjectUserId: profile.userId,
+          action: "admin.invitation.revoked",
+          entityType: "AdminProfile",
+          entityId: profile.id,
+          metadata: { invitationTokenIds: tokenIds },
+        },
+      });
+      return { adminProfileId, revokedAt: now, invitationCount: tokenIds.length };
     });
   }
 
@@ -658,6 +1023,69 @@ export class PlatformAdminService {
     return organizations.map((organization) => ({
       organizationId: organization.id,
     }));
+  }
+
+  private async issueInvitation(
+    transaction: Prisma.TransactionClient,
+    userId: string,
+    email: string,
+    adminProfileId: string,
+  ): Promise<{ id: string; expiresAt: Date; deliveryStatus: NotificationDeliveryStatus }> {
+    const now = new Date();
+    await transaction.invitationToken.updateMany({
+      where: { userId, usedAt: null, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    const rawToken = randomBytes(32).toString("base64url");
+    const expiresAt = new Date(now.getTime() + INVITATION_TTL_MS);
+    const token = await transaction.invitationToken.create({
+      data: { userId, tokenHash: hashOpaqueToken(rawToken), expiresAt },
+      select: { id: true, expiresAt: true },
+    });
+    const deliveryStatus = NotificationDeliveryStatus.BLOCKED_CONFIGURATION;
+    await transaction.notificationDelivery.create({
+      data: {
+        userId,
+        invitationTokenId: token.id,
+        channel: NotificationChannel.EMAIL,
+        templateCode: "ADMIN_INVITATION",
+        destination: email,
+        status: deliveryStatus,
+        failureCode: "EMAIL_PROVIDER_NOT_CONFIGURED",
+      },
+    });
+    await transaction.outboxEvent.create({
+      data: {
+        eventType: "admin.invitation.delivery.requested",
+        aggregateType: "AdminProfile",
+        aggregateId: adminProfileId,
+        idempotencyKey: `admin-invitation:${token.id}`,
+        status: OutboxEventStatus.BLOCKED_CONFIGURATION,
+        lastErrorCode: "EMAIL_PROVIDER_NOT_CONFIGURED",
+        payload: {
+          adminProfileId,
+          userId,
+          invitationTokenId: token.id,
+          channel: "EMAIL",
+          templateCode: "ADMIN_INVITATION",
+        },
+      },
+    });
+    return { id: token.id, expiresAt: token.expiresAt, deliveryStatus };
+  }
+
+  private projectInvitation<
+    T extends { usedAt: Date | null; revokedAt: Date | null; expiresAt: Date },
+  >(invitation?: T): (T & { lifecycleStatus: string }) | null {
+    if (!invitation) return null;
+    const lifecycleStatus = invitation.usedAt
+      ? "ACCEPTED"
+      : invitation.revokedAt
+        ? "REVOKED"
+        : invitation.expiresAt <= new Date()
+          ? "EXPIRED"
+          : "PENDING";
+    return { ...invitation, lifecycleStatus };
   }
 
   private async ensureAdminMembership(

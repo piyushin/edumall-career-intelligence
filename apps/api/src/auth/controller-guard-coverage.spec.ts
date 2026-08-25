@@ -6,13 +6,15 @@ import { AssessmentResultsController } from "../assessments/assessment-results.c
 import { CareerIntelligenceAdminController } from "../career-intelligence/career-intelligence-admin.controller";
 import { CommerceAdminController } from "../commerce/commerce-admin.controller";
 import { PlatformAdminController } from "../platform-admin/platform-admin.controller";
+import { PlatformDirectoryController } from "../platform-admin/platform-directory.controller";
 import { PlatformAdminGovernanceController } from "../platform-admin/platform-admin-governance.controller";
-import { AUTH_PERMISSIONS_KEY } from "./auth.tokens";
+import { AUTH_PERMISSIONS_KEY, AUTH_SENSITIVE_READ_KEY } from "./auth.tokens";
 import { PermissionsGuard } from "./permissions.guard";
 import { PrivilegedMutationAuditInterceptor } from "./privileged-mutation-audit.interceptor";
 
 const controllers = [
   PlatformAdminController,
+  PlatformDirectoryController,
   PlatformAdminGovernanceController,
   AssessmentAdminController,
   AssessmentAssignmentAdminController,
@@ -22,6 +24,10 @@ const controllers = [
 ];
 
 describe("privileged controller guard coverage", () => {
+  it("marks the global organization/user directories as mandatory sensitive reads", () => {
+    expect(Reflect.getMetadata(AUTH_SENSITIVE_READ_KEY, PlatformDirectoryController)).toBe(true);
+  });
+
   it.each(controllers)("wires PermissionsGuard and permission metadata on %s", (controller) => {
     const guards = (Reflect.getMetadata(GUARDS_METADATA, controller) ?? []) as unknown[];
     expect(guards).toContain(PermissionsGuard);

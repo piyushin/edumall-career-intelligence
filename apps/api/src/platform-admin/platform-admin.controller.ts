@@ -5,8 +5,10 @@ import {
   Header,
   Inject,
   Param,
+  Patch,
   ParseUUIDPipe,
   Post,
+  Query,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
@@ -23,7 +25,14 @@ import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { ScopeGuard } from "../auth/scope.guard";
 import { PlatformAdminService } from "./platform-admin.service";
-import { AssignAdminRoleDto, CreatePlatformAdminDto } from "./platform-admin.types";
+import {
+  AdminDirectoryQueryDto,
+  AssignAdminRoleDto,
+  CreatePlatformAdminDto,
+  CursorQueryDto,
+  RoleTemplateQueryDto,
+  UpdatePlatformAdminDto,
+} from "./platform-admin.types";
 
 @Controller("admin/platform")
 @UseGuards(AuthGuard, RolesGuard, ScopeGuard, PermissionsGuard)
@@ -39,22 +48,41 @@ export class PlatformAdminController {
   @Get("admins")
   @Permissions("admin.view")
   @Header("cache-control", "no-store")
-  public listAdmins(@CurrentAuthContext() context: AuthContext) {
-    return this.admins.listAdmins(context);
+  public listAdmins(
+    @CurrentAuthContext() context: AuthContext,
+    @Query() query: AdminDirectoryQueryDto,
+  ) {
+    return this.admins.listAdmins(context, query);
+  }
+
+  @Get("admins/:adminProfileId")
+  @Permissions("admin.view")
+  @Header("cache-control", "no-store")
+  public getAdmin(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("adminProfileId", new ParseUUIDPipe()) id: string,
+  ) {
+    return this.admins.getAdmin(context, id);
   }
 
   @Get("role-templates")
   @Permissions("admin.view")
   @Header("cache-control", "no-store")
-  public listRoleTemplates(@CurrentAuthContext() context: AuthContext) {
-    return this.admins.listRoleTemplates(context);
+  public listRoleTemplates(
+    @CurrentAuthContext() context: AuthContext,
+    @Query() query: RoleTemplateQueryDto,
+  ) {
+    return this.admins.listRoleTemplates(context, query);
   }
 
   @Get("permissions")
   @Permissions("admin.view")
   @Header("cache-control", "no-store")
-  public listPermissions(@CurrentAuthContext() context: AuthContext) {
-    return this.admins.listPermissions(context);
+  public listPermissions(
+    @CurrentAuthContext() context: AuthContext,
+    @Query() query: CursorQueryDto,
+  ) {
+    return this.admins.listPermissions(context, query);
   }
 
   @Post("admins")
@@ -66,6 +94,40 @@ export class PlatformAdminController {
     @Body() body: CreatePlatformAdminDto,
   ) {
     return this.admins.createAdmin(context, body);
+  }
+
+  @Patch("admins/:adminProfileId")
+  @Permissions("admin.create")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public updateAdmin(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("adminProfileId", new ParseUUIDPipe()) id: string,
+    @Body() body: UpdatePlatformAdminDto,
+  ) {
+    return this.admins.updateAdmin(context, id, body);
+  }
+
+  @Post("admins/:adminProfileId/invitation/resend")
+  @Permissions("admin.create")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public resendInvitation(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("adminProfileId", new ParseUUIDPipe()) id: string,
+  ) {
+    return this.admins.resendInvitation(context, id);
+  }
+
+  @Post("admins/:adminProfileId/invitation/revoke")
+  @Permissions("admin.create")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public revokeInvitation(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("adminProfileId", new ParseUUIDPipe()) id: string,
+  ) {
+    return this.admins.revokeInvitation(context, id);
   }
 
   @Post("admins/:adminProfileId/assignments")

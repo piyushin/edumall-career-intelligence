@@ -49,6 +49,7 @@ function invitationToken(
     tokenHash: hashOpaqueToken(rawToken),
     expiresAt: new Date(now.getTime() + 60_000),
     usedAt: null,
+    revokedAt: null,
     createdAt: now,
     ...overrides,
   };
@@ -112,7 +113,7 @@ describe("invitation acceptance", () => {
       where: { tokenHash: hashOpaqueToken(rawToken) },
     });
     expect(tx.invitationToken.updateMany).toHaveBeenCalledWith({
-      where: { id: tokenId, usedAt: null, expiresAt: { gt: now } },
+      where: { id: tokenId, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
       data: { usedAt: now },
     });
     expect(tx.user.update).toHaveBeenCalledWith({
@@ -168,6 +169,18 @@ describe("invitation acceptance", () => {
     ).rejects.toMatchObject({
       code: AuthenticationErrorCode.CONSUMED_INVITATION_TOKEN,
     });
+  });
+
+  it("rejects a revoked invitation token", async () => {
+    const tx = transaction(invitationToken(rawToken, { revokedAt: now }));
+    const prisma = transactionalPrisma(tx);
+
+    await expect(acceptInvitation(prisma, rawToken, "new-password", { now })).rejects.toMatchObject(
+      {
+        code: AuthenticationErrorCode.CONSUMED_INVITATION_TOKEN,
+      },
+    );
+    expect(tx.user.update).not.toHaveBeenCalled();
   });
 
   it("rejects a token lost to a concurrent consumer", async () => {

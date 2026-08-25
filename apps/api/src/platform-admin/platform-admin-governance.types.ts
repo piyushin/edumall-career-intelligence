@@ -1,5 +1,6 @@
 import {
   ArrayNotEmpty,
+  ArrayMaxSize,
   ArrayUnique,
   IsArray,
   IsISO8601,
@@ -30,8 +31,10 @@ export class CreateAdminRoleTemplateDto {
 
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(100)
   @ArrayUnique()
   @IsString({ each: true })
+  @MaxLength(120, { each: true })
   permissionCodes!: string[];
 }
 
@@ -50,8 +53,10 @@ export class UpdateAdminRoleTemplateDto {
 export class SetAdminRolePermissionsDto {
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(100)
   @ArrayUnique()
   @IsString({ each: true })
+  @MaxLength(120, { each: true })
   permissionCodes!: string[];
 }
 

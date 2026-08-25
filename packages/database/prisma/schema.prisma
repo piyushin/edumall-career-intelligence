@@ -77,6 +77,27 @@ enum AuditOutcome {
   FAILED
 }
 
+enum OutboxEventStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+  BLOCKED_CONFIGURATION
+  CANCELLED
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  BLOCKED_CONFIGURATION
+  CANCELLED
+}
+
+enum NotificationChannel {
+  EMAIL
+}
+
 enum AssessmentDefinitionStatus {
   ACTIVE
   ARCHIVED
@@ -206,6 +227,7 @@ model User {
   sessions                     Session[]
   passwordResetTokens          PasswordResetToken[]
   invitationTokens             InvitationToken[]
+  notificationDeliveries       NotificationDelivery[]
   auditLogs                    AuditLog[]                 @relation("ActorAuditLogs")
   subjectAuditLogs             AuditLog[]                 @relation("SubjectAuditLogs")
   createdAssessmentDefinitions AssessmentDefinition[]     @relation("AssessmentDefinitionCreatedBy")
@@ -296,17 +318,65 @@ model PasswordResetToken {
 }
 
 model InvitationToken {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  tokenHash String    @unique @map("token_hash") @db.Char(64)
-  expiresAt DateTime  @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String                 @id @default(uuid()) @db.Uuid
+  userId     String                 @map("user_id") @db.Uuid
+  tokenHash  String                 @unique @map("token_hash") @db.Char(64)
+  expiresAt  DateTime               @map("expires_at")
+  usedAt     DateTime?              @map("used_at")
+  revokedAt  DateTime?              @map("revoked_at")
+  createdAt  DateTime               @default(now()) @map("created_at")
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
 
   @@index([expiresAt])
   @@index([userId, expiresAt])
+  @@index([userId, revokedAt, usedAt])
   @@map("invitation_tokens")
+}
+
+model OutboxEvent {
+  id             String            @id @default(uuid()) @db.Uuid
+  eventType      String            @map("event_type") @db.VarChar(120)
+  aggregateType  String            @map("aggregate_type") @db.VarChar(120)
+  aggregateId    String            @map("aggregate_id") @db.Uuid
+  idempotencyKey String            @unique @map("idempotency_key") @db.VarChar(200)
+  status         OutboxEventStatus @default(PENDING)
+  payload        Json              @db.JsonB
+  attempts       Int               @default(0)
+  availableAt    DateTime          @default(now()) @map("available_at")
+  processedAt    DateTime?         @map("processed_at")
+  lastErrorCode  String?           @map("last_error_code") @db.VarChar(120)
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  @@index([status, availableAt, id])
+  @@index([aggregateType, aggregateId, createdAt])
+  @@map("outbox_events")
+}
+
+model NotificationDelivery {
+  id                String                     @id @default(uuid()) @db.Uuid
+  userId            String                     @map("user_id") @db.Uuid
+  invitationTokenId String?                    @map("invitation_token_id") @db.Uuid
+  channel           NotificationChannel
+  templateCode      String                     @map("template_code") @db.VarChar(120)
+  destination       String                     @db.VarChar(320)
+  status            NotificationDeliveryStatus @default(PENDING)
+  provider          String?                    @db.VarChar(120)
+  providerMessageId String?                    @map("provider_message_id") @db.VarChar(200)
+  failureCode       String?                    @map("failure_code") @db.VarChar(120)
+  requestedAt       DateTime                   @default(now()) @map("requested_at")
+  sentAt            DateTime?                  @map("sent_at")
+  cancelledAt       DateTime?                  @map("cancelled_at")
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
+  user              User                       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  invitationToken   InvitationToken?           @relation(fields: [invitationTokenId], references: [id], onDelete: Restrict)
+
+  @@unique([invitationTokenId])
+  @@index([userId, requestedAt, id])
+  @@index([status, requestedAt, id])
+  @@map("notification_deliveries")
 }
 
 /// Stable identity for an assessment across all versions.
