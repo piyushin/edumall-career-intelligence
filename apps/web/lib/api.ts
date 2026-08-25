@@ -14,7 +14,11 @@ export class ApiError extends Error {
   public readonly code?: string;
 
   public constructor(status: number, body?: ApiErrorBody) {
-    super(body?.message ?? `Request failed with status ${status}`);
+    super(
+      status === 403
+        ? `Access denied. ${body?.message ?? "Your session is not authorized for this operation."}`
+        : (body?.message ?? `Request failed with status ${status}`),
+    );
     this.name = "ApiError";
     this.status = status;
 
@@ -94,7 +98,12 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   });
 
   if (!response.ok) {
-    throw new ApiError(response.status, await parseError(response));
+    const error = new ApiError(response.status, await parseError(response));
+    if (response.status === 401 && typeof window !== "undefined" && !path.startsWith("/auth/")) {
+      const next = `${window.location.pathname}${window.location.search}`;
+      window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+    }
+    throw error;
   }
 
   if (response.status === 204) {

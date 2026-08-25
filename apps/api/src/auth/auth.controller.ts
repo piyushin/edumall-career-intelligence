@@ -67,6 +67,7 @@ export class AuthController {
           organizationId: result.context.organizationId,
           role: result.context.role,
           userId: result.context.userId,
+          permissions: result.context.permissions ?? [],
         },
         user: result.user,
       };
@@ -104,6 +105,7 @@ export class AuthController {
         organizationId: result.context.organizationId,
         role: result.context.role,
         userId: result.context.userId,
+        permissions: result.context.permissions ?? [],
       },
       user: result.user,
     };
@@ -121,6 +123,7 @@ export class AuthController {
           organizationId: context.organizationId,
           role: context.role,
           userId: context.userId,
+          permissions: context.permissions ?? [],
         },
         user,
       };

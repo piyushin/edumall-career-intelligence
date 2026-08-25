@@ -103,4 +103,18 @@ describe("web API client", () => {
       expect(error.message).toBe("Assessment conflict.");
     }
   });
+
+  it("distinguishes authorization denial from a generic server failure", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ code: "INSUFFICIENT_PERMISSION", message: "Permission missing." }),
+        { status: 403 },
+      ),
+    );
+    await expect(apiRequest("/admin/platform/users")).rejects.toMatchObject({
+      status: 403,
+      code: "INSUFFICIENT_PERMISSION",
+      message: expect.stringContaining("Access denied"),
+    });
+  });
 });

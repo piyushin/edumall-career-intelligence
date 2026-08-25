@@ -370,15 +370,18 @@ export class PlatformAdminService {
     this.assertSuperAdmin(context);
     const limit = boundedLimit(query.limit, 100);
     const cursor = decodeCreatedCursor(query.cursor);
+    const filters: Prisma.AdminPermissionWhereInput[] = [];
+    if (context.role !== MembershipRole.SUPER_ADMIN)
+      filters.push({ code: { in: context.permissions ?? [] } });
+    if (cursor)
+      filters.push({
+        OR: [
+          { createdAt: { lt: cursor.createdAt } },
+          { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+        ],
+      });
     const result = await this.prisma.adminPermission.findMany({
-      where: cursor
-        ? {
-            OR: [
-              { createdAt: { lt: cursor.createdAt } },
-              { createdAt: cursor.createdAt, id: { lt: cursor.id } },
-            ],
-          }
-        : {},
+      where: filters.length ? { AND: filters } : {},
       take: limit + 1,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });

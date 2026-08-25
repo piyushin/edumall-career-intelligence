@@ -25,6 +25,7 @@ const authContext = {
   role: MembershipRole.ORGANIZATION_ADMIN,
   sessionId,
   userId,
+  permissions: ["assessment.view"],
 };
 const safeUser = {
   email: "user@example.com",
@@ -135,6 +136,7 @@ describe("authentication HTTP API", () => {
         organizationId,
         role: MembershipRole.ORGANIZATION_ADMIN,
         userId,
+        permissions: authContext.permissions ?? [],
       },
       user: safeUser,
     });
@@ -185,6 +187,7 @@ describe("authentication HTTP API", () => {
         organizationId,
         role: MembershipRole.ORGANIZATION_ADMIN,
         userId,
+        permissions: authContext.permissions ?? [],
       },
       user: safeUser,
     });

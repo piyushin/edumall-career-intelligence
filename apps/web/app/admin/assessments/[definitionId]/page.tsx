@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button } from "@edumall/ui";
+import { AdminRoute } from "../../../../components/admin-route";
+import { useAdminSession } from "../../../../components/admin-session";
+import { hasPermission } from "../../../../lib/admin-authorization";
 import { ApiError } from "../../../../lib/api";
 import {
   createAssessmentConstruct,
@@ -42,6 +45,10 @@ const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 
 export default function AssessmentWorkspacePage() {
+  const session = useAdminSession();
+  const canView = hasPermission(session, "assessment.view");
+  const canManage = hasPermission(session, "assessment.manage");
+  const canPublish = hasPermission(session, "assessment.publish");
   const params = useParams<{ definitionId: string }>();
   const definitionId = params.definitionId;
 
@@ -62,6 +69,10 @@ export default function AssessmentWorkspacePage() {
   );
 
   const loadDefinition = useCallback(async () => {
+    if (!canView) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -84,9 +95,13 @@ export default function AssessmentWorkspacePage() {
     } finally {
       setLoading(false);
     }
-  }, [definitionId, selectedVersionId]);
+  }, [canView, definitionId, selectedVersionId]);
 
   const loadContent = useCallback(async () => {
+    if (!canView) {
+      setContent(null);
+      return;
+    }
     if (!selectedVersionId) {
       setContent(null);
       return;
@@ -103,7 +118,7 @@ export default function AssessmentWorkspacePage() {
     } finally {
       setContentLoading(false);
     }
-  }, [definitionId, selectedVersionId]);
+  }, [canView, definitionId, selectedVersionId]);
 
   useEffect(() => {
     void loadDefinition();
@@ -133,191 +148,198 @@ export default function AssessmentWorkspacePage() {
     }
   }
 
-  if (loading) {
-    return <p className="text-sm text-slate-600">Loading assessment workspace...</p>;
-  }
+  if (loading)
+    return (
+      <AdminRoute permission="assessment.view">
+        <p className="text-sm text-slate-600">Loading assessment workspace...</p>
+      </AdminRoute>
+    );
 
   if (error || !definition) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-        <p className="font-semibold text-red-900">Unable to open assessment</p>
-        <p className="mt-2 text-sm text-red-700">{error}</p>
-      </div>
+      <AdminRoute permission="assessment.view">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
+          <p className="font-semibold text-red-900">Unable to open assessment</p>
+          <p className="mt-2 text-sm text-red-700">{error}</p>
+        </div>
+      </AdminRoute>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <header>
-        <Link
-          href="/admin/assessments"
-          className="text-sm font-medium text-blue-700 hover:text-blue-800"
-        >
-          ← Assessment library
-        </Link>
-        <div className="mt-4 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-          <div>
-            <p className="text-sm font-semibold text-blue-700">Assessment authoring workspace</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">
-              {definition.code}
-            </h1>
-            <p className="mt-2 text-sm text-slate-600">Definition status: {definition.status}</p>
-          </div>
-
-          <div className="min-w-64">
-            <label className="text-sm font-medium text-slate-800">Active draft</label>
-            <select
-              className={`${inputClass} mt-2`}
-              value={selectedVersionId}
-              onChange={(event) => setSelectedVersionId(event.target.value)}
-            >
-              <option value="">Select a draft version</option>
-              {draftVersions.map((version) => (
-                <option key={version.id} value={version.id}>
-                  v{version.versionNumber} — {version.title}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </header>
-
-      {actionError ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
-        >
-          {actionError}
-        </div>
-      ) : null}
-
-      <CreateVersionPanel
-        definitionId={definitionId}
-        nextVersionNumber={
-          Math.max(0, ...definition.versions.map((version) => version.versionNumber)) + 1
-        }
-        disabled={busy}
-        onCreated={async (versionId) => {
-          await loadDefinition();
-          setSelectedVersionId(versionId);
-        }}
-      />
-
-      {!selectedVersionId ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-          <h2 className="font-semibold text-slate-900">Create or select a draft version</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Assessment content is authored inside a DRAFT version.
-          </p>
-        </div>
-      ) : contentLoading ? (
-        <p className="text-sm text-slate-600">Loading draft content...</p>
-      ) : content ? (
-        <>
-          <div className="grid gap-6 xl:grid-cols-2">
-            <ConstructPanel
-              content={content}
-              disabled={busy}
-              onCreate={(input) =>
-                runAction(async () => {
-                  await createAssessmentConstruct(definitionId, selectedVersionId, input);
-                })
-              }
-            />
-
-            <ItemPanel
-              content={content}
-              disabled={busy}
-              onCreate={(input) =>
-                runAction(async () => {
-                  await createAssessmentItem(definitionId, selectedVersionId, input);
-                })
-              }
-            />
-          </div>
-
-          <section className="space-y-4">
+    <AdminRoute permission="assessment.view">
+      <div className="space-y-8">
+        <header>
+          <Link
+            href="/admin/assessments"
+            className="text-sm font-medium text-blue-700 hover:text-blue-800"
+          >
+            ← Assessment library
+          </Link>
+          <div className="mt-4 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
             <div>
-              <h2 className="text-xl font-semibold text-slate-950">Questions & scoring</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Configure options, construct links and explicit scores. No score is inferred
-                automatically.
-              </p>
+              <p className="text-sm font-semibold text-blue-700">Assessment authoring workspace</p>
+              <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">
+                {definition.code}
+              </h1>
+              <p className="mt-2 text-sm text-slate-600">Definition status: {definition.status}</p>
             </div>
 
-            {content.items.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-sm text-slate-600">
-                No questions have been added yet.
+            <div className="min-w-64">
+              <label className="text-sm font-medium text-slate-800">Active draft</label>
+              <select
+                className={`${inputClass} mt-2`}
+                value={selectedVersionId}
+                onChange={(event) => setSelectedVersionId(event.target.value)}
+              >
+                <option value="">Select a draft version</option>
+                {draftVersions.map((version) => (
+                  <option key={version.id} value={version.id}>
+                    v{version.versionNumber} — {version.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </header>
+
+        {actionError ? (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          >
+            {actionError}
+          </div>
+        ) : null}
+
+        <CreateVersionPanel
+          definitionId={definitionId}
+          nextVersionNumber={
+            Math.max(0, ...definition.versions.map((version) => version.versionNumber)) + 1
+          }
+          disabled={busy || !canManage}
+          onCreated={async (versionId) => {
+            await loadDefinition();
+            setSelectedVersionId(versionId);
+          }}
+        />
+
+        {!selectedVersionId ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+            <h2 className="font-semibold text-slate-900">Create or select a draft version</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Assessment content is authored inside a DRAFT version.
+            </p>
+          </div>
+        ) : contentLoading ? (
+          <p className="text-sm text-slate-600">Loading draft content...</p>
+        ) : content ? (
+          <>
+            <div className="grid gap-6 xl:grid-cols-2">
+              <ConstructPanel
+                content={content}
+                disabled={busy || !canManage}
+                onCreate={(input) =>
+                  runAction(async () => {
+                    await createAssessmentConstruct(definitionId, selectedVersionId, input);
+                  })
+                }
+              />
+
+              <ItemPanel
+                content={content}
+                disabled={busy || !canManage}
+                onCreate={(input) =>
+                  runAction(async () => {
+                    await createAssessmentItem(definitionId, selectedVersionId, input);
+                  })
+                }
+              />
+            </div>
+
+            <section className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-950">Questions & scoring</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Configure options, construct links and explicit scores. No score is inferred
+                  automatically.
+                </p>
               </div>
-            ) : (
-              content.items.map((item) => (
-                <ItemEditor
-                  key={item.id}
-                  item={item}
-                  content={content}
-                  disabled={busy}
-                  onAddOption={(input) =>
-                    runAction(async () => {
-                      await createAssessmentItemOption(
-                        definitionId,
-                        selectedVersionId,
-                        item.id,
-                        input,
-                      );
-                    })
-                  }
-                  onLinkConstruct={(input) =>
-                    runAction(async () => {
-                      await createAssessmentItemConstructLink(
-                        definitionId,
-                        selectedVersionId,
-                        item.id,
-                        input,
-                      );
-                    })
-                  }
-                  onAddScore={(optionId, input) =>
-                    runAction(async () => {
-                      await createAssessmentOptionScore(
-                        definitionId,
-                        selectedVersionId,
-                        item.id,
-                        optionId,
-                        input,
-                      );
-                    })
-                  }
-                />
-              ))
-            )}
-          </section>
 
-          <PublicationPanel
-            disabled={busy}
-            readiness={readiness}
-            onCheck={async () => {
-              setBusy(true);
-              setActionError("");
+              {content.items.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-sm text-slate-600">
+                  No questions have been added yet.
+                </div>
+              ) : (
+                content.items.map((item) => (
+                  <ItemEditor
+                    key={item.id}
+                    item={item}
+                    content={content}
+                    disabled={busy || !canManage}
+                    onAddOption={(input) =>
+                      runAction(async () => {
+                        await createAssessmentItemOption(
+                          definitionId,
+                          selectedVersionId,
+                          item.id,
+                          input,
+                        );
+                      })
+                    }
+                    onLinkConstruct={(input) =>
+                      runAction(async () => {
+                        await createAssessmentItemConstructLink(
+                          definitionId,
+                          selectedVersionId,
+                          item.id,
+                          input,
+                        );
+                      })
+                    }
+                    onAddScore={(optionId, input) =>
+                      runAction(async () => {
+                        await createAssessmentOptionScore(
+                          definitionId,
+                          selectedVersionId,
+                          item.id,
+                          optionId,
+                          input,
+                        );
+                      })
+                    }
+                  />
+                ))
+              )}
+            </section>
 
-              try {
-                setReadiness(await getPublicationReadiness(definitionId, selectedVersionId));
-              } catch (caught) {
-                setActionError(errorMessage(caught, "Unable to check publication readiness."));
-              } finally {
-                setBusy(false);
-              }
-            }}
-            onPublish={async () => {
-              await runAction(async () => {
-                await publishAssessmentVersion(definitionId, selectedVersionId);
-                setSelectedVersionId("");
-                setContent(null);
-              });
-            }}
-          />
-        </>
-      ) : null}
-    </div>
+            <PublicationPanel
+              disabled={busy || !canPublish}
+              readiness={readiness}
+              onCheck={async () => {
+                setBusy(true);
+                setActionError("");
+
+                try {
+                  setReadiness(await getPublicationReadiness(definitionId, selectedVersionId));
+                } catch (caught) {
+                  setActionError(errorMessage(caught, "Unable to check publication readiness."));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              onPublish={async () => {
+                await runAction(async () => {
+                  await publishAssessmentVersion(definitionId, selectedVersionId);
+                  setSelectedVersionId("");
+                  setContent(null);
+                });
+              }}
+            />
+          </>
+        ) : null}
+      </div>
+    </AdminRoute>
   );
 }
 

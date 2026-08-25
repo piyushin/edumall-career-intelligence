@@ -408,3 +408,13 @@
 - **Consequences:** R19.1B adds backward-compatible invitation revocation, notification-delivery, and outbox tables. Resend rotates the invitation token, revoke cancels outstanding delivery work, and every lifecycle mutation is audited. Provider dispatch remains an explicitly configured operational integration.
 - **Status:** Approved architecture implemented in R19.1B source; not deployed
 - **Revisit trigger:** Approval and configuration of the production email provider and delivery worker.
+
+## D-038 - R19.1C Control Centre Authorization Projection
+
+- **Decision ID:** D-038
+- **Date:** 2026-08-25
+- **Decision:** The validated session response includes server-resolved effective permission codes for UI navigation and request minimization. Browser controls are advisory only; API guards remain authoritative. Platform-global pages do not issue their API request unless the session projection confirms platform scope and the required permission.
+- **Reason:** Delegated administrators need an accurate Control Centre without exposing navigation or fetching data outside their responsibility, while client state must never become an authorization authority.
+- **Consequences:** Navigation, page loading and mutation controls are permission-aware; 401 and 403 outcomes have distinct handling; credentials remain in HTTP-only cookies. Existing server-side role, scope, permission, CSRF and audit enforcement is unchanged.
+- **Status:** Implemented in R19.1C source; not deployed
+- **Revisit trigger:** R19.5 central identity-provider session and claims migration.

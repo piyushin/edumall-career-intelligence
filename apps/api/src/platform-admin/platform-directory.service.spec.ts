@@ -144,6 +144,7 @@ describe("PlatformDirectoryService", () => {
     const findFirst = vi.fn().mockResolvedValue({
       id: "55555555-5555-4555-8555-555555555555",
       email: "candidate@example.com",
+      assignedAssessments: [],
     });
     const delegated = {
       ...superContext,
@@ -159,6 +160,26 @@ describe("PlatformDirectoryService", () => {
       commerceOrders: false,
       commerceEntitlements: false,
     });
+  });
+
+  it("projects candidate segment without returning unrestricted assignment metadata", async () => {
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "55555555-5555-4555-8555-555555555555",
+      email: "candidate@example.com",
+      assignedAssessments: [
+        {
+          id: "assignment-id",
+          metadata: { productSegment: "COLLEGE", privateImportPayload: "never-return" },
+          attempts: [],
+        },
+      ],
+    });
+    const result = await new PlatformDirectoryService({
+      user: { findFirst },
+    } as unknown as PrismaClient).user(superContext, "55555555-5555-4555-8555-555555555555");
+    expect(result).toMatchObject({ candidateSegment: "COLLEGE" });
+    expect(JSON.stringify(result)).not.toContain("privateImportPayload");
+    expect(JSON.stringify(result)).not.toContain("metadata");
   });
 
   it("returns deterministic organization pages with bounded member summaries", async () => {
@@ -195,5 +216,23 @@ describe("PlatformDirectoryService", () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: 21, orderBy: [{ createdAt: "desc" }, { id: "desc" }] }),
     );
+  });
+
+  it("does not select organization commerce counts without commerce permission", async () => {
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "44444444-4444-4444-8444-444444444444",
+      _count: { memberships: 1, assessmentAssignments: 2 },
+    });
+    const prisma = {
+      organization: { findFirst },
+      organizationMembership: { count: vi.fn().mockResolvedValue(1) },
+    } as unknown as PrismaClient;
+    await new PlatformDirectoryService(prisma).organization(
+      { ...superContext, role: MembershipRole.PLATFORM_ADMIN, permissions: ["organization.view"] },
+      "44444444-4444-4444-8444-444444444444",
+    );
+    expect(findFirst.mock.calls[0]?.[0]?.select?._count?.select).toEqual({
+      memberships: true,
+    });
   });
 });

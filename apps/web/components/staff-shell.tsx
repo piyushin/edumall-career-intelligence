@@ -7,7 +7,7 @@ import { BrandLogo } from "./brand-logo";
 import { ApiError } from "../lib/api";
 import { getSession, logout, type AuthSession } from "../lib/auth";
 
-const allowedRoles = new Set(["SUPER_ADMIN", "ORGANIZATION_ADMIN", "COUNSELLOR"]);
+const allowedRoles = new Set(["SUPER_ADMIN", "PLATFORM_ADMIN", "ORGANIZATION_ADMIN", "COUNSELLOR"]);
 
 type StaffState =
   | { status: "loading" }
@@ -27,7 +27,11 @@ export function StaffShell({ children }: { children: ReactNode }) {
       .then((session) => {
         if (!active) return;
 
-        if (!allowedRoles.has(session.session.role)) {
+        if (
+          !allowedRoles.has(session.session.role) ||
+          (session.session.role === "PLATFORM_ADMIN" &&
+            !session.session.permissions.includes("candidate.view"))
+        ) {
           setState({ status: "forbidden" });
           return;
         }

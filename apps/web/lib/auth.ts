@@ -1,7 +1,13 @@
 import { apiRequest } from "./api";
 
 export type MembershipRole =
-  "SUPER_ADMIN" | "ORGANIZATION_ADMIN" | "COUNSELLOR" | "ASSESSOR" | "STUDENT" | "EMPLOYEE";
+  | "SUPER_ADMIN"
+  | "PLATFORM_ADMIN"
+  | "ORGANIZATION_ADMIN"
+  | "COUNSELLOR"
+  | "ASSESSOR"
+  | "STUDENT"
+  | "EMPLOYEE";
 
 export type PublicSignupSegment =
   "SCHOOL_6_8" | "SCHOOL_9_10" | "SCHOOL_11_12" | "COLLEGE" | "PROFESSIONAL" | "SKILLED_WORKFORCE";
@@ -12,6 +18,7 @@ export interface AuthSession {
     organizationId: string | null;
     role: MembershipRole;
     userId: string;
+    permissions: string[];
     expiresAt?: string;
   };
   user: {

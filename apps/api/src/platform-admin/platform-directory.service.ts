@@ -211,6 +211,8 @@ export class PlatformDirectoryService {
 
   public async organization(context: AuthContext, id: string) {
     this.assertPlatform(context);
+    const canViewAssessments = this.can(context, "assessment.view");
+    const canViewCommerce = this.can(context, "commerce.view");
     const organization = await this.prisma.organization.findFirst({
       where: { id, deletedAt: null },
       select: {
@@ -222,7 +224,11 @@ export class PlatformDirectoryService {
         createdAt: true,
         updatedAt: true,
         _count: {
-          select: { memberships: true, assessmentAssignments: true, commerceOrders: true },
+          select: {
+            memberships: true,
+            ...(canViewAssessments ? { assessmentAssignments: true } : {}),
+            ...(canViewCommerce ? { commerceOrders: true } : {}),
+          },
         },
       },
     });
@@ -409,6 +415,7 @@ export class PlatformDirectoryService {
             status: true,
             assignedAt: true,
             organizationId: true,
+            metadata: true,
             attempts: {
               take: 10,
               orderBy: [{ startedAt: "desc" }, { id: "desc" }],
@@ -452,7 +459,16 @@ export class PlatformDirectoryService {
       },
     });
     if (!user) throw new NotFoundException({ code: "USER_NOT_FOUND", message: "User not found." });
-    return user;
+    const candidateSegment = user.assignedAssessments
+      .map((assignment) => this.candidateSegment(assignment.metadata))
+      .find((segment): segment is string => Boolean(segment));
+    return {
+      ...user,
+      candidateSegment: candidateSegment ?? null,
+      assignedAssessments: user.assignedAssessments.map(
+        ({ metadata: _metadata, ...assignment }) => assignment,
+      ),
+    };
   }
 
   private assertPlatform(context: AuthContext) {
@@ -473,5 +489,11 @@ export class PlatformDirectoryService {
       context.role === MembershipRole.SUPER_ADMIN ||
       (context.permissions ?? []).includes(permission)
     );
+  }
+
+  private candidateSegment(metadata: Prisma.JsonValue | null): string | null {
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+    const value = (metadata as Prisma.JsonObject).productSegment;
+    return typeof value === "string" && value.length <= 40 ? value : null;
   }
 }

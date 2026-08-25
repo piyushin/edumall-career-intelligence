@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BrandLogo } from "../../components/brand-logo";
 import { ApiError } from "../../lib/api";
+import { hasPermission, safeNextPath } from "../../lib/admin-authorization";
 import { login, logout } from "../../lib/auth";
 
 export function LoginForm() {
@@ -27,8 +28,25 @@ export function LoginForm() {
         ...(organizationId.trim() ? { organizationId: organizationId.trim() } : {}),
       });
       const next = searchParams.get("next");
-      if (result.session.role === "SUPER_ADMIN" || result.session.role === "ORGANIZATION_ADMIN") {
-        router.replace(next?.startsWith("/admin") ? next : "/admin");
+      if (
+        result.session.role === "SUPER_ADMIN" ||
+        result.session.role === "PLATFORM_ADMIN" ||
+        result.session.role === "ORGANIZATION_ADMIN"
+      ) {
+        const destination = safeNextPath(next);
+        const defaultAdminPath =
+          result.session.role === "ORGANIZATION_ADMIN"
+            ? "/admin/assignments"
+            : hasPermission(result, "admin.view")
+              ? "/admin"
+              : hasPermission(result, "candidate.view")
+                ? "/admin/users"
+                : hasPermission(result, "organization.view")
+                  ? "/admin/organizations"
+                  : hasPermission(result, "audit.view")
+                    ? "/admin/audit"
+                    : "/admin/assessments";
+        router.replace(destination !== "/admin" ? destination : defaultAdminPath);
         router.refresh();
         return;
       }

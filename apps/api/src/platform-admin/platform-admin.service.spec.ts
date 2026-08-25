@@ -20,6 +20,29 @@ const context: AuthContext = {
 };
 
 describe("PlatformAdminService session isolation", () => {
+  it("limits a delegated role editor to permissions held by the current session", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = {
+      adminPermission: { findMany },
+      auditLog: { create: vi.fn().mockResolvedValue({ id: "audit" }) },
+    } as unknown as PrismaClient;
+    await new PlatformAdminService(prisma).listPermissions(
+      {
+        ...context,
+        role: MembershipRole.PLATFORM_ADMIN,
+        permissions: ["admin.view", "admin.permission.manage"],
+      },
+      {},
+    );
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [{ code: { in: ["admin.view", "admin.permission.manage"] } }],
+        },
+      }),
+    );
+  });
+
   it("paginates and searches the admin directory with effective permissions and a safe invitation projection", async () => {
     const createdAt = new Date("2026-08-25T10:00:00Z");
     const findMany = vi.fn().mockResolvedValue([
