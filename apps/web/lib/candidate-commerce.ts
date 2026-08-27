@@ -75,6 +75,14 @@ export type PaymentIntent =
       description: string;
     };
 
+export const CHECKOUT_ORDER_ACTION_LABEL = "Create Order / Apply Coupon";
+
+export function unavailableGatewayMessage(
+  _intent: Extract<PaymentIntent, { gatewayConfigured: false }>,
+): string {
+  return "Online payment is currently unavailable. You may use an eligible coupon or contact The EduMall for UPI, bank transfer, cash/offline, sponsored, or complimentary approval.";
+}
+
 export function getCandidateCheckout(attemptId: string): Promise<CandidateCheckout> {
   return apiRequest<CandidateCheckout>(`/commerce/attempts/${attemptId}/checkout`);
 }

@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../../lib/api";
 import {
+  CHECKOUT_ORDER_ACTION_LABEL,
   createCandidateOrder,
   createPaymentIntent,
   getCandidateCheckout,
   type CandidateCheckout,
+  unavailableGatewayMessage,
   verifyRazorpayPayment,
 } from "../../../../lib/candidate-commerce";
 import { downloadCandidateReleasedReportPdf } from "../../../../lib/candidate-assessments";
@@ -180,9 +182,7 @@ export function SubmittedCommerce({ attemptId, title }: { attemptId: string; tit
       const intent = await createPaymentIntent(order.id);
 
       if (!intent.gatewayConfigured) {
-        setMessage(
-          "Your order has been created. Online payment is awaiting gateway activation. You may use an organisation coupon or contact The EduMall for payment approval.",
-        );
+        setMessage(unavailableGatewayMessage(intent));
         return;
       }
 
@@ -387,16 +387,12 @@ export function SubmittedCommerce({ attemptId, title }: { attemptId: string; tit
                 onClick={() => void purchase()}
                 className="mt-5 w-full rounded-xl bg-gradient-to-r from-red-600 to-orange-500 px-5 py-3.5 text-sm font-black text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {working
-                  ? "Please wait..."
-                  : couponCode.trim()
-                    ? "Apply Coupon / Continue"
-                    : "Proceed to Secure Payment"}
+                {working ? "Please wait..." : CHECKOUT_ORDER_ACTION_LABEL}
               </button>
 
               <p className="mt-4 text-center text-xs leading-5 text-slate-500">
-                Organisation-sponsored candidates can use their assigned coupon. Online payment is
-                verified server-side before report access is granted.
+                Create your order to apply an eligible coupon or continue with the payment options
+                currently available for your account.
               </p>
             </div>
           ) : (
