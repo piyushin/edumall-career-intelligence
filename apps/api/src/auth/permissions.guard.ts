@@ -19,6 +19,11 @@ const LEGACY_ORGANIZATION_ADMIN_PERMISSIONS = new Set([
   "candidate.view",
   "candidate.manage",
   "report.release",
+  "report.search",
+  "report.credit.view",
+  "report.credit.manage",
+  "counsellor.assignment.view",
+  "counsellor.assignment.manage",
   "commerce.view",
   "commerce.product.manage",
   "commerce.price.manage",
@@ -26,7 +31,12 @@ const LEGACY_ORGANIZATION_ADMIN_PERMISSIONS = new Set([
   "commerce.payment.approve",
 ]);
 
-const LEGACY_COUNSELLOR_PERMISSIONS = new Set(["candidate.view", "report.release"]);
+const LEGACY_COUNSELLOR_PERMISSIONS = new Set([
+  "candidate.view",
+  "report.release",
+  "report.search",
+  "counsellor.assignment.view",
+]);
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {

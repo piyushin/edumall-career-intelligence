@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -46,6 +47,7 @@ import type {
   SafeUser,
   SignupDto,
 } from "./auth.types";
+import { normalizePhoneE164 } from "./phone";
 
 interface RequestMetadata {
   ipAddress?: string | undefined;
@@ -157,6 +159,15 @@ export class AuthService {
 
     const email = input.email.trim();
     const normalizedEmail = normalizeEmail(email);
+    let phoneE164: string;
+    try {
+      phoneE164 = normalizePhoneE164(input.mobile);
+    } catch {
+      throw new BadRequestException({
+        code: "INVALID_MOBILE_NUMBER",
+        message: "Enter a valid mobile number with international country code.",
+      });
+    }
     const assessmentCode = PUBLIC_ASSESSMENT_CODE_BY_SEGMENT[input.segment];
 
     try {
@@ -201,6 +212,7 @@ export class AuthService {
           data: {
             email,
             normalizedEmail,
+            phoneE164,
             passwordHash,
             firstName: input.firstName.trim(),
             lastName: input.lastName.trim(),

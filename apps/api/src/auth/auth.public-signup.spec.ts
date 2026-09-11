@@ -80,6 +80,7 @@ describe("AuthService public candidate signup", () => {
         firstName: "Asha",
         lastName: "Patel",
         email: " Candidate@Example.com ",
+        mobile: "+91 98765 43210",
         password: "very-secure-password",
         segment: "SCHOOL_9_10",
       },
@@ -101,6 +102,7 @@ describe("AuthService public candidate signup", () => {
         data: expect.objectContaining({
           email: "Candidate@Example.com",
           normalizedEmail: "candidate@example.com",
+          phoneE164: "+919876543210",
           firstName: "Asha",
           lastName: "Patel",
           status: UserStatus.ACTIVE,

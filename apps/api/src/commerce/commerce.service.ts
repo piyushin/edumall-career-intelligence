@@ -2,7 +2,6 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
-  HttpException,
   Inject,
   Injectable,
   NotFoundException,
@@ -531,67 +530,6 @@ export class CommerceService {
       status: "paid" as const,
       orderId: order.id,
     };
-  }
-
-  public async assertReportAccess(context: AuthContext, attemptId: string): Promise<void> {
-    const organizationId = this.requireOrganization(context);
-
-    const attempt = await this.prisma.assessmentAttempt.findFirst({
-      where: {
-        id: attemptId,
-        assignment: {
-          organizationId,
-          userId: context.userId,
-        },
-      },
-      select: {
-        assignment: {
-          select: {
-            metadata: true,
-          },
-        },
-      },
-    });
-
-    if (!attempt) {
-      throw new NotFoundException({
-        code: "ASSESSMENT_ATTEMPT_NOT_FOUND",
-        message: "Assessment attempt not found.",
-      });
-    }
-
-    if (!this.isPublicSignup(attempt.assignment.metadata)) {
-      return;
-    }
-
-    const entitlement = await this.prisma.commerceEntitlement.findUnique({
-      where: {
-        userId_attemptId_type: {
-          userId: context.userId,
-          attemptId,
-          type: CommerceEntitlementType.REPORT,
-        },
-      },
-      select: {
-        status: true,
-        expiresAt: true,
-      },
-    });
-
-    const active =
-      entitlement?.status === CommerceEntitlementStatus.ACTIVE &&
-      (!entitlement.expiresAt || entitlement.expiresAt > new Date());
-
-    if (!active) {
-      throw new HttpException(
-        {
-          code: "REPORT_ENTITLEMENT_REQUIRED",
-          message:
-            "A valid report entitlement is required. Apply an organisation coupon or complete payment to unlock the report.",
-        },
-        402,
-      );
-    }
   }
 
   public async createProduct(context: AuthContext, input: CreateCommerceProductDto) {

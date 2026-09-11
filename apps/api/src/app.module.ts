@@ -8,6 +8,7 @@ import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health/health.controller";
 import { PlatformAdminModule } from "./platform-admin/platform-admin.module";
 import { ReadinessService } from "./health/readiness.service";
+import { ReportPlatformModule } from "./report-platform/report-platform.module";
 
 @Module({})
 export class AppModule {
@@ -20,6 +21,7 @@ export class AppModule {
         AssessmentModule,
         CareerIntelligenceModule,
         PlatformAdminModule,
+        ReportPlatformModule,
       ],
       module: AppModule,
       providers: [

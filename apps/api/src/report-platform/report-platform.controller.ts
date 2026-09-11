@@ -1,0 +1,269 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseGuards,
+  UseInterceptors,
+} from "@nestjs/common";
+import { MembershipRole } from "@prisma/client";
+import { AuthGuard } from "../auth/auth.guard";
+import type { AuthContext } from "../auth/auth.types";
+import { CsrfGuard } from "../auth/csrf.guard";
+import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
+import { Permissions } from "../auth/permissions.decorator";
+import { PermissionsGuard } from "../auth/permissions.guard";
+import { PrivilegedMutationAuditInterceptor } from "../auth/privileged-mutation-audit.interceptor";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
+import { SensitiveRead } from "../auth/sensitive-read.decorator";
+import { CandidateCounsellorAssignmentService } from "./candidate-counsellor-assignment.service";
+import { ReportConfigurationService } from "./report-configuration.service";
+import { ReportCreditService } from "./report-credit.service";
+import { ReportOpenService } from "./report-open.service";
+import { ReportSearchService } from "./report-search.service";
+import {
+  ConfigureAutomaticReportDto,
+  ConsumeReportCreditDto,
+  CreateCounsellorAssignmentDto,
+  CreateWalletDto,
+  CreditLedgerQueryDto,
+  CreditQuantityDto,
+  ReportSearchQueryDto,
+} from "./report-platform.types";
+
+const ADMIN_ROLES = [
+  MembershipRole.SUPER_ADMIN,
+  MembershipRole.PLATFORM_ADMIN,
+  MembershipRole.ORGANIZATION_ADMIN,
+];
+const STAFF_ROLES = [...ADMIN_ROLES, MembershipRole.COUNSELLOR];
+
+@Controller("admin/reports")
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
+@Roles(...ADMIN_ROLES)
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
+@SensitiveRead()
+export class AdminReportController {
+  public constructor(
+    @Inject(ReportSearchService) private readonly search: ReportSearchService,
+    @Inject(ReportOpenService) private readonly openReport: ReportOpenService,
+  ) {}
+
+  @Get()
+  @Permissions("report.search")
+  @Header("cache-control", "no-store")
+  public list(@CurrentAuthContext() context: AuthContext, @Query() query: ReportSearchQueryDto) {
+    return this.search.searchAdmin(context, query);
+  }
+
+  @Get(":attemptId/full")
+  @Permissions("report.view.full")
+  @Header("cache-control", "private, no-store")
+  public full(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+  ) {
+    return this.openReport.open(context, attemptId);
+  }
+}
+
+@Controller("staff/reports")
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
+@Roles(...STAFF_ROLES)
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
+@SensitiveRead()
+export class StaffReportController {
+  public constructor(
+    @Inject(ReportSearchService) private readonly search: ReportSearchService,
+    @Inject(ReportOpenService) private readonly openReport: ReportOpenService,
+  ) {}
+
+  @Get()
+  @Permissions("report.search")
+  @Header("cache-control", "no-store")
+  public list(@CurrentAuthContext() context: AuthContext, @Query() query: ReportSearchQueryDto) {
+    return this.search.searchStaff(context, query);
+  }
+
+  @Get(":attemptId/full")
+  @Permissions("candidate.view")
+  @Header("cache-control", "private, no-store")
+  public full(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+  ) {
+    return this.openReport.open(context, attemptId);
+  }
+}
+
+@Controller("admin/report-configurations")
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
+@Roles(...ADMIN_ROLES)
+@Permissions("assessment.manage")
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
+export class ReportConfigurationController {
+  public constructor(
+    @Inject(ReportConfigurationService) private readonly configurations: ReportConfigurationService,
+  ) {}
+  @Get()
+  @Header("cache-control", "no-store")
+  public list(
+    @CurrentAuthContext() context: AuthContext,
+    @Query("assessmentVersionId") assessmentVersionId?: string,
+  ) {
+    return this.configurations.list(context, assessmentVersionId);
+  }
+  @Post()
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public create(
+    @CurrentAuthContext() context: AuthContext,
+    @Body() body: ConfigureAutomaticReportDto,
+  ) {
+    return this.configurations.configure(context, body);
+  }
+  @Post(":configurationId/activate")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public activate(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("configurationId", new ParseUUIDPipe()) id: string,
+  ) {
+    return this.configurations.activate(context, id);
+  }
+}
+
+@Controller("admin/report-credits")
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
+@Roles(...ADMIN_ROLES)
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
+export class ReportCreditController {
+  public constructor(@Inject(ReportCreditService) private readonly credits: ReportCreditService) {}
+  @Post("wallets")
+  @Permissions("report.credit.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public wallet(@CurrentAuthContext() context: AuthContext, @Body() body: CreateWalletDto) {
+    return this.credits.createOrGetWallet(context, body);
+  }
+  @Get("wallets/:walletId")
+  @Permissions("report.credit.view")
+  @Header("cache-control", "no-store")
+  public getWallet(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("walletId", new ParseUUIDPipe()) id: string,
+  ) {
+    return this.credits.getWallet(context, id);
+  }
+  @Get("wallets/:walletId/ledger")
+  @Permissions("report.credit.view")
+  @Header("cache-control", "no-store")
+  public ledger(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("walletId", new ParseUUIDPipe()) id: string,
+    @Query() query: CreditLedgerQueryDto,
+  ) {
+    return this.credits.ledger(context, id, query.page, query.pageSize);
+  }
+  @Post("wallets/:walletId/allot")
+  @Permissions("report.credit.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public allot(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("walletId", new ParseUUIDPipe()) id: string,
+    @Body() body: CreditQuantityDto,
+  ) {
+    return this.credits.allot(context, id, body.quantity, body.reference);
+  }
+  @Post("wallets/:walletId/revoke-unused")
+  @Permissions("report.credit.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public revoke(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("walletId", new ParseUUIDPipe()) id: string,
+    @Body() body: CreditQuantityDto,
+  ) {
+    return this.credits.revokeUnusedAdminCredits(context, id, body.quantity, body.reference);
+  }
+  @Post("wallets/:walletId/consume")
+  @Permissions("report.credit.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public consume(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("walletId", new ParseUUIDPipe()) id: string,
+    @Body() body: ConsumeReportCreditDto,
+  ) {
+    return this.credits.consumeForAttempt(context, id, body);
+  }
+}
+
+@Controller("admin/counsellor-assignments")
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
+@Roles(...ADMIN_ROLES)
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
+export class CounsellorAssignmentAdminController {
+  public constructor(
+    @Inject(CandidateCounsellorAssignmentService)
+    private readonly assignments: CandidateCounsellorAssignmentService,
+  ) {}
+  @Get()
+  @Permissions("counsellor.assignment.view")
+  @Header("cache-control", "no-store")
+  public list(
+    @CurrentAuthContext() context: AuthContext,
+    @Query("organizationId") organizationId?: string,
+  ) {
+    return this.assignments.list(context, organizationId);
+  }
+  @Post()
+  @Permissions("counsellor.assignment.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public assign(
+    @CurrentAuthContext() context: AuthContext,
+    @Body() body: CreateCounsellorAssignmentDto,
+  ) {
+    return this.assignments.assign(context, body);
+  }
+  @Post(":assignmentId/revoke")
+  @Permissions("counsellor.assignment.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public revoke(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("assignmentId", new ParseUUIDPipe()) id: string,
+  ) {
+    return this.assignments.revoke(context, id);
+  }
+}
+
+@Controller("staff/counsellor-assignments")
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
+@Roles(...STAFF_ROLES)
+@Permissions("counsellor.assignment.view")
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
+@SensitiveRead()
+export class CounsellorAssignmentStaffController {
+  public constructor(
+    @Inject(CandidateCounsellorAssignmentService)
+    private readonly assignments: CandidateCounsellorAssignmentService,
+  ) {}
+
+  @Get()
+  @Header("cache-control", "no-store")
+  public list(
+    @CurrentAuthContext() context: AuthContext,
+    @Query("organizationId") organizationId?: string,
+  ) {
+    return this.assignments.list(context, organizationId);
+  }
+}

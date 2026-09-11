@@ -170,6 +170,68 @@ enum CareerFitFactorDirection {
   NEGATIVE
 }
 
+enum AssessmentReportConfigurationStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AssessmentReportGenerationStatus {
+  PENDING
+  PROCESSING
+  GENERATED
+  BLOCKED_CONFIGURATION
+  FAILED
+}
+
+enum CommerceReportPrincipalType {
+  USER
+  ORGANIZATION
+}
+
+enum CommerceReportAccessGrantSource {
+  CREDIT
+  COUPON
+  ADMIN
+  CONTRACT
+}
+
+enum CommerceReportAccessGrantStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum CommerceCreditWalletOwnerType {
+  USER
+  ORGANIZATION
+}
+
+enum CommerceCreditType {
+  REPORT_ACCESS
+}
+
+enum CommerceCreditWalletStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum CommerceCreditLedgerEventType {
+  PURCHASE
+  ADMIN_ALLOTMENT
+  TRANSFER_IN
+  TRANSFER_OUT
+  CONSUMPTION
+  REVERSAL
+  REVOCATION
+}
+
+enum CandidateCounsellorAssignmentStatus {
+  ACTIVE
+  REVOKED
+  COMPLETED
+}
+
 /// Technical metadata only. This is not a business-domain model.
 model SystemMetadata {
   id        String   @id @default(uuid()) @db.Uuid
@@ -182,24 +244,27 @@ model SystemMetadata {
 }
 
 model Organization {
-  id                       String                    @id @default(uuid()) @db.Uuid
-  name                     String                    @db.VarChar(200)
-  slug                     String                    @unique @db.VarChar(120)
-  status                   OrganizationStatus        @default(ACTIVE)
+  id                       String                          @id @default(uuid()) @db.Uuid
+  name                     String                          @db.VarChar(200)
+  slug                     String                          @unique @db.VarChar(120)
+  status                   OrganizationStatus              @default(ACTIVE)
   type                     OrganizationType
-  createdAt                DateTime                  @default(now()) @map("created_at")
-  updatedAt                DateTime                  @updatedAt @map("updated_at")
-  deletedAt                DateTime?                 @map("deleted_at")
+  createdAt                DateTime                        @default(now()) @map("created_at")
+  updatedAt                DateTime                        @updatedAt @map("updated_at")
+  deletedAt                DateTime?                       @map("deleted_at")
   memberships              OrganizationMembership[]
   sessions                 Session[]
-  auditLogs                AuditLog[]                @relation("OrganizationAuditLogs")
+  auditLogs                AuditLog[]                      @relation("OrganizationAuditLogs")
   assessmentDefinitions    AssessmentDefinition[]
   assessmentAssignments    AssessmentAssignment[]
   assessmentReportReleases AssessmentReportRelease[]
-  commerceProducts         CommerceProduct[]         @relation("CommerceProductOrganization")
-  commerceCoupons          CommerceCoupon[]          @relation("CommerceCouponOrganization")
-  commerceOrders           CommerceOrder[]           @relation("CommerceOrderOrganization")
-  commerceEntitlements     CommerceEntitlement[]     @relation("CommerceEntitlementOrganization")
+  commerceProducts         CommerceProduct[]               @relation("CommerceProductOrganization")
+  commerceCoupons          CommerceCoupon[]                @relation("CommerceCouponOrganization")
+  commerceOrders           CommerceOrder[]                 @relation("CommerceOrderOrganization")
+  commerceEntitlements     CommerceEntitlement[]           @relation("CommerceEntitlementOrganization")
+  reportAccessGrants       CommerceReportAccessGrant[]     @relation("ReportAccessGrantOrganizationPrincipal")
+  creditWallets            CommerceCreditWallet[]          @relation("CreditWalletOrganizationOwner")
+  counsellorAssignments    CandidateCounsellorAssignment[]
 
   adminRoleAssignments AdminRoleAssignment[]
 
@@ -209,39 +274,48 @@ model Organization {
 }
 
 model User {
-  id                           String                     @id @default(uuid()) @db.Uuid
-  email                        String                     @db.VarChar(320)
-  normalizedEmail              String                     @unique @map("normalized_email") @db.VarChar(320)
-  passwordHash                 String?                    @map("password_hash") @db.VarChar(255)
-  firstName                    String                     @map("first_name") @db.VarChar(100)
-  lastName                     String                     @map("last_name") @db.VarChar(100)
-  status                       UserStatus                 @default(INVITED)
-  emailVerifiedAt              DateTime?                  @map("email_verified_at")
-  lastLoginAt                  DateTime?                  @map("last_login_at")
-  failedLoginCount             Int                        @default(0) @map("failed_login_count")
-  lockedUntil                  DateTime?                  @map("locked_until")
-  createdAt                    DateTime                   @default(now()) @map("created_at")
-  updatedAt                    DateTime                   @updatedAt @map("updated_at")
-  deletedAt                    DateTime?                  @map("deleted_at")
-  memberships                  OrganizationMembership[]
-  sessions                     Session[]
-  passwordResetTokens          PasswordResetToken[]
-  invitationTokens             InvitationToken[]
-  notificationDeliveries       NotificationDelivery[]
-  auditLogs                    AuditLog[]                 @relation("ActorAuditLogs")
-  subjectAuditLogs             AuditLog[]                 @relation("SubjectAuditLogs")
-  createdAssessmentDefinitions AssessmentDefinition[]     @relation("AssessmentDefinitionCreatedBy")
-  createdAssessmentVersions    AssessmentVersion[]        @relation("AssessmentVersionCreatedBy")
-  publishedAssessmentVersions  AssessmentVersion[]        @relation("AssessmentVersionPublishedBy")
-  assignedAssessments          AssessmentAssignment[]     @relation("AssessmentAssignmentCandidate")
-  createdAssessmentAssignments AssessmentAssignment[]     @relation("AssessmentAssignmentAssignedBy")
-  releasedAssessmentReports    AssessmentReportRelease[]  @relation("AssessmentReportReleaseReleasedBy")
-  createdCommerceProducts      CommerceProduct[]          @relation("CommerceProductCreatedBy")
-  createdCommerceCoupons       CommerceCoupon[]           @relation("CommerceCouponCreatedBy")
-  commerceOrders               CommerceOrder[]            @relation("CommerceOrderUser")
-  commercePaymentsApproved     CommercePayment[]          @relation("CommercePaymentApprovedBy")
-  commerceCouponRedemptions    CommerceCouponRedemption[] @relation("CommerceCouponRedemptionUser")
-  commerceEntitlements         CommerceEntitlement[]      @relation("CommerceEntitlementUser")
+  id                             String                          @id @default(uuid()) @db.Uuid
+  email                          String                          @db.VarChar(320)
+  normalizedEmail                String                          @unique @map("normalized_email") @db.VarChar(320)
+  phoneE164                      String?                         @map("phone_e164") @db.VarChar(16)
+  passwordHash                   String?                         @map("password_hash") @db.VarChar(255)
+  firstName                      String                          @map("first_name") @db.VarChar(100)
+  lastName                       String                          @map("last_name") @db.VarChar(100)
+  status                         UserStatus                      @default(INVITED)
+  emailVerifiedAt                DateTime?                       @map("email_verified_at")
+  lastLoginAt                    DateTime?                       @map("last_login_at")
+  failedLoginCount               Int                             @default(0) @map("failed_login_count")
+  lockedUntil                    DateTime?                       @map("locked_until")
+  createdAt                      DateTime                        @default(now()) @map("created_at")
+  updatedAt                      DateTime                        @updatedAt @map("updated_at")
+  deletedAt                      DateTime?                       @map("deleted_at")
+  memberships                    OrganizationMembership[]
+  sessions                       Session[]
+  passwordResetTokens            PasswordResetToken[]
+  invitationTokens               InvitationToken[]
+  notificationDeliveries         NotificationDelivery[]
+  auditLogs                      AuditLog[]                      @relation("ActorAuditLogs")
+  subjectAuditLogs               AuditLog[]                      @relation("SubjectAuditLogs")
+  createdAssessmentDefinitions   AssessmentDefinition[]          @relation("AssessmentDefinitionCreatedBy")
+  createdAssessmentVersions      AssessmentVersion[]             @relation("AssessmentVersionCreatedBy")
+  publishedAssessmentVersions    AssessmentVersion[]             @relation("AssessmentVersionPublishedBy")
+  assignedAssessments            AssessmentAssignment[]          @relation("AssessmentAssignmentCandidate")
+  createdAssessmentAssignments   AssessmentAssignment[]          @relation("AssessmentAssignmentAssignedBy")
+  releasedAssessmentReports      AssessmentReportRelease[]       @relation("AssessmentReportReleaseReleasedBy")
+  createdCommerceProducts        CommerceProduct[]               @relation("CommerceProductCreatedBy")
+  createdCommerceCoupons         CommerceCoupon[]                @relation("CommerceCouponCreatedBy")
+  commerceOrders                 CommerceOrder[]                 @relation("CommerceOrderUser")
+  commercePaymentsApproved       CommercePayment[]               @relation("CommercePaymentApprovedBy")
+  commerceCouponRedemptions      CommerceCouponRedemption[]      @relation("CommerceCouponRedemptionUser")
+  commerceEntitlements           CommerceEntitlement[]           @relation("CommerceEntitlementUser")
+  configuredReportConfigurations AssessmentReportConfiguration[] @relation("AssessmentReportConfigurationConfiguredBy")
+  grantedReportAccessGrants      CommerceReportAccessGrant[]     @relation("ReportAccessGrantGrantedBy")
+  reportAccessGrants             CommerceReportAccessGrant[]     @relation("ReportAccessGrantUserPrincipal")
+  creditWallets                  CommerceCreditWallet[]          @relation("CreditWalletUserOwner")
+  creditLedgerEntries            CommerceCreditLedgerEntry[]     @relation("CreditLedgerActor")
+  candidateCounsellorAssignments CandidateCounsellorAssignment[] @relation("CandidateCounsellorAssignmentCandidate")
+  counsellorCandidateAssignments CandidateCounsellorAssignment[] @relation("CandidateCounsellorAssignmentCounsellor")
+  assignedCounsellorAssignments  CandidateCounsellorAssignment[] @relation("CandidateCounsellorAssignmentAssignedBy")
 
   adminProfile                AdminProfile?         @relation("AdminProfileUser")
   createdAdminProfiles        AdminProfile[]        @relation("AdminProfileCreatedBy")
@@ -250,6 +324,7 @@ model User {
 
   @@index([status])
   @@index([status, lockedUntil])
+  @@index([phoneE164])
   @@map("users")
 }
 
@@ -402,30 +477,30 @@ model AssessmentDefinition {
 /// Versioned assessment specification.
 /// Published/retired versions are protected from content mutation by the database migration.
 model AssessmentVersion {
-  id                     String                         @id @default(uuid()) @db.Uuid
-  assessmentDefinitionId String                         @map("assessment_definition_id") @db.Uuid
-  versionNumber          Int                            @map("version_number")
-  status                 AssessmentVersionStatus        @default(DRAFT)
-  title                  String                         @db.VarChar(200)
-  edition                String                         @db.VarChar(60)
-  form                   String                         @db.VarChar(60)
-  language               String                         @db.VarChar(20)
-  scoringVersion         String                         @map("scoring_version") @db.VarChar(60)
-  normVersion            String                         @map("norm_version") @db.VarChar(60)
-  reportVersion          String                         @map("report_version") @db.VarChar(60)
-  description            String?                        @db.Text
-  instructions           String?                        @db.Text
-  deliveryConfig         Json?                          @map("delivery_config") @db.JsonB
-  scoringConfig          Json?                          @map("scoring_config") @db.JsonB
-  createdByUserId        String?                        @map("created_by_user_id") @db.Uuid
-  publishedByUserId      String?                        @map("published_by_user_id") @db.Uuid
-  createdAt              DateTime                       @default(now()) @map("created_at")
-  updatedAt              DateTime                       @updatedAt @map("updated_at")
-  publishedAt            DateTime?                      @map("published_at")
-  retiredAt              DateTime?                      @map("retired_at")
-  assessmentDefinition   AssessmentDefinition           @relation(fields: [assessmentDefinitionId], references: [id], onDelete: Restrict)
-  createdByUser          User?                          @relation("AssessmentVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  publishedByUser        User?                          @relation("AssessmentVersionPublishedBy", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  id                     String                          @id @default(uuid()) @db.Uuid
+  assessmentDefinitionId String                          @map("assessment_definition_id") @db.Uuid
+  versionNumber          Int                             @map("version_number")
+  status                 AssessmentVersionStatus         @default(DRAFT)
+  title                  String                          @db.VarChar(200)
+  edition                String                          @db.VarChar(60)
+  form                   String                          @db.VarChar(60)
+  language               String                          @db.VarChar(20)
+  scoringVersion         String                          @map("scoring_version") @db.VarChar(60)
+  normVersion            String                          @map("norm_version") @db.VarChar(60)
+  reportVersion          String                          @map("report_version") @db.VarChar(60)
+  description            String?                         @db.Text
+  instructions           String?                         @db.Text
+  deliveryConfig         Json?                           @map("delivery_config") @db.JsonB
+  scoringConfig          Json?                           @map("scoring_config") @db.JsonB
+  createdByUserId        String?                         @map("created_by_user_id") @db.Uuid
+  publishedByUserId      String?                         @map("published_by_user_id") @db.Uuid
+  createdAt              DateTime                        @default(now()) @map("created_at")
+  updatedAt              DateTime                        @updatedAt @map("updated_at")
+  publishedAt            DateTime?                       @map("published_at")
+  retiredAt              DateTime?                       @map("retired_at")
+  assessmentDefinition   AssessmentDefinition            @relation(fields: [assessmentDefinitionId], references: [id], onDelete: Restrict)
+  createdByUser          User?                           @relation("AssessmentVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  publishedByUser        User?                           @relation("AssessmentVersionPublishedBy", fields: [publishedByUserId], references: [id], onDelete: Restrict)
   constructs             AssessmentConstruct[]
   items                  AssessmentItem[]
   assignments            AssessmentAssignment[]
@@ -433,7 +508,8 @@ model AssessmentVersion {
   interpretationSets     AssessmentInterpretationSet[]
   reportDataSnapshots    AssessmentReportDataSnapshot[]
   careerFitModels        CareerFitModel[]
-  commerceProducts       CommerceProduct[]              @relation("CommerceProductAssessmentVersion")
+  commerceProducts       CommerceProduct[]               @relation("CommerceProductAssessmentVersion")
+  reportConfigurations   AssessmentReportConfiguration[]
 
   @@unique([assessmentDefinitionId, versionNumber])
   @@index([assessmentDefinitionId, status])
@@ -568,21 +644,24 @@ model AssessmentAssignment {
 
 /// One actual sitting/attempt under an assignment.
 model AssessmentAttempt {
-  id                   String                    @id @default(uuid()) @db.Uuid
-  assignmentId         String                    @map("assignment_id") @db.Uuid
-  attemptNumber        Int                       @map("attempt_number")
-  status               AssessmentAttemptStatus   @default(IN_PROGRESS)
-  startedAt            DateTime                  @default(now()) @map("started_at")
-  lastActivityAt       DateTime                  @default(now()) @map("last_activity_at")
-  submittedAt          DateTime?                 @map("submitted_at")
-  abandonedAt          DateTime?                 @map("abandoned_at")
-  metadata             Json?                     @db.JsonB
-  assignment           AssessmentAssignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  id                   String                      @id @default(uuid()) @db.Uuid
+  assignmentId         String                      @map("assignment_id") @db.Uuid
+  attemptNumber        Int                         @map("attempt_number")
+  status               AssessmentAttemptStatus     @default(IN_PROGRESS)
+  startedAt            DateTime                    @default(now()) @map("started_at")
+  lastActivityAt       DateTime                    @default(now()) @map("last_activity_at")
+  submittedAt          DateTime?                   @map("submitted_at")
+  abandonedAt          DateTime?                   @map("abandoned_at")
+  metadata             Json?                       @db.JsonB
+  assignment           AssessmentAssignment        @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   responses            AssessmentResponse[]
   scoringRuns          AssessmentScoringRun[]
   reportReleases       AssessmentReportRelease[]
-  commerceOrders       CommerceOrder[]           @relation("CommerceOrderAttempt")
-  commerceEntitlements CommerceEntitlement[]     @relation("CommerceEntitlementAttempt")
+  commerceOrders       CommerceOrder[]             @relation("CommerceOrderAttempt")
+  commerceEntitlements CommerceEntitlement[]       @relation("CommerceEntitlementAttempt")
+  reportGeneration     AssessmentReportGeneration?
+  reportAccessGrants   CommerceReportAccessGrant[]
+  creditLedgerEntries  CommerceCreditLedgerEntry[]
 
   @@unique([assignmentId, attemptNumber])
   @@index([assignmentId, status])
@@ -663,21 +742,22 @@ model AssessmentConstructScore {
 /// Versioned normative data package for one immutable assessment version.
 /// Actual norm values must come from validated psychometric source data.
 model AssessmentNormSet {
-  id                  String                      @id @default(uuid()) @db.Uuid
-  assessmentVersionId String                      @map("assessment_version_id") @db.Uuid
-  normVersion         String                      @map("norm_version") @db.VarChar(60)
-  name                String                      @db.VarChar(200)
-  description         String?                     @db.Text
-  sourceReference     String?                     @map("source_reference") @db.Text
-  populationMetadata  Json?                       @map("population_metadata") @db.JsonB
-  status              AssessmentNormSetStatus     @default(DRAFT)
-  publishedAt         DateTime?                   @map("published_at")
-  retiredAt           DateTime?                   @map("retired_at")
-  createdAt           DateTime                    @default(now()) @map("created_at")
-  updatedAt           DateTime                    @updatedAt @map("updated_at")
-  assessmentVersion   AssessmentVersion           @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
-  groups              AssessmentNormGroup[]
-  applications        AssessmentNormApplication[]
+  id                   String                          @id @default(uuid()) @db.Uuid
+  assessmentVersionId  String                          @map("assessment_version_id") @db.Uuid
+  normVersion          String                          @map("norm_version") @db.VarChar(60)
+  name                 String                          @db.VarChar(200)
+  description          String?                         @db.Text
+  sourceReference      String?                         @map("source_reference") @db.Text
+  populationMetadata   Json?                           @map("population_metadata") @db.JsonB
+  status               AssessmentNormSetStatus         @default(DRAFT)
+  publishedAt          DateTime?                       @map("published_at")
+  retiredAt            DateTime?                       @map("retired_at")
+  createdAt            DateTime                        @default(now()) @map("created_at")
+  updatedAt            DateTime                        @updatedAt @map("updated_at")
+  assessmentVersion    AssessmentVersion               @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  groups               AssessmentNormGroup[]
+  applications         AssessmentNormApplication[]
+  reportConfigurations AssessmentReportConfiguration[]
 
   @@unique([assessmentVersionId, normVersion])
   @@index([assessmentVersionId, status])
@@ -688,19 +768,20 @@ model AssessmentNormSet {
 /// One defined norm population/subgroup inside a norm set.
 /// criteria stores documented inclusion criteria only; it is not executable scoring logic.
 model AssessmentNormGroup {
-  id              String                         @id @default(uuid()) @db.Uuid
-  normSetId       String                         @map("norm_set_id") @db.Uuid
-  code            String                         @db.VarChar(120)
-  name            String                         @db.VarChar(200)
-  description     String?                        @db.Text
-  criteria        Json?                          @db.JsonB
-  sampleSize      Int?                           @map("sample_size")
-  metadata        Json?                          @db.JsonB
-  createdAt       DateTime                       @default(now()) @map("created_at")
-  updatedAt       DateTime                       @updatedAt @map("updated_at")
-  normSet         AssessmentNormSet              @relation(fields: [normSetId], references: [id], onDelete: Restrict)
-  constructTables AssessmentConstructNormTable[]
-  applications    AssessmentNormApplication[]
+  id                             String                          @id @default(uuid()) @db.Uuid
+  normSetId                      String                          @map("norm_set_id") @db.Uuid
+  code                           String                          @db.VarChar(120)
+  name                           String                          @db.VarChar(200)
+  description                    String?                         @db.Text
+  criteria                       Json?                           @db.JsonB
+  sampleSize                     Int?                            @map("sample_size")
+  metadata                       Json?                           @db.JsonB
+  createdAt                      DateTime                        @default(now()) @map("created_at")
+  updatedAt                      DateTime                        @updatedAt @map("updated_at")
+  normSet                        AssessmentNormSet               @relation(fields: [normSetId], references: [id], onDelete: Restrict)
+  constructTables                AssessmentConstructNormTable[]
+  applications                   AssessmentNormApplication[]
+  assessmentReportConfigurations AssessmentReportConfiguration[]
 
   @@unique([normSetId, code])
   @@index([normSetId])
@@ -779,21 +860,22 @@ model AssessmentNormApplication {
 /// Versioned interpretation-rule package for one assessment version.
 /// Rules must be supported by validated psychometric documentation before publication.
 model AssessmentInterpretationSet {
-  id                  String                            @id @default(uuid()) @db.Uuid
-  assessmentVersionId String                            @map("assessment_version_id") @db.Uuid
-  version             String                            @db.VarChar(60)
-  name                String                            @db.VarChar(200)
-  description         String?                           @db.Text
-  sourceReference     String?                           @map("source_reference") @db.Text
-  methodology         Json?                             @db.JsonB
-  status              AssessmentInterpretationSetStatus @default(DRAFT)
-  publishedAt         DateTime?                         @map("published_at")
-  retiredAt           DateTime?                         @map("retired_at")
-  createdAt           DateTime                          @default(now()) @map("created_at")
-  updatedAt           DateTime                          @updatedAt @map("updated_at")
-  assessmentVersion   AssessmentVersion                 @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
-  rules               AssessmentInterpretationRule[]
-  reportDataSnapshots AssessmentReportDataSnapshot[]
+  id                   String                            @id @default(uuid()) @db.Uuid
+  assessmentVersionId  String                            @map("assessment_version_id") @db.Uuid
+  version              String                            @db.VarChar(60)
+  name                 String                            @db.VarChar(200)
+  description          String?                           @db.Text
+  sourceReference      String?                           @map("source_reference") @db.Text
+  methodology          Json?                             @db.JsonB
+  status               AssessmentInterpretationSetStatus @default(DRAFT)
+  publishedAt          DateTime?                         @map("published_at")
+  retiredAt            DateTime?                         @map("retired_at")
+  createdAt            DateTime                          @default(now()) @map("created_at")
+  updatedAt            DateTime                          @updatedAt @map("updated_at")
+  assessmentVersion    AssessmentVersion                 @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  rules                AssessmentInterpretationRule[]
+  reportDataSnapshots  AssessmentReportDataSnapshot[]
+  reportConfigurations AssessmentReportConfiguration[]
 
   @@unique([assessmentVersionId, version])
   @@index([assessmentVersionId, status])
@@ -863,6 +945,7 @@ model AssessmentReportDataSnapshot {
   assessmentVersion   AssessmentVersion            @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
   interpretationSet   AssessmentInterpretationSet? @relation(fields: [interpretationSetId], references: [id], onDelete: Restrict)
   reportReleases      AssessmentReportRelease[]
+  reportGenerations   AssessmentReportGeneration[]
 
   @@unique([scoringRunId, reportVersion, inputHash])
   @@index([assessmentVersionId, reportVersion])
@@ -958,26 +1041,27 @@ model CareerPath {
 
 /// Published scientific/configuration package mapping an assessment version to a career taxonomy version.
 model CareerFitModel {
-  id                      String                        @id @default(uuid()) @db.Uuid
-  assessmentVersionId     String                        @map("assessment_version_id") @db.Uuid
-  careerTaxonomyVersionId String                        @map("career_taxonomy_version_id") @db.Uuid
-  version                 String                        @db.VarChar(60)
-  name                    String                        @db.VarChar(200)
-  description             String?                       @db.Text
-  algorithmKey            String                        @map("algorithm_key") @db.VarChar(120)
-  algorithmVersion        String                        @map("algorithm_version") @db.VarChar(60)
-  sourceReference         String?                       @map("source_reference") @db.Text
-  methodology             Json?                         @db.JsonB
-  status                  CareerFitModelStatus          @default(DRAFT)
-  createdAt               DateTime                      @default(now()) @map("created_at")
-  updatedAt               DateTime                      @updatedAt @map("updated_at")
-  publishedAt             DateTime?                     @map("published_at")
-  retiredAt               DateTime?                     @map("retired_at")
-  assessmentVersion       AssessmentVersion             @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
-  careerTaxonomyVersion   CareerTaxonomyVersion         @relation(fields: [careerTaxonomyVersionId], references: [id], onDelete: Restrict)
+  id                      String                          @id @default(uuid()) @db.Uuid
+  assessmentVersionId     String                          @map("assessment_version_id") @db.Uuid
+  careerTaxonomyVersionId String                          @map("career_taxonomy_version_id") @db.Uuid
+  version                 String                          @db.VarChar(60)
+  name                    String                          @db.VarChar(200)
+  description             String?                         @db.Text
+  algorithmKey            String                          @map("algorithm_key") @db.VarChar(120)
+  algorithmVersion        String                          @map("algorithm_version") @db.VarChar(60)
+  sourceReference         String?                         @map("source_reference") @db.Text
+  methodology             Json?                           @db.JsonB
+  status                  CareerFitModelStatus            @default(DRAFT)
+  createdAt               DateTime                        @default(now()) @map("created_at")
+  updatedAt               DateTime                        @updatedAt @map("updated_at")
+  publishedAt             DateTime?                       @map("published_at")
+  retiredAt               DateTime?                       @map("retired_at")
+  assessmentVersion       AssessmentVersion               @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  careerTaxonomyVersion   CareerTaxonomyVersion           @relation(fields: [careerTaxonomyVersionId], references: [id], onDelete: Restrict)
   factors                 CareerFitModelFactor[]
   recommendationBands     CareerFitRecommendationBand[]
   runs                    CareerFitRun[]
+  reportConfigurations    AssessmentReportConfiguration[]
 
   @@unique([assessmentVersionId, careerTaxonomyVersionId, version])
   @@index([assessmentVersionId, status])
@@ -1352,14 +1436,15 @@ model CommerceOrder {
   paidAt             DateTime?           @map("paid_at")
   cancelledAt        DateTime?           @map("cancelled_at")
 
-  organization      Organization               @relation("CommerceOrderOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
-  user              User                       @relation("CommerceOrderUser", fields: [userId], references: [id], onDelete: Restrict)
-  attempt           AssessmentAttempt          @relation("CommerceOrderAttempt", fields: [attemptId], references: [id], onDelete: Restrict)
-  product           CommerceProduct            @relation(fields: [productId], references: [id], onDelete: Restrict)
-  coupon            CommerceCoupon?            @relation(fields: [couponId], references: [id], onDelete: Restrict)
-  payments          CommercePayment[]
-  couponRedemptions CommerceCouponRedemption[]
-  entitlements      CommerceEntitlement[]
+  organization        Organization                @relation("CommerceOrderOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  user                User                        @relation("CommerceOrderUser", fields: [userId], references: [id], onDelete: Restrict)
+  attempt             AssessmentAttempt           @relation("CommerceOrderAttempt", fields: [attemptId], references: [id], onDelete: Restrict)
+  product             CommerceProduct             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  coupon              CommerceCoupon?             @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  payments            CommercePayment[]
+  couponRedemptions   CommerceCouponRedemption[]
+  entitlements        CommerceEntitlement[]
+  creditLedgerEntries CommerceCreditLedgerEntry[]
 
   @@index([organizationId, createdAt])
   @@index([userId, createdAt])
@@ -1437,4 +1522,163 @@ model CommerceEntitlement {
   @@index([userId, status])
   @@index([attemptId, status])
   @@map("commerce_entitlements")
+}
+
+model AssessmentReportConfiguration {
+  id                    String                              @id @default(uuid()) @db.Uuid
+  assessmentVersionId   String                              @map("assessment_version_id") @db.Uuid
+  normGroupId           String                              @map("norm_group_id") @db.Uuid
+  interpretationSetId   String                              @map("interpretation_set_id") @db.Uuid
+  careerFitModelId      String                              @map("career_fit_model_id") @db.Uuid
+  reportTemplateVersion String                              @map("report_template_version") @db.VarChar(60)
+  status                AssessmentReportConfigurationStatus @default(INACTIVE)
+  configuredByUserId    String                              @map("configured_by_user_id") @db.Uuid
+  createdAt             DateTime                            @default(now()) @map("created_at")
+  updatedAt             DateTime                            @updatedAt @map("updated_at")
+
+  assessmentVersion   AssessmentVersion            @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  normGroup           AssessmentNormGroup          @relation(fields: [normGroupId], references: [id], onDelete: Restrict)
+  interpretationSet   AssessmentInterpretationSet  @relation(fields: [interpretationSetId], references: [id], onDelete: Restrict)
+  careerFitModel      CareerFitModel               @relation(fields: [careerFitModelId], references: [id], onDelete: Restrict)
+  configuredByUser    User                         @relation("AssessmentReportConfigurationConfiguredBy", fields: [configuredByUserId], references: [id], onDelete: Restrict)
+  generations         AssessmentReportGeneration[]
+  assessmentNormSet   AssessmentNormSet?           @relation(fields: [assessmentNormSetId], references: [id])
+  assessmentNormSetId String?                      @db.Uuid
+
+  @@index([assessmentVersionId, status])
+  @@index([normGroupId])
+  @@index([interpretationSetId])
+  @@index([careerFitModelId])
+  @@index([configuredByUserId, createdAt])
+  @@map("assessment_report_configurations")
+}
+
+model AssessmentReportGeneration {
+  id                   String                           @id @default(uuid()) @db.Uuid
+  attemptId            String                           @unique @map("attempt_id") @db.Uuid
+  configurationId      String?                          @map("configuration_id") @db.Uuid
+  reportDataSnapshotId String?                          @map("report_data_snapshot_id") @db.Uuid
+  status               AssessmentReportGenerationStatus @default(PENDING)
+  attemptCount         Int                              @default(0) @map("attempt_count")
+  lastErrorCode        String?                          @map("last_error_code") @db.VarChar(120)
+  lastErrorMessage     String?                          @map("last_error_message") @db.VarChar(1000)
+  startedAt            DateTime?                        @map("started_at")
+  completedAt          DateTime?                        @map("completed_at")
+  lastAttemptAt        DateTime?                        @map("last_attempt_at")
+  createdAt            DateTime                         @default(now()) @map("created_at")
+  updatedAt            DateTime                         @updatedAt @map("updated_at")
+
+  attempt            AssessmentAttempt              @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  configuration      AssessmentReportConfiguration? @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  reportDataSnapshot AssessmentReportDataSnapshot?  @relation(fields: [reportDataSnapshotId], references: [id], onDelete: Restrict)
+
+  @@index([status, updatedAt])
+  @@index([configurationId])
+  @@index([reportDataSnapshotId])
+  @@map("assessment_report_generations")
+}
+
+model CommerceReportAccessGrant {
+  id                      String                          @id @default(uuid()) @db.Uuid
+  attemptId               String                          @map("attempt_id") @db.Uuid
+  principalType           CommerceReportPrincipalType     @map("principal_type")
+  principalUserId         String?                         @map("principal_user_id") @db.Uuid
+  principalOrganizationId String?                         @map("principal_organization_id") @db.Uuid
+  source                  CommerceReportAccessGrantSource
+  status                  CommerceReportAccessGrantStatus @default(ACTIVE)
+  grantedByUserId         String                          @map("granted_by_user_id") @db.Uuid
+  creditLedgerEntryId     String?                         @unique @map("credit_ledger_entry_id") @db.Uuid
+  grantedAt               DateTime                        @default(now()) @map("granted_at")
+  expiresAt               DateTime?                       @map("expires_at")
+  revokedAt               DateTime?                       @map("revoked_at")
+  metadata                Json?                           @db.JsonB
+
+  attempt               AssessmentAttempt          @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  principalUser         User?                      @relation("ReportAccessGrantUserPrincipal", fields: [principalUserId], references: [id], onDelete: Restrict)
+  principalOrganization Organization?              @relation("ReportAccessGrantOrganizationPrincipal", fields: [principalOrganizationId], references: [id], onDelete: Restrict)
+  grantedByUser         User                       @relation("ReportAccessGrantGrantedBy", fields: [grantedByUserId], references: [id], onDelete: Restrict)
+  creditLedgerEntry     CommerceCreditLedgerEntry? @relation("GrantCreditLedgerEntry", fields: [creditLedgerEntryId], references: [id], onDelete: Restrict)
+  ledgerEntryReference  CommerceCreditLedgerEntry? @relation("LedgerReportAccessGrant")
+
+  @@index([attemptId, status])
+  @@index([principalUserId, status])
+  @@index([principalOrganizationId, status])
+  @@index([grantedByUserId, grantedAt])
+  @@index([expiresAt])
+  @@map("commerce_report_access_grants")
+}
+
+model CommerceCreditWallet {
+  id                  String                        @id @default(uuid()) @db.Uuid
+  ownerType           CommerceCreditWalletOwnerType @map("owner_type")
+  ownerUserId         String?                       @map("owner_user_id") @db.Uuid
+  ownerOrganizationId String?                       @map("owner_organization_id") @db.Uuid
+  creditType          CommerceCreditType            @default(REPORT_ACCESS) @map("credit_type")
+  status              CommerceCreditWalletStatus    @default(ACTIVE)
+  currentBalance      Int                           @default(0) @map("current_balance")
+  createdAt           DateTime                      @default(now()) @map("created_at")
+  updatedAt           DateTime                      @updatedAt @map("updated_at")
+
+  ownerUser         User?                       @relation("CreditWalletUserOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  ownerOrganization Organization?               @relation("CreditWalletOrganizationOwner", fields: [ownerOrganizationId], references: [id], onDelete: Restrict)
+  ledgerEntries     CommerceCreditLedgerEntry[]
+
+  @@index([ownerUserId, status])
+  @@index([ownerOrganizationId, status])
+  @@index([status])
+  @@map("commerce_credit_wallets")
+}
+
+model CommerceCreditLedgerEntry {
+  id           String                        @id @default(uuid()) @db.Uuid
+  walletId     String                        @map("wallet_id") @db.Uuid
+  eventType    CommerceCreditLedgerEventType @map("event_type")
+  quantity     Int
+  delta        Int
+  balanceAfter Int                           @map("balance_after")
+  attemptId    String?                       @map("attempt_id") @db.Uuid
+  orderId      String?                       @map("order_id") @db.Uuid
+  actorUserId  String                        @map("actor_user_id") @db.Uuid
+  reference    String?                       @db.VarChar(200)
+  metadata     Json?                         @db.JsonB
+  createdAt    DateTime                      @default(now()) @map("created_at")
+
+  wallet                CommerceCreditWallet       @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  attempt               AssessmentAttempt?         @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  order                 CommerceOrder?             @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  actorUser             User                       @relation("CreditLedgerActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  reportAccessGrantId   String?                    @unique @map("report_access_grant_id") @db.Uuid
+  reportAccessGrant     CommerceReportAccessGrant? @relation("LedgerReportAccessGrant", fields: [reportAccessGrantId], references: [id], onDelete: Restrict)
+  accessGrantUsingEntry CommerceReportAccessGrant? @relation("GrantCreditLedgerEntry")
+
+  @@index([walletId, createdAt])
+  @@index([attemptId, eventType])
+  @@index([orderId])
+  @@index([actorUserId, createdAt])
+  @@map("commerce_credit_ledger_entries")
+}
+
+model CandidateCounsellorAssignment {
+  id               String                              @id @default(uuid()) @db.Uuid
+  organizationId   String                              @map("organization_id") @db.Uuid
+  candidateUserId  String                              @map("candidate_user_id") @db.Uuid
+  counsellorUserId String                              @map("counsellor_user_id") @db.Uuid
+  status           CandidateCounsellorAssignmentStatus @default(ACTIVE)
+  assignedByUserId String                              @map("assigned_by_user_id") @db.Uuid
+  assignedAt       DateTime                            @default(now()) @map("assigned_at")
+  revokedAt        DateTime?                           @map("revoked_at")
+  consentedAt      DateTime?                           @map("consented_at")
+  consentMetadata  Json?                               @map("consent_metadata") @db.JsonB
+  metadata         Json?                               @db.JsonB
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  candidateUser  User         @relation("CandidateCounsellorAssignmentCandidate", fields: [candidateUserId], references: [id], onDelete: Restrict)
+  counsellorUser User         @relation("CandidateCounsellorAssignmentCounsellor", fields: [counsellorUserId], references: [id], onDelete: Restrict)
+  assignedByUser User         @relation("CandidateCounsellorAssignmentAssignedBy", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status])
+  @@index([candidateUserId, status])
+  @@index([counsellorUserId, organizationId, status])
+  @@index([assignedByUserId, assignedAt])
+  @@map("candidate_counsellor_assignments")
 }

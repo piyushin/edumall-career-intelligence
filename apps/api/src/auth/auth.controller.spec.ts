@@ -157,6 +157,7 @@ describe("authentication HTTP API", () => {
         firstName: "Asha",
         lastName: "Patel",
         email: "asha@example.com",
+        mobile: "+919876543210",
         password: "long-enough-password",
         segment: "SCHOOL_9_10",
       })

@@ -32,6 +32,7 @@ import { AssessmentReportReleaseService } from "./assessment-report-release.serv
 import { AssessmentReportWorkflowService } from "./assessment-report-workflow.service";
 import { GenerateAssessmentReportDto } from "./assessment-report-workflow.types";
 import { AssessmentResultsService } from "./assessment-results.service";
+import { ReportAccessPolicyService } from "../report-platform/report-access-policy.service";
 
 @Controller("staff/assessment-results")
 @UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
@@ -54,6 +55,8 @@ export class AssessmentResultsController {
     private readonly releases: AssessmentReportReleaseService,
     @Inject(AssessmentReportPdfService)
     private readonly pdf: AssessmentReportPdfService,
+    @Inject(ReportAccessPolicyService)
+    private readonly reportAccess: ReportAccessPolicyService,
   ) {}
 
   @Get()
@@ -67,11 +70,12 @@ export class AssessmentResultsController {
 
   @Get(":attemptId/report-readiness")
   @Header("cache-control", "no-store")
-  public reportReadiness(
+  public async reportReadiness(
     @CurrentAuthContext() context: AuthContext,
     @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
     @Query() query: AssessmentAssignmentOrganizationQueryDto,
   ) {
+    await this.reportAccess.assertCanOpenFullReport(context, attemptId);
     return this.reports.getReadiness(context, attemptId, query.organizationId);
   }
 
@@ -79,12 +83,13 @@ export class AssessmentResultsController {
   @Permissions("candidate.view", "report.release")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
-  public generateReportSnapshot(
+  public async generateReportSnapshot(
     @CurrentAuthContext() context: AuthContext,
     @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
     @Query() query: AssessmentAssignmentOrganizationQueryDto,
     @Body() body: GenerateAssessmentReportDto,
   ) {
+    await this.reportAccess.assertCanOpenFullReport(context, attemptId);
     return this.reports.generate(
       context,
       attemptId,
@@ -98,11 +103,12 @@ export class AssessmentResultsController {
   @Permissions("report.release")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
-  public releaseReport(
+  public async releaseReport(
     @CurrentAuthContext() context: AuthContext,
     @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
     @Query() query: AssessmentAssignmentOrganizationQueryDto,
   ) {
+    await this.reportAccess.assertCanOpenFullReport(context, attemptId);
     return this.releases.release(context, attemptId, query.organizationId);
   }
 
@@ -114,6 +120,7 @@ export class AssessmentResultsController {
     @Query() query: AssessmentAssignmentOrganizationQueryDto,
     @Res({ passthrough: true }) response: Response,
   ) {
+    await this.reportAccess.assertCanDownloadFullReport(context, attemptId);
     const readiness = await this.reports.getReadiness(context, attemptId, query.organizationId);
 
     if (!readiness.latestSnapshot) {
@@ -137,11 +144,12 @@ export class AssessmentResultsController {
 
   @Get(":attemptId")
   @Header("cache-control", "no-store")
-  public get(
+  public async get(
     @CurrentAuthContext() context: AuthContext,
     @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
     @Query() query: AssessmentAssignmentOrganizationQueryDto,
   ) {
+    await this.reportAccess.assertCanOpenFullReport(context, attemptId);
     return this.results.getResult(context, attemptId, query.organizationId);
   }
 }

@@ -1,6 +1,15 @@
 import type { AuthContext } from "@edumall/database";
 import type { User, UserStatus } from "@prisma/client";
-import { IsEmail, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from "class-validator";
+import {
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  MaxLength,
+  MinLength,
+} from "class-validator";
 
 export type { AuthContext };
 
@@ -69,6 +78,13 @@ export class SignupDto {
   @IsEmail()
   @MaxLength(320)
   public email!: string;
+
+  @IsString()
+  @MaxLength(32)
+  @Matches(/^\+[1-9][0-9\s().-]{7,30}$/, {
+    message: "mobile must include a valid international country code",
+  })
+  public mobile!: string;
 
   @IsString()
   @MaxLength(1024)

@@ -25,6 +25,7 @@ function user(overrides: Partial<User> = {}): User {
     id: userId,
     email: "user@example.com",
     normalizedEmail: "user@example.com",
+    phoneE164: null,
     passwordHash: null,
     firstName: "Test",
     lastName: "User",

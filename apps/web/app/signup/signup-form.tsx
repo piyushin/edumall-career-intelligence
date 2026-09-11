@@ -33,6 +33,8 @@ export function SignupForm() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [countryCode, setCountryCode] = useState("+91");
+  const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [segment, setSegment] = useState<PublicSignupSegment>("SCHOOL_11_12");
@@ -55,7 +57,14 @@ export function SignupForm() {
 
     setSubmitting(true);
     try {
-      await signup({ firstName, lastName, email, password, segment });
+      await signup({
+        firstName,
+        lastName,
+        email,
+        mobile: `${countryCode}${mobile}`,
+        password,
+        segment,
+      });
       router.replace("/candidate/assessments");
       router.refresh();
     } catch (caught) {
@@ -141,6 +150,41 @@ export function SignupForm() {
                 className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-50"
               />
             </label>
+            <fieldset>
+              <legend className="text-sm font-bold text-slate-800">Mobile number</legend>
+              <div className="mt-2 grid grid-cols-[7rem_1fr] gap-3">
+                <label>
+                  <span className="sr-only">Country code</span>
+                  <input
+                    type="tel"
+                    required
+                    inputMode="tel"
+                    autoComplete="tel-country-code"
+                    aria-label="Country code"
+                    value={countryCode}
+                    onChange={(e) => setCountryCode(e.target.value)}
+                    placeholder="+91"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-50"
+                  />
+                </label>
+                <label>
+                  <span className="sr-only">Mobile number</span>
+                  <input
+                    type="tel"
+                    required
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
+                    placeholder="Mobile number"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-50"
+                  />
+                </label>
+              </div>
+              <span className="mt-1 block text-xs text-slate-500">
+                Include the international country code. No OTP is required in this release.
+              </span>
+            </fieldset>
             <label className="block">
               <span className="text-sm font-bold text-slate-800">I am a...</span>
               <select

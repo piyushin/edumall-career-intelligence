@@ -45,6 +45,7 @@ export async function signup(input: {
   firstName: string;
   lastName: string;
   email: string;
+  mobile: string;
   password: string;
   segment: PublicSignupSegment;
 }): Promise<AuthSession> {
