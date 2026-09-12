@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { AssessmentModule } from "../assessments/assessment.module";
+import { AssessmentNormService } from "../assessments/assessment-norm.service";
 import {
   CAREER_FIT_ALGORITHM_DEFINITIONS,
   CareerFitAlgorithmRegistry,
@@ -12,9 +12,9 @@ import { weightedPercentileCareerFitAlgorithm } from "./weighted-percentile-care
 import { weightedScaledRawCareerFitAlgorithm } from "./weighted-scaled-raw-career-fit.algorithm";
 
 @Module({
-  imports: [AssessmentModule],
   controllers: [CareerIntelligenceAdminController, CareerFitExecutionController],
   providers: [
+    AssessmentNormService,
     {
       provide: CAREER_FIT_ALGORITHM_DEFINITIONS,
       useValue: [weightedPercentileCareerFitAlgorithm, weightedScaledRawCareerFitAlgorithm],

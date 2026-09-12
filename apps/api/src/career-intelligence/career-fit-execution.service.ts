@@ -110,13 +110,29 @@ export class CareerFitExecutionService {
   ) {
     const organizationId = await this.resolveOrganizationId(context, requestedOrganizationId);
 
+    return this.executeTrusted(attemptId, normGroupId, careerFitModelId, organizationId);
+  }
+
+  /**
+   * Trusted entry point for automatic report processing. Authorization belongs to the
+   * caller; this method still enforces submitted state and every scientific publication
+   * and version invariant used by the staff entry point.
+   */
+  public async executeAutomatic(attemptId: string, normGroupId: string, careerFitModelId: string) {
+    return this.executeTrusted(attemptId, normGroupId, careerFitModelId);
+  }
+
+  private async executeTrusted(
+    attemptId: string,
+    normGroupId: string,
+    careerFitModelId: string,
+    organizationId?: string,
+  ) {
     const attempt = await this.prisma.assessmentAttempt.findFirst({
       where: {
         id: attemptId,
         status: AssessmentAttemptStatus.SUBMITTED,
-        assignment: {
-          organizationId,
-        },
+        ...(organizationId ? { assignment: { organizationId } } : {}),
       },
       select: {
         id: true,

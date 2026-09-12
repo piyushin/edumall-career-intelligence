@@ -42,4 +42,22 @@ describe("candidate checkout launch copy", () => {
     expect(component).not.toContain("Proceed to Secure Payment");
     expect(component).not.toContain("Online payment is verified server-side");
   });
+
+  it("shows the free summary and entitlement actions without a release workflow", () => {
+    const component = readFileSync(
+      fileURLToPath(
+        new URL("../app/candidate/assessments/[attemptId]/submitted-commerce.tsx", import.meta.url),
+      ),
+      "utf8",
+    );
+
+    expect(component).toContain("Career Intelligence Summary");
+    expect(component).toContain("Unlock Detailed Career Intelligence Report");
+    expect(component).toContain("View Detailed Report");
+    expect(component).toContain("Download Detailed Report");
+    expect(component).toContain("Book a Career Counsellor");
+    expect(component).toContain("Explore Another Assessment");
+    expect(component).not.toMatch(/Awaiting Release|Review & Release|Release to Candidate/);
+    expect(component).not.toMatch(/pilot/i);
+  });
 });

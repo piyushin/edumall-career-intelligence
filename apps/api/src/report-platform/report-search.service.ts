@@ -78,7 +78,16 @@ export class ReportSearchService {
               },
             },
           },
-          reportGeneration: { select: { status: true, completedAt: true } },
+          reportGeneration: {
+            select: {
+              status: true,
+              attemptCount: true,
+              lastErrorCode: true,
+              lastErrorMessage: true,
+              configurationId: true,
+              completedAt: true,
+            },
+          },
           commerceEntitlements: {
             where: { type: CommerceEntitlementType.REPORT },
             select: { status: true, expiresAt: true },
@@ -108,6 +117,7 @@ export class ReportSearchService {
         organization: attempt.assignment.organization,
         assessment: attempt.assignment.assessmentVersion,
         generationStatus: attempt.reportGeneration?.status ?? null,
+        generation: attempt.reportGeneration,
         candidateEntitlementStatus: attempt.commerceEntitlements[0]?.status ?? "NONE",
         canViewFullReport:
           administrativeFullAccess ||

@@ -9,6 +9,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../auth/auth.types";
 import type { AssessmentScoringService } from "./assessment-scoring.service";
+import type { AutomaticReportProcessingService } from "../report-platform/automatic-report-processing.service";
 import { AssessmentService } from "./assessment.service";
 
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -60,15 +61,20 @@ function createPrisma() {
 describe("AssessmentService", () => {
   let prisma: ReturnType<typeof createPrisma>;
   let service: AssessmentService;
+  let scoring: { scoreSubmittedAttempt: ReturnType<typeof vi.fn> };
+  let automaticReports: { processSubmittedAttempt: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     vi.clearAllMocks();
     prisma = createPrisma();
+    automaticReports = {
+      processSubmittedAttempt: vi.fn().mockResolvedValue({ status: "GENERATED" }),
+    };
+    scoring = { scoreSubmittedAttempt: vi.fn().mockResolvedValue({}) };
     service = new AssessmentService(
       prisma as unknown as PrismaClient,
-      {
-        scoreSubmittedAttempt: vi.fn().mockResolvedValue({}),
-      } as unknown as AssessmentScoringService,
+      scoring as unknown as AssessmentScoringService,
+      automaticReports as unknown as AutomaticReportProcessingService,
     );
   });
 
@@ -266,6 +272,27 @@ describe("AssessmentService", () => {
           status: AssessmentAttemptStatus.SUBMITTED,
         }),
       }),
+    );
+    expect(scoring.scoreSubmittedAttempt).toHaveBeenCalledWith(attemptId);
+    expect(automaticReports.processSubmittedAttempt).toHaveBeenCalledWith(attemptId);
+  });
+
+  it("does not undo submission when automatic report processing fails", async () => {
+    prisma.assessmentAttempt.findFirst.mockResolvedValue({
+      id: attemptId,
+      status: AssessmentAttemptStatus.IN_PROGRESS,
+      submittedAt: null,
+      assignment: { assessmentVersion: { items: [] } },
+      responses: [],
+    });
+    prisma.assessmentAttempt.update.mockResolvedValue({});
+    automaticReports.processSubmittedAttempt.mockRejectedValue(new Error("processor unavailable"));
+
+    await expect(service.submitAttempt(context, attemptId)).resolves.toMatchObject({
+      status: "submitted",
+    });
+    expect(prisma.assessmentAttempt.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "SUBMITTED" }) }),
     );
   });
 });

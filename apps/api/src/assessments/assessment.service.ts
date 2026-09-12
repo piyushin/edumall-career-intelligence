@@ -16,6 +16,7 @@ import {
 import type { AuthContext } from "../auth/auth.types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import { AssessmentScoringService } from "./assessment-scoring.service";
+import { AutomaticReportProcessingService } from "../report-platform/automatic-report-processing.service";
 import type { SaveAssessmentResponseDto } from "./assessment.types";
 
 @Injectable()
@@ -25,6 +26,8 @@ export class AssessmentService {
     private readonly prisma: PrismaClient,
     @Inject(AssessmentScoringService)
     private readonly scoring: AssessmentScoringService,
+    @Inject(AutomaticReportProcessingService)
+    private readonly automaticReports: AutomaticReportProcessingService,
   ) {}
 
   public async listAssignments(context: AuthContext) {
@@ -523,6 +526,13 @@ export class AssessmentService {
     });
 
     await this.scoring.scoreSubmittedAttempt(attemptId);
+
+    try {
+      await this.automaticReports.processSubmittedAttempt(attemptId);
+    } catch {
+      // Submission and deterministic scoring are authoritative. The generation state,
+      // where persistence is available, remains retryable through the report processor.
+    }
 
     return submission;
   }

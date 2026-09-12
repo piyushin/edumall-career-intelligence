@@ -23,19 +23,30 @@ function context(
   };
 }
 
-function prisma(options: { assignment?: unknown; grant?: unknown } = {}) {
+function prisma(
+  options: {
+    assignment?: unknown;
+    grant?: unknown;
+    entitlement?: unknown;
+    metadata?: unknown;
+  } = {},
+) {
   return {
     assessmentAttempt: {
       findUnique: vi.fn().mockResolvedValue({
         id: "attempt",
-        assignment: { organizationId: tenantB, userId: candidateId, metadata: {} },
+        assignment: {
+          organizationId: tenantB,
+          userId: candidateId,
+          metadata: options.metadata ?? {},
+        },
       }),
     },
     candidateCounsellorAssignment: {
       findFirst: vi.fn().mockResolvedValue(options.assignment ?? null),
     },
     commerceReportAccessGrant: { findFirst: vi.fn().mockResolvedValue(options.grant ?? null) },
-    commerceEntitlement: { findFirst: vi.fn().mockResolvedValue(null) },
+    commerceEntitlement: { findFirst: vi.fn().mockResolvedValue(options.entitlement ?? null) },
   };
 }
 
@@ -86,5 +97,50 @@ describe("ReportAccessPolicyService", () => {
       ),
     ).resolves.toMatchObject({ basis: "ADMINISTRATIVE_SCOPE" });
     expect(client.commerceReportAccessGrant.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("denies a public-signup candidate without report entitlement", async () => {
+    const service = new ReportAccessPolicyService(
+      prisma({ metadata: { registrationSource: "PUBLIC_SIGNUP" } }) as unknown as PrismaClient,
+    );
+    await expect(
+      service.assertCanOpenFullReport(
+        context(MembershipRole.STUDENT, tenantB, candidateId),
+        "attempt",
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("allows only the owning public-signup candidate after report entitlement", async () => {
+    const service = new ReportAccessPolicyService(
+      prisma({
+        metadata: { registrationSource: "PUBLIC_SIGNUP" },
+        entitlement: { id: "entitlement" },
+      }) as unknown as PrismaClient,
+    );
+    await expect(
+      service.assertCanOpenFullReport(
+        context(MembershipRole.STUDENT, tenantB, candidateId),
+        "attempt",
+      ),
+    ).resolves.toMatchObject({ basis: "CANDIDATE_ENTITLEMENT" });
+    await expect(
+      service.assertCanOpenFullReport(
+        context(MembershipRole.STUDENT, tenantB, "other-candidate"),
+        "attempt",
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("allows an authorized central administrator to download without release or payment", async () => {
+    const admin = {
+      ...context(MembershipRole.PLATFORM_ADMIN, null),
+      permissions: ["report.view.full", "report.download"],
+    };
+    await expect(
+      new ReportAccessPolicyService(
+        prisma() as unknown as PrismaClient,
+      ).assertCanDownloadFullReport(admin, "attempt"),
+    ).resolves.toMatchObject({ basis: "ADMINISTRATIVE_SCOPE" });
   });
 });

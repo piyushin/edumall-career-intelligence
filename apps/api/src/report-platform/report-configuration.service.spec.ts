@@ -76,6 +76,51 @@ const input = {
 };
 
 describe("ReportConfigurationService", () => {
+  it("reports automatic readiness only for one active configuration with published references", async () => {
+    const client = prisma();
+    client.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      normVersion: "N1",
+      assessmentDefinition: { organizationId: null },
+      reportConfigurations: [
+        {
+          id: "configuration",
+          normGroup: {
+            normSet: {
+              assessmentVersionId: versionId,
+              normVersion: "N1",
+              status: AssessmentNormSetStatus.PUBLISHED,
+            },
+          },
+          interpretationSet: {
+            assessmentVersionId: versionId,
+            status: AssessmentInterpretationSetStatus.PUBLISHED,
+          },
+          careerFitModel: {
+            assessmentVersionId: versionId,
+            status: CareerFitModelStatus.PUBLISHED,
+          },
+        },
+      ],
+    });
+
+    await expect(
+      new ReportConfigurationService(client as unknown as PrismaClient).readiness(
+        context,
+        versionId,
+      ),
+    ).resolves.toMatchObject({
+      status: "READY",
+      activeConfigurationId: "configuration",
+      checks: {
+        activeConfiguration: true,
+        publishedNormSource: true,
+        publishedInterpretation: true,
+        publishedCareerFitModel: true,
+      },
+    });
+  });
+
   it("rejects cross-assessment scientific references", async () => {
     const client = prisma({ careerVersionId: "99999999-9999-4999-8999-999999999999" });
     await expect(

@@ -2,10 +2,12 @@ import { apiRequest } from "./api";
 
 export type CandidateReportStatus =
   | "ASSESSMENT_IN_PROGRESS"
-  | "PROCESSING_SCORE"
-  | "PROCESSING_REPORT"
-  | "AWAITING_RELEASE"
-  | "RELEASED";
+  | "SCORING"
+  | "REPORT_PROCESSING"
+  | "REPORT_CONFIGURATION_BLOCKED"
+  | "REPORT_GENERATION_FAILED"
+  | "DETAILED_REPORT_READY_LOCKED"
+  | "DETAILED_REPORT_UNLOCKED";
 
 export interface CandidateCommerceProduct {
   id: string;

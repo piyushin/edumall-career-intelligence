@@ -45,6 +45,11 @@ export class AssessmentReportDataService {
     scoringRunId: string,
     normGroupId: string,
     interpretationSetId: string,
+    configuration?: {
+      id: string;
+      careerFitModelId: string;
+      reportTemplateVersion: string;
+    },
   ) {
     return this.prisma.$transaction(async (tx) => {
       const scoringRun = await tx.assessmentScoringRun.findUnique({
@@ -245,7 +250,10 @@ export class AssessmentReportDataService {
       }
 
       const careerFitRun = await tx.careerFitRun.findFirst({
-        where: { scoringRunId },
+        where: {
+          scoringRunId,
+          ...(configuration ? { careerFitModelId: configuration.careerFitModelId } : {}),
+        },
         orderBy: { calculatedAt: "desc" },
         select: {
           id: true,
@@ -449,6 +457,17 @@ export class AssessmentReportDataService {
           snapshotPolicy: "immutable-v3",
           interpretationPolicy: "published-only",
           careerFitPolicy: careerFitRun ? "frozen-deterministic-run" : "not-available",
+          ...(configuration
+            ? {
+                automaticReportConfiguration: {
+                  configurationId: configuration.id,
+                  normGroupId,
+                  interpretationSetId,
+                  careerFitModelId: configuration.careerFitModelId,
+                  reportTemplateVersion: configuration.reportTemplateVersion,
+                },
+              }
+            : {}),
         },
       };
 

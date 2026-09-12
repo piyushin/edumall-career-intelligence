@@ -168,7 +168,14 @@ export interface AssessmentReportPayload {
 }
 
 export interface AssessmentReportReadiness {
-  status: "SCORING_UNAVAILABLE" | "NOT_READY" | "READY" | "GENERATED";
+  status:
+    | "SCORING_UNAVAILABLE"
+    | "NOT_READY"
+    | "READY"
+    | "PROCESSING"
+    | "CONFIGURATION_REQUIRED"
+    | "GENERATION_FAILED"
+    | "GENERATED";
   scoringRunId: string | null;
   publishedNormGroups: Array<{
     id: string;
@@ -211,6 +218,14 @@ export interface AssessmentReportReadiness {
     releasedByUserId: string;
     reviewedAt: string;
     releasedAt: string;
+  } | null;
+  generation: {
+    id: string;
+    status: "PENDING" | "PROCESSING" | "GENERATED" | "BLOCKED_CONFIGURATION" | "FAILED";
+    attemptCount: number;
+    lastErrorCode: string | null;
+    lastErrorMessage: string | null;
+    configurationId: string | null;
   } | null;
   latestSnapshot: {
     id: string;

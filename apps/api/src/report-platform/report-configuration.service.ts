@@ -140,6 +140,73 @@ export class ReportConfigurationService {
     });
   }
 
+  public async readiness(context: AuthContext, assessmentVersionId: string) {
+    const version = await this.prisma.assessmentVersion.findUnique({
+      where: { id: assessmentVersionId },
+      select: {
+        id: true,
+        normVersion: true,
+        assessmentDefinition: { select: { organizationId: true } },
+        reportConfigurations: {
+          where: { status: AssessmentReportConfigurationStatus.ACTIVE },
+          take: 2,
+          select: {
+            id: true,
+            normGroup: {
+              select: {
+                normSet: {
+                  select: { assessmentVersionId: true, normVersion: true, status: true },
+                },
+              },
+            },
+            interpretationSet: { select: { assessmentVersionId: true, status: true } },
+            careerFitModel: { select: { assessmentVersionId: true, status: true } },
+          },
+        },
+      },
+    });
+    if (!version) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_VERSION_NOT_FOUND",
+        message: "Assessment version not found.",
+      });
+    }
+    this.assertVersionScope(context, version.assessmentDefinition.organizationId);
+    const configuration =
+      version.reportConfigurations.length === 1 ? version.reportConfigurations[0] : null;
+    const normReady = Boolean(
+      configuration &&
+        configuration.normGroup.normSet.assessmentVersionId === version.id &&
+        configuration.normGroup.normSet.normVersion === version.normVersion &&
+        configuration.normGroup.normSet.status === AssessmentNormSetStatus.PUBLISHED,
+    );
+    const interpretationReady = Boolean(
+      configuration &&
+        configuration.interpretationSet.assessmentVersionId === version.id &&
+        configuration.interpretationSet.status === AssessmentInterpretationSetStatus.PUBLISHED,
+    );
+    const careerFitReady = Boolean(
+      configuration &&
+        configuration.careerFitModel.assessmentVersionId === version.id &&
+        configuration.careerFitModel.status === CareerFitModelStatus.PUBLISHED,
+    );
+    return {
+      assessmentVersionId,
+      status:
+        configuration && normReady && interpretationReady && careerFitReady
+          ? ("READY" as const)
+          : ("CONFIGURATION_REQUIRED" as const),
+      activeConfigurationId: configuration?.id ?? null,
+      activeConfigurationCount: version.reportConfigurations.length,
+      checks: {
+        activeConfiguration: version.reportConfigurations.length === 1,
+        publishedNormSource: normReady,
+        publishedInterpretation: interpretationReady,
+        publishedCareerFitModel: careerFitReady,
+      },
+    };
+  }
+
   private async validateReferences(
     input: Pick<
       ConfigureAutomaticReportDto,

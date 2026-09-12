@@ -106,6 +106,32 @@ export class ReportAccessPolicyService {
     return decision;
   }
 
+  public async assertCanRetryAutomaticReport(context: AuthContext, attemptId: string) {
+    const attempt = await this.prisma.assessmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: { assignment: { select: { organizationId: true } } },
+    });
+    if (!attempt) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_REPORT_NOT_FOUND",
+        message: "Assessment report not found.",
+      });
+    }
+    const centralAdministrator =
+      context.role === MembershipRole.SUPER_ADMIN || context.role === MembershipRole.PLATFORM_ADMIN;
+    const permitted =
+      context.permissions?.includes("*") || context.permissions?.includes("assessment.manage");
+    if (
+      !centralAdministrator ||
+      !permitted ||
+      (context.organizationId !== null &&
+        context.organizationId !== attempt.assignment.organizationId)
+    ) {
+      this.deny();
+    }
+    return attempt;
+  }
+
   private activeGrant(attemptId: string, type: CommerceReportPrincipalType, principalId: string) {
     return this.prisma.commerceReportAccessGrant.findFirst({
       where: {

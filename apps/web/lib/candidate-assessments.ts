@@ -144,11 +144,46 @@ export function submitCandidateAttempt(
   );
 }
 
-export async function downloadCandidateReleasedReportPdf(
+export interface CandidateShortResult {
+  attemptId: string;
+  assessmentTitle: string;
+  submittedAt: string | null;
+  status:
+    | "ASSESSMENT_IN_PROGRESS"
+    | "SCORING"
+    | "PROCESSING"
+    | "CONFIGURATION_BLOCKED"
+    | "GENERATION_FAILED"
+    | "AVAILABLE";
+  message?: string;
+  profileOverview?: string | null;
+  strongestIndicators?: Array<{
+    name: string;
+    description: string | null;
+    percentile: string | null;
+    standardizedScore: string | null;
+    interpretationLabel: string | null;
+    interpretationSummary: string | null;
+  }>;
+  careerDirections?: Array<{
+    name: string;
+    description: string | null;
+    cluster: string | null;
+    recommendationLabel: string | null;
+    recommendationSummary: string | null;
+  }>;
+  nextStep?: string;
+}
+
+export function getCandidateShortResult(attemptId: string): Promise<CandidateShortResult> {
+  return apiRequest<CandidateShortResult>(`/candidate/assessments/${attemptId}/short-result`);
+}
+
+export async function downloadCandidateDetailedReportPdf(
   attemptId: string,
 ): Promise<{ blob: Blob; filename: string }> {
   const response = await fetch(
-    `${API_BASE_URL}/assessments/attempts/${attemptId}/released-report.pdf`,
+    `${API_BASE_URL}/candidate/assessments/${attemptId}/detailed-report.pdf`,
     {
       method: "GET",
       credentials: "include",

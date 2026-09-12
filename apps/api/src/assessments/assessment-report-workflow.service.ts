@@ -160,7 +160,8 @@ export class AssessmentReportWorkflowService {
       })),
     );
 
-    const latestSnapshot = scoringRun.reportDataSnapshots[0] ?? null;
+    const latestSnapshot =
+      attempt.reportGeneration?.reportDataSnapshot ?? scoringRun.reportDataSnapshots[0] ?? null;
     const latestCareerFitRun = careerFitRun
       ? {
           id: careerFitRun.id,
@@ -178,11 +179,19 @@ export class AssessmentReportWorkflowService {
       publishedCareerFitModels.length > 0;
 
     return {
-      status: latestSnapshot
-        ? ("GENERATED" as const)
-        : canGenerate
-          ? ("READY" as const)
-          : ("NOT_READY" as const),
+      status:
+        attempt.reportGeneration?.status === "BLOCKED_CONFIGURATION"
+          ? ("CONFIGURATION_REQUIRED" as const)
+          : attempt.reportGeneration?.status === "FAILED"
+            ? ("GENERATION_FAILED" as const)
+            : attempt.reportGeneration?.status === "PENDING" ||
+                attempt.reportGeneration?.status === "PROCESSING"
+              ? ("PROCESSING" as const)
+              : latestSnapshot
+                ? ("GENERATED" as const)
+                : canGenerate
+                  ? ("READY" as const)
+                  : ("NOT_READY" as const),
       scoringRunId: scoringRun.id,
       publishedNormGroups,
       publishedInterpretationSets: interpretationSets,
@@ -190,6 +199,16 @@ export class AssessmentReportWorkflowService {
       latestCareerFitRun,
       latestSnapshot,
       latestRelease,
+      generation: attempt.reportGeneration
+        ? {
+            id: attempt.reportGeneration.id,
+            status: attempt.reportGeneration.status,
+            attemptCount: attempt.reportGeneration.attemptCount,
+            lastErrorCode: attempt.reportGeneration.lastErrorCode,
+            lastErrorMessage: attempt.reportGeneration.lastErrorMessage,
+            configurationId: attempt.reportGeneration.configurationId,
+          }
+        : null,
       canGenerate,
     };
   }
@@ -293,6 +312,28 @@ export class AssessmentReportWorkflowService {
             releasedByUserId: true,
             reviewedAt: true,
             releasedAt: true,
+          },
+        },
+        reportGeneration: {
+          select: {
+            id: true,
+            status: true,
+            attemptCount: true,
+            lastErrorCode: true,
+            lastErrorMessage: true,
+            configurationId: true,
+            reportDataSnapshot: {
+              select: {
+                id: true,
+                scoringRunId: true,
+                assessmentVersionId: true,
+                interpretationSetId: true,
+                reportVersion: true,
+                inputHash: true,
+                payload: true,
+                generatedAt: true,
+              },
+            },
           },
         },
         scoringRuns: {

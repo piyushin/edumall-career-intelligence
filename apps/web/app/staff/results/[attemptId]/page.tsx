@@ -6,11 +6,8 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../../lib/api";
 import {
   downloadAssessmentReportPdf,
-  executeCareerFitRun,
-  generateAssessmentReportSnapshot,
   getAssessmentReportReadiness,
   getAssessmentResult,
-  releaseAssessmentReport,
   type AssessmentReportPayload,
   type AssessmentReportReadiness,
   type AssessmentResultDetail,
@@ -146,14 +143,8 @@ export default function ResultDetailPage() {
 
   const [reportReadiness, setReportReadiness] = useState<AssessmentReportReadiness | null>(null);
 
-  const [normGroupId, setNormGroupId] = useState("");
-  const [interpretationSetId, setInterpretationSetId] = useState("");
-  const [careerFitModelId, setCareerFitModelId] = useState("");
-
   const [loading, setLoading] = useState(true);
-  const [generatingReport, setGeneratingReport] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [releasingReport, setReleasingReport] = useState(false);
 
   const [error, setError] = useState("");
   const [reportError, setReportError] = useState("");
@@ -174,18 +165,6 @@ export default function ResultDetailPage() {
 
         setResult(loadedResult);
         setReportReadiness(readiness);
-
-        if (readiness.publishedNormGroups.length === 1) {
-          setNormGroupId(readiness.publishedNormGroups[0]?.id ?? "");
-        }
-
-        if (readiness.publishedInterpretationSets.length === 1) {
-          setInterpretationSetId(readiness.publishedInterpretationSets[0]?.id ?? "");
-        }
-
-        if (readiness.publishedCareerFitModels.length === 1) {
-          setCareerFitModelId(readiness.publishedCareerFitModels[0]?.id ?? "");
-        }
       } catch (caught) {
         if (!active) {
           return;
@@ -205,54 +184,6 @@ export default function ResultDetailPage() {
       active = false;
     };
   }, [params.attemptId, organizationId]);
-
-  async function handleGenerateReport() {
-    if (!normGroupId || !interpretationSetId || !careerFitModelId) {
-      setReportError("Select a published norm group, interpretation set, and CareerFit model.");
-      return;
-    }
-
-    setGeneratingReport(true);
-    setReportError("");
-
-    try {
-      const existingCareerFit = reportReadiness?.latestCareerFitRun;
-
-      if (
-        !existingCareerFit ||
-        existingCareerFit.careerFitModelId !== careerFitModelId ||
-        existingCareerFit.normGroupId !== normGroupId
-      ) {
-        await executeCareerFitRun(
-          params.attemptId,
-          {
-            normGroupId,
-            careerFitModelId,
-          },
-          organizationId,
-        );
-      }
-
-      await generateAssessmentReportSnapshot(
-        params.attemptId,
-        {
-          normGroupId,
-          interpretationSetId,
-        },
-        organizationId,
-      );
-
-      const refreshed = await getAssessmentReportReadiness(params.attemptId, organizationId);
-
-      setReportReadiness(refreshed);
-    } catch (caught) {
-      setReportError(
-        caught instanceof ApiError ? caught.message : "Unable to generate governed report data.",
-      );
-    } finally {
-      setGeneratingReport(false);
-    }
-  }
 
   async function handleDownloadPdf() {
     setDownloadingPdf(true);
@@ -281,33 +212,6 @@ export default function ResultDetailPage() {
       );
     } finally {
       setDownloadingPdf(false);
-    }
-  }
-
-  async function handleReleaseReport() {
-    const confirmed = window.confirm(
-      "Release this exact immutable Career Intelligence report to the candidate?",
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setReleasingReport(true);
-    setReportError("");
-
-    try {
-      await releaseAssessmentReport(params.attemptId, organizationId);
-      const refreshed = await getAssessmentReportReadiness(params.attemptId, organizationId);
-      setReportReadiness(refreshed);
-    } catch (caught) {
-      setReportError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Unable to release the report to the candidate.",
-      );
-    } finally {
-      setReleasingReport(false);
     }
   }
 
@@ -464,176 +368,41 @@ export default function ResultDetailPage() {
                 recorded scoring, normalization, interpretation, and report provenance.
               </p>
             </div>
-            <div className="mt-6 border-t border-slate-200 pt-6">
-              {reportReadiness.latestRelease?.reportDataSnapshotId ===
-              reportReadiness.latestSnapshot.id ? (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="text-sm font-semibold text-emerald-900">
-                    Reviewed and released to candidate
-                  </p>
-                  <p className="mt-1 text-xs text-emerald-800">
-                    Released {formatDate(reportReadiness.latestRelease.releasedAt)}. Candidate
-                    access is locked to this immutable snapshot.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    disabled={releasingReport}
-                    onClick={() => void handleReleaseReport()}
-                    className="rounded-lg bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {releasingReport ? "Releasing..." : "Review & release to candidate"}
-                  </button>
-                  <p className="mt-3 max-w-3xl text-xs leading-5 text-slate-500">
-                    Release is permitted only for the governed v3 snapshot with deterministic
-                    CareerFit evidence. The released snapshot cannot be silently changed.
-                  </p>
-                </>
-              )}
-            </div>
-          </>
-        ) : !reportReadiness.canGenerate ? (
-          <>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              A report may be generated only when published norm data, a published interpretation
-              set, and a published CareerFit model are available for this exact assessment version.
-            </p>
-
-            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
-              Scientific configuration is incomplete. No candidate report will be generated until
-              the required published norm, interpretation, and CareerFit configuration exists.
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Select the published scientific configuration that applies to this candidate. The
-              backend validates the assessment version and refuses missing, ambiguous, unpublished,
-              or incomplete scientific data.
-            </p>
-
-            <div className="mt-6 grid gap-5 md:grid-cols-3">
-              <label className="block">
-                <span className="text-sm font-medium text-slate-800">Published norm group</span>
-
-                <select
-                  value={normGroupId}
-                  onChange={(event) => setNormGroupId(event.target.value)}
-                  className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="">Select norm group</option>
-
-                  {reportReadiness.publishedNormGroups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.normSetName} — {group.name}
-                      {group.sampleSize ? ` — n=${group.sampleSize}` : ""}
-                    </option>
-                  ))}
-                </select>
-
-                {normGroupId ? (
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    {
-                      reportReadiness.publishedNormGroups.find((group) => group.id === normGroupId)
-                        ?.sourceReference
-                    }
-                  </p>
-                ) : null}
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-medium text-slate-800">
-                  Published interpretation set
-                </span>
-
-                <select
-                  value={interpretationSetId}
-                  onChange={(event) => setInterpretationSetId(event.target.value)}
-                  className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="">Select interpretation set</option>
-
-                  {reportReadiness.publishedInterpretationSets.map((set) => (
-                    <option key={set.id} value={set.id}>
-                      {set.name} — {set.version}
-                    </option>
-                  ))}
-                </select>
-
-                {interpretationSetId ? (
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    {
-                      reportReadiness.publishedInterpretationSets.find(
-                        (set) => set.id === interpretationSetId,
-                      )?.sourceReference
-                    }
-                  </p>
-                ) : null}
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-medium text-slate-800">
-                  Published CareerFit model
-                </span>
-
-                <select
-                  value={careerFitModelId}
-                  onChange={(event) => setCareerFitModelId(event.target.value)}
-                  className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="">Select CareerFit model</option>
-
-                  {reportReadiness.publishedCareerFitModels.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name} - {model.version}
-                    </option>
-                  ))}
-                </select>
-
-                {careerFitModelId ? (
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    {
-                      reportReadiness.publishedCareerFitModels.find(
-                        (model) => model.id === careerFitModelId,
-                      )?.sourceReference
-                    }
-                  </p>
-                ) : null}
-              </label>
-            </div>
-
-            {reportError ? (
-              <div
-                role="alert"
-                className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
-              >
-                {reportError}
+            {reportReadiness.latestRelease ? (
+              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-800">Legacy release history</p>
+                <p className="mt-1 text-xs text-slate-600">
+                  A historical release was recorded{" "}
+                  {formatDate(reportReadiness.latestRelease.releasedAt)}. New automatic reports do
+                  not require a release record.
+                </p>
               </div>
             ) : null}
-
-            <div className="mt-6">
-              <button
-                type="button"
-                disabled={
-                  generatingReport || !normGroupId || !interpretationSetId || !careerFitModelId
-                }
-                onClick={() => void handleGenerateReport()}
-                className="rounded-lg bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {generatingReport
-                  ? "Calculating CareerFit and generating report..."
-                  : "Calculate CareerFit & generate report"}
-              </button>
-
-              <p className="mt-3 max-w-3xl text-xs leading-5 text-slate-500">
-                This action applies only published norm, interpretation and CareerFit configuration.
-                It stores deterministic CareerFit evidence and an immutable report-data snapshot
-                with provenance; it does not invent scientific norms or weights.
-              </p>
-            </div>
           </>
+        ) : reportReadiness.status === "CONFIGURATION_REQUIRED" ? (
+          <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+            <p className="font-semibold">Configuration Required</p>
+            <p className="mt-1">
+              An authorized central administrator must activate a complete published report
+              configuration for this assessment version, then retry automatic processing.
+            </p>
+          </div>
+        ) : reportReadiness.status === "GENERATION_FAILED" ? (
+          <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">
+            <p className="font-semibold">Generation Failed</p>
+            <p className="mt-1">
+              The submitted assessment remains complete. An authorized central administrator can
+              safely retry automatic processing.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-900">
+            <p className="font-semibold">Processing</p>
+            <p className="mt-1">
+              CareerFit, interpretation, and the immutable report snapshot are generated
+              automatically from the active governed configuration. No approval step is required.
+            </p>
+          </div>
         )}
       </section>
     </div>

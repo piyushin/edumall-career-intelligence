@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../../../lib/api";
 import {
@@ -11,7 +12,11 @@ import {
   unavailableGatewayMessage,
   verifyRazorpayPayment,
 } from "../../../../lib/candidate-commerce";
-import { downloadCandidateReleasedReportPdf } from "../../../../lib/candidate-assessments";
+import {
+  downloadCandidateDetailedReportPdf,
+  getCandidateShortResult,
+  type CandidateShortResult,
+} from "../../../../lib/candidate-assessments";
 
 type RazorpayResult = {
   razorpay_order_id: string;
@@ -85,6 +90,7 @@ function loadRazorpayScript(): Promise<void> {
 
 export function SubmittedCommerce({ attemptId, title }: { attemptId: string; title: string }) {
   const [checkout, setCheckout] = useState<CandidateCheckout | null>(null);
+  const [shortResult, setShortResult] = useState<CandidateShortResult | null>(null);
   const [selectedProduct, setSelectedProduct] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [loading, setLoading] = useState(true);
@@ -97,8 +103,12 @@ export function SubmittedCommerce({ attemptId, title }: { attemptId: string; tit
     setError("");
 
     try {
-      const data = await getCandidateCheckout(attemptId);
+      const [data, summary] = await Promise.all([
+        getCandidateCheckout(attemptId),
+        getCandidateShortResult(attemptId),
+      ]);
       setCheckout(data);
+      setShortResult(summary);
 
       if (!selectedProduct && data.products[0]) {
         setSelectedProduct(data.products[0].code);
@@ -119,7 +129,7 @@ export function SubmittedCommerce({ attemptId, title }: { attemptId: string; tit
     setError("");
 
     try {
-      const { blob, filename } = await downloadCandidateReleasedReportPdf(attemptId);
+      const { blob, filename } = await downloadCandidateDetailedReportPdf(attemptId);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -130,6 +140,21 @@ export function SubmittedCommerce({ attemptId, title }: { attemptId: string; tit
       URL.revokeObjectURL(url);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Unable to download your report.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  async function viewReport() {
+    setDownloading(true);
+    setError("");
+    try {
+      const { blob } = await downloadCandidateDetailedReportPdf(attemptId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Unable to open your report.");
     } finally {
       setDownloading(false);
     }
@@ -261,13 +286,17 @@ export function SubmittedCommerce({ attemptId, title }: { attemptId: string; tit
             </p>
 
             <h2 className="mt-3 text-2xl font-black text-slate-950">
-              {checkout?.reportStatus === "RELEASED"
-                ? "Your report has been released"
-                : checkout?.reportStatus === "AWAITING_RELEASE"
-                  ? "Your report is prepared and awaiting release"
-                  : checkout?.reportStatus === "PROCESSING_REPORT"
-                    ? "Your Career Intelligence report is being prepared"
-                    : "Your assessment is being scored"}
+              {checkout?.reportStatus === "DETAILED_REPORT_UNLOCKED"
+                ? "Your detailed report is unlocked"
+                : checkout?.reportStatus === "DETAILED_REPORT_READY_LOCKED"
+                  ? "Your detailed report is ready to unlock"
+                  : checkout?.reportStatus === "REPORT_CONFIGURATION_BLOCKED"
+                    ? "Your result needs configuration support"
+                    : checkout?.reportStatus === "REPORT_GENERATION_FAILED"
+                      ? "Your result needs processing support"
+                      : checkout?.reportStatus === "REPORT_PROCESSING"
+                        ? "Your Career Intelligence result is being prepared"
+                        : "Your assessment is being scored"}
             </h2>
 
             <p className="mt-4 text-sm leading-7 text-slate-600">
@@ -275,24 +304,89 @@ export function SubmittedCommerce({ attemptId, title }: { attemptId: string; tit
               does not alter your assessment score or bypass the governed report-generation process.
             </p>
 
+            <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
+              <p className="font-black text-blue-950">Career Intelligence Summary</p>
+              {shortResult?.status === "AVAILABLE" ? (
+                <div className="mt-3 space-y-5 text-sm text-blue-950">
+                  {shortResult.profileOverview ? (
+                    <p className="leading-6">{shortResult.profileOverview}</p>
+                  ) : null}
+                  {shortResult.strongestIndicators?.length ? (
+                    <div>
+                      <p className="font-black">Strongest profile indicators</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {shortResult.strongestIndicators.map((indicator) => (
+                          <span
+                            key={indicator.name}
+                            className="rounded-full border border-blue-200 bg-white px-3 py-1.5 font-bold"
+                          >
+                            {indicator.name}
+                            {indicator.interpretationLabel
+                              ? ` · ${indicator.interpretationLabel}`
+                              : ""}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {shortResult.careerDirections?.length ? (
+                    <div>
+                      <p className="font-black">Top career directions</p>
+                      <ol className="mt-2 space-y-2">
+                        {shortResult.careerDirections.map((direction, index) => (
+                          <li
+                            key={`${direction.name}-${index}`}
+                            className="rounded-xl bg-white p-3"
+                          >
+                            <span className="font-black">
+                              {index + 1}. {direction.name}
+                            </span>
+                            {direction.recommendationLabel ? (
+                              <span className="ml-2 text-blue-700">
+                                {direction.recommendationLabel}
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm leading-6 text-blue-800">
+                  {shortResult?.message ?? "Your free summary is being prepared."}
+                </p>
+              )}
+            </div>
+
             {checkout?.reportAccess ? (
               <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
                 <p className="font-black text-emerald-900">Report access unlocked</p>
                 <p className="mt-2 text-sm leading-6 text-emerald-800">
-                  {checkout.reportReleased
+                  {checkout.reportStatus === "DETAILED_REPORT_UNLOCKED"
                     ? "Your detailed Career Intelligence report is available now."
-                    : "Your access is confirmed. The report will become downloadable as soon as the governed report is released."}
+                    : "Your access is confirmed. The report will become available as soon as automatic processing finishes."}
                 </p>
 
-                {checkout.reportReleased ? (
-                  <button
-                    type="button"
-                    disabled={downloading}
-                    onClick={() => void downloadReport()}
-                    className="mt-4 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-black text-white disabled:opacity-50"
-                  >
-                    {downloading ? "Preparing report..." : "Download My Career Intelligence Report"}
-                  </button>
+                {checkout.reportStatus === "DETAILED_REPORT_UNLOCKED" ? (
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={downloading}
+                      onClick={() => void viewReport()}
+                      className="rounded-xl border border-emerald-700 bg-white px-5 py-3 text-sm font-black text-emerald-800"
+                    >
+                      View Detailed Report
+                    </button>
+                    <button
+                      type="button"
+                      disabled={downloading}
+                      onClick={() => void downloadReport()}
+                      className="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-black text-white disabled:opacity-50"
+                    >
+                      {downloading ? "Preparing report..." : "Download Detailed Report"}
+                    </button>
+                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -323,13 +417,15 @@ export function SubmittedCommerce({ attemptId, title }: { attemptId: string; tit
             ) : null}
           </div>
 
-          {checkout?.commerceRequired && !checkout.reportAccess ? (
+          {checkout?.commerceRequired &&
+          !checkout.reportAccess &&
+          checkout.reportStatus === "DETAILED_REPORT_READY_LOCKED" ? (
             <div className="rounded-3xl border border-orange-200 bg-[#fffaf6] p-6">
               <p className="text-xs font-black uppercase tracking-[0.15em] text-orange-700">
-                Unlock your result
+                Detailed report access
               </p>
               <h2 className="mt-3 text-2xl font-black text-slate-950">
-                Choose your Career Intelligence package
+                Unlock Detailed Career Intelligence Report
               </h2>
 
               <div className="mt-6 space-y-3">
@@ -405,11 +501,26 @@ export function SubmittedCommerce({ attemptId, title }: { attemptId: string; tit
                 <p>✓ Deterministic scoring pipeline</p>
                 <p>✓ Career Intelligence interpretation</p>
                 <p>✓ CareerFit directions</p>
-                <p>✓ Governed report release</p>
+                <p>✓ Automatic immutable report generation</p>
                 <p>✓ Counselling option when included</p>
               </div>
             </div>
           )}
+        </div>
+
+        <div className="flex flex-wrap gap-3 border-t border-slate-200 px-7 py-6 sm:px-10">
+          <Link
+            href="/candidate?service=counselling"
+            className="rounded-xl border border-blue-600 px-5 py-3 text-sm font-black text-blue-700"
+          >
+            Book a Career Counsellor
+          </Link>
+          <Link
+            href="/candidate/assessments"
+            className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-black text-slate-700"
+          >
+            Explore Another Assessment
+          </Link>
         </div>
       </section>
     </main>

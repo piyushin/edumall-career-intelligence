@@ -13,6 +13,15 @@ export class ReportOpenService {
 
   public async open(context: AuthContext, attemptId: string) {
     await this.policy.assertCanOpenFullReport(context, attemptId);
+    return this.loadGeneratedReport(attemptId);
+  }
+
+  public async openForDownload(context: AuthContext, attemptId: string) {
+    await this.policy.assertCanDownloadFullReport(context, attemptId);
+    return this.loadGeneratedReport(attemptId);
+  }
+
+  private async loadGeneratedReport(attemptId: string) {
     const attempt = await this.prisma.assessmentAttempt.findUnique({
       where: { id: attemptId },
       select: {
@@ -21,7 +30,13 @@ export class ReportOpenService {
           select: {
             status: true,
             reportDataSnapshot: {
-              select: { id: true, reportVersion: true, generatedAt: true, payload: true },
+              select: {
+                id: true,
+                inputHash: true,
+                reportVersion: true,
+                generatedAt: true,
+                payload: true,
+              },
             },
           },
         },
@@ -32,7 +47,13 @@ export class ReportOpenService {
             reportDataSnapshots: {
               orderBy: { generatedAt: "desc" },
               take: 1,
-              select: { id: true, reportVersion: true, generatedAt: true, payload: true },
+              select: {
+                id: true,
+                inputHash: true,
+                reportVersion: true,
+                generatedAt: true,
+                payload: true,
+              },
             },
           },
         },

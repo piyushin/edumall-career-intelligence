@@ -76,6 +76,7 @@ export class CommerceService {
           userId: context.userId,
           attemptId,
           status: CommerceEntitlementStatus.ACTIVE,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
         },
         select: {
           type: true,
@@ -95,19 +96,25 @@ export class CommerceService {
     );
 
     const scoringRun = attempt.scoringRuns[0] ?? null;
-    const snapshot = scoringRun?.reportDataSnapshots[0] ?? null;
+    const snapshot =
+      attempt.reportGeneration?.reportDataSnapshot ?? scoringRun?.reportDataSnapshots[0] ?? null;
     const release = attempt.reportReleases[0] ?? null;
+    const reportAccess = !publicSignup || reportEntitlement;
 
     const reportStatus =
       attempt.status !== AssessmentAttemptStatus.SUBMITTED
         ? "ASSESSMENT_IN_PROGRESS"
-        : release
-          ? "RELEASED"
-          : snapshot
-            ? "AWAITING_RELEASE"
-            : scoringRun
-              ? "PROCESSING_REPORT"
-              : "PROCESSING_SCORE";
+        : !scoringRun
+          ? "SCORING"
+          : attempt.reportGeneration?.status === "BLOCKED_CONFIGURATION"
+            ? "REPORT_CONFIGURATION_BLOCKED"
+            : attempt.reportGeneration?.status === "FAILED"
+              ? "REPORT_GENERATION_FAILED"
+              : snapshot
+                ? reportAccess
+                  ? "DETAILED_REPORT_UNLOCKED"
+                  : "DETAILED_REPORT_READY_LOCKED"
+                : "REPORT_PROCESSING";
 
     return {
       attemptId,
@@ -117,7 +124,7 @@ export class CommerceService {
       reportReleased: Boolean(release),
       reportReleasedAt: release?.releasedAt ?? null,
       commerceRequired: publicSignup,
-      reportAccess: !publicSignup || reportEntitlement,
+      reportAccess,
       counsellingAccess: counsellingEntitlement,
       candidate: attempt.assignment.user,
       products,
@@ -1081,6 +1088,14 @@ export class CommerceService {
                 id: true,
                 generatedAt: true,
               },
+            },
+          },
+        },
+        reportGeneration: {
+          select: {
+            status: true,
+            reportDataSnapshot: {
+              select: { id: true, generatedAt: true },
             },
           },
         },

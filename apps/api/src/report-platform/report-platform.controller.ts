@@ -8,10 +8,14 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  Res,
+  StreamableFile,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
 import { MembershipRole } from "@prisma/client";
+import type { Response } from "express";
+import { AssessmentReportPdfService } from "../assessments/assessment-report-pdf.service";
 import { AuthGuard } from "../auth/auth.guard";
 import type { AuthContext } from "../auth/auth.types";
 import { CsrfGuard } from "../auth/csrf.guard";
@@ -23,7 +27,10 @@ import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { SensitiveRead } from "../auth/sensitive-read.decorator";
 import { CandidateCounsellorAssignmentService } from "./candidate-counsellor-assignment.service";
+import { AutomaticReportProcessingService } from "./automatic-report-processing.service";
+import { CandidateShortResultService } from "./candidate-short-result.service";
 import { ReportConfigurationService } from "./report-configuration.service";
+import { ReportAccessPolicyService } from "./report-access-policy.service";
 import { ReportCreditService } from "./report-credit.service";
 import { ReportOpenService } from "./report-open.service";
 import { ReportSearchService } from "./report-search.service";
@@ -53,6 +60,10 @@ export class AdminReportController {
   public constructor(
     @Inject(ReportSearchService) private readonly search: ReportSearchService,
     @Inject(ReportOpenService) private readonly openReport: ReportOpenService,
+    @Inject(AssessmentReportPdfService) private readonly pdf: AssessmentReportPdfService,
+    @Inject(AutomaticReportProcessingService)
+    private readonly automaticReports: AutomaticReportProcessingService,
+    @Inject(ReportAccessPolicyService) private readonly reportAccess: ReportAccessPolicyService,
   ) {}
 
   @Get()
@@ -70,6 +81,86 @@ export class AdminReportController {
     @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
   ) {
     return this.openReport.open(context, attemptId);
+  }
+
+  @Get(":attemptId/report.pdf")
+  @Permissions("report.download")
+  @Header("cache-control", "private, no-store")
+  public async pdfReport(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const opened = await this.openReport.openForDownload(context, attemptId);
+    const pdf = await this.pdf.render(opened.report);
+    response.setHeader("content-type", "application/pdf");
+    response.setHeader(
+      "content-disposition",
+      `attachment; filename="career-intelligence-report-${attemptId}.pdf"`,
+    );
+    response.setHeader("content-length", String(pdf.length));
+    return new StreamableFile(pdf);
+  }
+
+  @Post(":attemptId/retry")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+  @Permissions("assessment.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public async retry(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+  ) {
+    await this.reportAccess.assertCanRetryAutomaticReport(context, attemptId);
+    return this.automaticReports.processSubmittedAttempt(attemptId);
+  }
+}
+
+@Controller("candidate/assessments")
+@UseGuards(AuthGuard, RolesGuard)
+@Roles(MembershipRole.STUDENT, MembershipRole.EMPLOYEE)
+export class CandidateReportController {
+  public constructor(
+    @Inject(CandidateShortResultService)
+    private readonly shortResults: CandidateShortResultService,
+    @Inject(ReportOpenService) private readonly openReport: ReportOpenService,
+    @Inject(AssessmentReportPdfService) private readonly pdf: AssessmentReportPdfService,
+  ) {}
+
+  @Get(":attemptId/short-result")
+  @Header("cache-control", "private, no-store")
+  public shortResult(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+  ) {
+    return this.shortResults.getOwnShortResult(context, attemptId);
+  }
+
+  @Get(":attemptId/detailed-report")
+  @Header("cache-control", "private, no-store")
+  public detailedReport(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+  ) {
+    return this.openReport.open(context, attemptId);
+  }
+
+  @Get(":attemptId/detailed-report.pdf")
+  @Header("cache-control", "private, no-store")
+  public async detailedReportPdf(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const opened = await this.openReport.openForDownload(context, attemptId);
+    const pdf = await this.pdf.render(opened.report);
+    response.setHeader("content-type", "application/pdf");
+    response.setHeader(
+      "content-disposition",
+      `attachment; filename="career-intelligence-report-${attemptId}.pdf"`,
+    );
+    response.setHeader("content-length", String(pdf.length));
+    return new StreamableFile(pdf);
   }
 }
 
@@ -118,6 +209,14 @@ export class ReportConfigurationController {
     @Query("assessmentVersionId") assessmentVersionId?: string,
   ) {
     return this.configurations.list(context, assessmentVersionId);
+  }
+  @Get("readiness/:assessmentVersionId")
+  @Header("cache-control", "no-store")
+  public readiness(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("assessmentVersionId", new ParseUUIDPipe()) assessmentVersionId: string,
+  ) {
+    return this.configurations.readiness(context, assessmentVersionId);
   }
   @Post()
   @UseGuards(CsrfGuard)

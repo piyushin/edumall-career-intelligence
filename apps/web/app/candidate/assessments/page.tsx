@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError } from "../../../lib/api";
 import {
-  downloadCandidateReleasedReportPdf,
+  downloadCandidateDetailedReportPdf,
   listCandidateAssignments,
   startOrResumeCandidateAttempt,
   type CandidateAssignment,
@@ -76,7 +76,7 @@ export default function CandidateAssessmentsPage() {
     setError("");
 
     try {
-      const { blob, filename } = await downloadCandidateReleasedReportPdf(attemptId);
+      const { blob, filename } = await downloadCandidateDetailedReportPdf(attemptId);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
 

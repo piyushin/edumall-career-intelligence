@@ -18,11 +18,10 @@ import { AuthGuard } from "../auth/auth.guard";
 import type { AuthContext } from "../auth/auth.types";
 import { CsrfGuard } from "../auth/csrf.guard";
 import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
-import { ReportAccessPolicyService } from "../report-platform/report-access-policy.service";
+import { ReportOpenService } from "../report-platform/report-open.service";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { AssessmentReportPdfService } from "./assessment-report-pdf.service";
-import { AssessmentReportReleaseService } from "./assessment-report-release.service";
 import { AssessmentService } from "./assessment.service";
 import { SaveAssessmentResponseDto } from "./assessment.types";
 
@@ -33,12 +32,10 @@ export class AssessmentController {
   public constructor(
     @Inject(AssessmentService)
     private readonly assessments: AssessmentService,
-    @Inject(AssessmentReportReleaseService)
-    private readonly releases: AssessmentReportReleaseService,
     @Inject(AssessmentReportPdfService)
     private readonly pdf: AssessmentReportPdfService,
-    @Inject(ReportAccessPolicyService)
-    private readonly reportAccess: ReportAccessPolicyService,
+    @Inject(ReportOpenService)
+    private readonly reportOpen: ReportOpenService,
   ) {}
 
   @Get("assignments")
@@ -65,9 +62,8 @@ export class AssessmentController {
     @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
     @Res({ passthrough: true }) response: Response,
   ) {
-    await this.reportAccess.assertCanOpenFullReport(context, attemptId);
-    const release = await this.releases.getCandidateReleasedSnapshot(context, attemptId);
-    const pdf = await this.pdf.render(release.reportDataSnapshot);
+    const opened = await this.reportOpen.openForDownload(context, attemptId);
+    const pdf = await this.pdf.render(opened.report);
 
     response.setHeader("content-type", "application/pdf");
     response.setHeader(

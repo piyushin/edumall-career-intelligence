@@ -2,7 +2,7 @@
 
 ## Scope
 
-R20-A establishes the durable schema, authorization, and API primitives for automatic reports. It does not replace the complete submission workflow or redesign candidate/admin screens. No scientific identifiers, norms, mappings, thresholds, weights, or interpretations are seeded.
+R20-A establishes the durable schema, authorization, and API primitives for automatic reports. R20-B connects those primitives to submission, automatic governed report generation, the free candidate summary, and entitlement-based detailed report access. No scientific identifiers, norms, mappings, thresholds, weights, or interpretations are seeded.
 
 ## Access concepts
 
@@ -45,7 +45,28 @@ Platform-scoped administrators search platform data (optionally narrowed by orga
 - the interpretation set and CareerFit model belong to the same assessment version; and
 - the norm set, interpretation set, and CareerFit model are all `PUBLISHED`.
 
-`AssessmentReportGeneration` provides one durable orchestration record per attempt with `PENDING`, `PROCESSING`, `GENERATED`, `BLOCKED_CONFIGURATION`, and `FAILED` states, configuration/snapshot references, retry count, sanitized operational error fields, and processing timestamps. R20-A does not expose operational errors to candidates.
+`AssessmentReportGeneration` provides one durable orchestration record per attempt with `PENDING`, `PROCESSING`, `GENERATED`, `BLOCKED_CONFIGURATION`, and `FAILED` states, configuration/snapshot references, retry count, sanitized operational error fields, and processing timestamps.
+
+`AutomaticReportProcessingService` is the single R20-B orchestration path. After the submission transaction, deterministic scoring completes first and the processor then:
+
+- confirms submitted state and resolves the latest immutable scoring run;
+- requires exactly one active configuration for the assessment version;
+- validates that configured norm, interpretation, CareerFit, and taxonomy references remain published and version-compatible;
+- invokes the existing norm and CareerFit execution services, applies the configured interpretation set, and creates/reuses the immutable report-data snapshot;
+- links the exact configuration and snapshot to the attempt generation; and
+- records system-attributed start, retry, generated, blocked-configuration, and failed audit evidence.
+
+All scientific stages retain their existing hashes and unique constraints. Reprocessing a generated attempt returns the linked snapshot. Processing failures never change the submitted attempt. Missing/invalid active configuration is recorded as `BLOCKED_CONFIGURATION`; other failures are recorded as `FAILED` with sanitized candidate-safe operational text. An authorized central administrator may invoke the same processor through the authenticated retry route. PDF byte rendering is deliberately outside submission and is performed only when an authorized user requests a download.
+
+`GET /admin/report-configurations/readiness/:assessmentVersionId` exposes pre-commerce readiness for one active configuration plus published norm, interpretation, and CareerFit checks. Report search includes generation attempts and sanitized failure details.
+
+## Candidate short result and detailed access
+
+`GET /candidate/assessments/:attemptId/short-result` is restricted to the authenticated candidate's own tenant-scoped attempt and never checks commerce entitlement. Before completion it returns explicit scoring/processing/configuration-blocked/failed states. Once generated, it projects only concise published construct labels/summaries and the top five governed CareerFit directions from the immutable snapshot. It omits raw scores, internal construct keys, scientific IDs, evidence, methodology, provenance, candidate contact data, and the complete premium payload.
+
+The complete candidate report and PDF use `ReportOpenService` and `ReportAccessPolicyService`. A generated public-signup report is `DETAILED_REPORT_READY_LOCKED` until an active report entitlement exists and `DETAILED_REPORT_UNLOCKED` afterward. Payment, coupon, or institutional entitlement does not call generation. Non-commercial institutional semantics remain unchanged.
+
+Platform Super Admin and properly permitted Platform Admin sessions can open/download the generation-linked snapshot without candidate commerce or release. Tenant administrators still require an organization report-access grant. Counsellors still require both active assignment and a user report-access grant. All PDF routes render the immutable snapshot selected by the generation record and authorize before reading/rendering it.
 
 ## Phone storage
 
@@ -59,10 +80,8 @@ Credit and counsellor assignment mutations, plus report configuration changes, w
 
 ## Legacy compatibility
 
-`AssessmentReportRelease`, its schema, historical migration, records, and candidate release-reading flow are preserved. R20-A only adds references and new tables; it performs no destructive drop or rename. Existing releases remain readable. Candidate PDF access still honors the historical released snapshot while also using the centralized commercial report policy.
+`AssessmentReportRelease`, its schema, historical migration, records, and compatibility API are preserved. Existing release evidence remains readable and the staff UI labels it as legacy history. New automatic reports create no release row and neither candidate nor administrator access requires one. The legacy candidate PDF path remains as a compatibility alias but now opens the authorized generation-linked immutable snapshot.
 
 ## Follow-on work
 
-R20-B must connect assessment submission to deterministic scoring, automatic CareerFit execution, configuration resolution, generation-state transitions/retries, complete snapshot generation, and the free short result. It must stop requiring a new manual `AssessmentReportRelease` for the normal automatic commercial workflow while keeping historical releases readable.
-
-R20-C must implement the full candidate/admin report UX, tenant/counsellor self-service credit purchasing through preserved checkout/payment primitives, report download experiences, and optional counselling journeys. OTP, if approved, is also later work.
+R20-C should deepen the complete report reading experience, add tenant/counsellor self-service credit purchasing, implement counselling scheduling/operations, and connect durable background recovery when the worker evolves beyond its current health-only queue. OTP, if approved, also remains later work.
