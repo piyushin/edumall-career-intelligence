@@ -158,6 +158,16 @@ export function AdminShell({ children }: { children: ReactNode }) {
             >
               Report reviews
             </Link>
+            <Link
+              href="/admin/consent-documents"
+              className={`block rounded-lg px-3 py-2 text-sm font-medium ${
+                pathname.startsWith("/admin/consent-documents")
+                  ? "bg-blue-50 text-blue-800"
+                  : "text-slate-700 hover:bg-white"
+              }`}
+            >
+              Consent documents
+            </Link>
           </nav>
         </aside>
 

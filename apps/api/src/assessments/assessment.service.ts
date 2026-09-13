@@ -15,6 +15,7 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
+import { ConsentService } from "../consent/consent.service";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import { AssessmentReportPipelineService } from "./assessment-report-pipeline.service";
 import type { SaveAssessmentResponseDto } from "./assessment.types";
@@ -28,6 +29,8 @@ export class AssessmentService {
     private readonly prisma: PrismaClient,
     @Inject(AssessmentReportPipelineService)
     private readonly reportPipeline: AssessmentReportPipelineService,
+    @Inject(ConsentService)
+    private readonly consent: ConsentService,
   ) {}
 
   public async listAssignments(context: AuthContext) {
@@ -80,6 +83,8 @@ export class AssessmentService {
 
   public async startOrResumeAttempt(context: AuthContext, assignmentId: string) {
     const organizationId = this.requireOrganization(context);
+
+    await this.requireConsent(context.userId);
 
     try {
       return await this.prisma.$transaction(
@@ -536,6 +541,18 @@ export class AssessmentService {
     }
 
     return context.organizationId;
+  }
+
+  /** D-013: no attempt may start until the candidate's consent record is complete. */
+  private async requireConsent(userId: string): Promise<void> {
+    const requirements = await this.consent.getRequirements(userId);
+
+    if (!requirements.complete) {
+      throw new ForbiddenException({
+        code: "CONSENT_REQUIRED",
+        message: "Required consent has not been completed for this account.",
+      });
+    }
   }
 
   private assertAssignmentAvailable(assignment: {

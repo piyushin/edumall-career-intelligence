@@ -109,6 +109,26 @@ enum AssessmentReportReleaseStatus {
   WITHDRAWN
 }
 
+enum ConsentDocumentType {
+  PRIVACY_NOTICE
+  ASSESSMENT_DATA_PROCESSING
+}
+
+enum ConsentDocumentStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+/// SELF: an adult accepting on their own behalf. GUARDIAN: a guardian accepting on
+/// behalf of a candidate under 18 (D-013). STUDENT_ASSENT: the minor's own assent,
+/// captured alongside guardian consent, never in place of it.
+enum ConsentAcceptorRole {
+  SELF
+  GUARDIAN
+  STUDENT_ASSENT
+}
+
 /// Technical metadata only. This is not a business-domain model.
 model SystemMetadata {
   id        String   @id @default(uuid()) @db.Uuid
@@ -149,6 +169,7 @@ model User {
   passwordHash                 String?                    @map("password_hash") @db.VarChar(255)
   firstName                    String                     @map("first_name") @db.VarChar(100)
   lastName                     String                     @map("last_name") @db.VarChar(100)
+  dateOfBirth                  DateTime?                  @map("date_of_birth") @db.Date
   status                       UserStatus                 @default(INVITED)
   emailVerifiedAt              DateTime?                  @map("email_verified_at")
   lastLoginAt                  DateTime?                  @map("last_login_at")
@@ -169,6 +190,7 @@ model User {
   createdAssessmentAssignments AssessmentAssignment[]     @relation("AssessmentAssignmentAssignedBy")
   reviewedReportReleases       AssessmentReportRelease[]  @relation("AssessmentReportReleaseReviewedBy")
   authoredCounsellorNotes      AssessmentCounsellorNote[] @relation("AssessmentCounsellorNoteAuthor")
+  consentRecords               UserConsentRecord[]
 
   @@index([status])
   @@index([status, lockedUntil])
@@ -773,6 +795,51 @@ model AssessmentCounsellorNote {
   @@index([attemptId, createdAt])
   @@index([organizationId])
   @@map("assessment_counsellor_notes")
+}
+
+/// Versioned legal text (D-013). Only one PUBLISHED document per type at a time.
+/// Placeholder body text ships with this schema — production legal copy is a
+/// content-authoring action, not a code change (see docs/OPEN_QUESTIONS.md).
+model ConsentDocument {
+  id          String                @id @default(uuid()) @db.Uuid
+  type        ConsentDocumentType
+  version     String                @db.VarChar(60)
+  title       String                @db.VarChar(200)
+  bodyText    String                @map("body_text") @db.Text
+  status      ConsentDocumentStatus @default(DRAFT)
+  publishedAt DateTime?             @map("published_at")
+  retiredAt   DateTime?             @map("retired_at")
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+  records     UserConsentRecord[]
+
+  @@unique([type, version])
+  @@index([type, status])
+  @@index([status, publishedAt])
+  @@map("consent_documents")
+}
+
+/// Append-only acceptance evidence. A guardian's acceptance is self-attested in the
+/// candidate's own session (no guardian account/login and no identity verification
+/// exist yet — see docs/OPEN_QUESTIONS.md Legal Q1); it is not identity-verified.
+model UserConsentRecord {
+  id                   String              @id @default(uuid()) @db.Uuid
+  userId               String              @map("user_id") @db.Uuid
+  consentDocumentId    String              @map("consent_document_id") @db.Uuid
+  acceptedByRole       ConsentAcceptorRole @map("accepted_by_role")
+  acceptedAt           DateTime            @default(now()) @map("accepted_at")
+  guardianName         String?             @map("guardian_name") @db.VarChar(200)
+  guardianEmail        String?             @map("guardian_email") @db.VarChar(320)
+  guardianRelationship String?             @map("guardian_relationship") @db.VarChar(100)
+  ipAddress            String?             @map("ip_address") @db.VarChar(45)
+  createdAt            DateTime            @default(now()) @map("created_at")
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  consentDocument      ConsentDocument     @relation(fields: [consentDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, consentDocumentId])
+  @@index([userId])
+  @@index([consentDocumentId])
+  @@map("user_consent_records")
 }
 
 model AuditLog {

@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ConsentModule } from "../consent/consent.module";
 import { AssessmentAssignmentAdminController } from "./assessment-assignment-admin.controller";
 import { AssessmentAssignmentAdminService } from "./assessment-assignment-admin.service";
 import { AssessmentAdminController } from "./assessment-admin.controller";
@@ -16,6 +17,7 @@ import { AssessmentScoringService } from "./assessment-scoring.service";
 import { AssessmentService } from "./assessment.service";
 
 @Module({
+  imports: [ConsentModule],
   controllers: [
     AssessmentController,
     AssessmentAdminController,

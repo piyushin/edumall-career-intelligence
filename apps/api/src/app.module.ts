@@ -3,6 +3,7 @@ import type { AppConfig } from "@edumall/config";
 import { AssessmentModule } from "./assessments/assessment.module";
 import { AuthModule } from "./auth/auth.module";
 import { APP_CONFIG } from "./config/app-config.token";
+import { ConsentModule } from "./consent/consent.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health/health.controller";
 import { ReadinessService } from "./health/readiness.service";
@@ -12,7 +13,12 @@ export class AppModule {
   public static register(config: AppConfig): DynamicModule {
     return {
       controllers: [HealthController],
-      imports: [DatabaseModule.register(config), AuthModule.register(config), AssessmentModule],
+      imports: [
+        DatabaseModule.register(config),
+        AuthModule.register(config),
+        ConsentModule,
+        AssessmentModule,
+      ],
       module: AppModule,
       providers: [
         {

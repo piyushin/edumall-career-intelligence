@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../auth/auth.types";
+import type { ConsentService } from "../consent/consent.service";
 import type { AssessmentReportPipelineService } from "./assessment-report-pipeline.service";
 import { AssessmentService } from "./assessment.service";
 
@@ -57,18 +58,27 @@ function createPrisma() {
   return prisma;
 }
 
+function createConsentService(complete = true) {
+  return {
+    getRequirements: vi.fn().mockResolvedValue({ complete }),
+  };
+}
+
 describe("AssessmentService", () => {
   let prisma: ReturnType<typeof createPrisma>;
+  let consent: ReturnType<typeof createConsentService>;
   let service: AssessmentService;
 
   beforeEach(() => {
     vi.clearAllMocks();
     prisma = createPrisma();
+    consent = createConsentService();
     service = new AssessmentService(
       prisma as unknown as PrismaClient,
       {
         generateReportIfReady: vi.fn().mockResolvedValue({ generated: false }),
       } as unknown as AssessmentReportPipelineService,
+      consent as unknown as ConsentService,
     );
   });
 
@@ -119,6 +129,16 @@ describe("AssessmentService", () => {
 
     expect(result.id).toBe(attemptId);
     expect(prisma.assessmentAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it("blocks starting an attempt until consent is complete", async () => {
+    consent.getRequirements.mockResolvedValue({ complete: false });
+
+    await expect(service.startOrResumeAttempt(context, assignmentId)).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "CONSENT_REQUIRED" }),
+    });
+
+    expect(prisma.assessmentAssignment.findFirst).not.toHaveBeenCalled();
   });
 
   it("rejects attempts beyond the assignment limit", async () => {
@@ -274,7 +294,11 @@ describe("AssessmentService", () => {
       generateReportIfReady: vi.fn().mockRejectedValue(new Error("norm set not published")),
     } as unknown as AssessmentReportPipelineService;
 
-    service = new AssessmentService(prisma as unknown as PrismaClient, reportPipeline);
+    service = new AssessmentService(
+      prisma as unknown as PrismaClient,
+      reportPipeline,
+      consent as unknown as ConsentService,
+    );
 
     prisma.assessmentAttempt.findFirst.mockResolvedValue({
       id: attemptId,

@@ -6,6 +6,9 @@ import {
   AssessmentNormSetStatus,
   AssessmentReportReleaseStatus,
   AssessmentVersionStatus,
+  ConsentAcceptorRole,
+  ConsentDocumentStatus,
+  ConsentDocumentType,
   MembershipRole,
   MembershipStatus,
   OrganizationType,
@@ -868,5 +871,143 @@ describe.skipIf(!runIntegrationTests)("Phase 2 assessment database integration",
         },
       }),
     ).rejects.toThrow(/Counsellor note identity fields are immutable/);
+  });
+
+  it("enforces consent document lifecycle and acceptance-record guards (Phase 5B)", async () => {
+    const suffix = randomUUID();
+
+    const candidate = await prisma.user.create({
+      data: {
+        email: `phase-5b-candidate-${suffix}@example.test`,
+        normalizedEmail: `phase-5b-candidate-${suffix}@example.test`,
+        firstName: "Phase",
+        lastName: "Candidate",
+        status: UserStatus.ACTIVE,
+      },
+    });
+
+    await expect(
+      prisma.user.update({
+        where: { id: candidate.id },
+        data: { dateOfBirth: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+      }),
+    ).rejects.toThrow(/users_date_of_birth_not_future_check/);
+
+    // The "one published per type" index is a global singleton, not scoped to this
+    // test's suffix — retire any document a previous run left published so this run
+    // starts from a clean slate.
+    await prisma.consentDocument.updateMany({
+      where: {
+        type: ConsentDocumentType.PRIVACY_NOTICE,
+        status: ConsentDocumentStatus.PUBLISHED,
+      },
+      data: {
+        status: ConsentDocumentStatus.RETIRED,
+        retiredAt: new Date(),
+      },
+    });
+
+    const document = await prisma.consentDocument.create({
+      data: {
+        type: ConsentDocumentType.PRIVACY_NOTICE,
+        version: `v1-${suffix}`,
+        title: "Privacy Notice",
+        bodyText: "Placeholder privacy notice text pending legal review.",
+      },
+    });
+
+    await expect(
+      prisma.userConsentRecord.create({
+        data: {
+          userId: candidate.id,
+          consentDocumentId: document.id,
+          acceptedByRole: ConsentAcceptorRole.SELF,
+        },
+      }),
+    ).rejects.toThrow(/Only a published consent document may be accepted/);
+
+    await prisma.consentDocument.update({
+      where: { id: document.id },
+      data: {
+        status: ConsentDocumentStatus.PUBLISHED,
+        publishedAt: new Date(),
+      },
+    });
+
+    await expect(
+      prisma.consentDocument.create({
+        data: {
+          type: ConsentDocumentType.PRIVACY_NOTICE,
+          version: `v2-${suffix}`,
+          title: "Privacy Notice v2",
+          bodyText: "A second version.",
+          status: ConsentDocumentStatus.PUBLISHED,
+          publishedAt: new Date(),
+        },
+      }),
+    ).rejects.toThrow(/Unique constraint failed/);
+
+    await expect(
+      prisma.consentDocument.update({
+        where: { id: document.id },
+        data: { title: "Mutated title" },
+      }),
+    ).rejects.toThrow(/Published consent documents may only transition to retired/);
+
+    await expect(
+      prisma.userConsentRecord.create({
+        data: {
+          userId: candidate.id,
+          consentDocumentId: document.id,
+          acceptedByRole: ConsentAcceptorRole.GUARDIAN,
+        },
+      }),
+    ).rejects.toThrow(/user_consent_records_guardian_fields_check/);
+
+    const record = await prisma.userConsentRecord.create({
+      data: {
+        userId: candidate.id,
+        consentDocumentId: document.id,
+        acceptedByRole: ConsentAcceptorRole.GUARDIAN,
+        guardianName: "Priya Shah",
+        guardianEmail: `guardian-${suffix}@example.test`,
+        guardianRelationship: "Mother",
+      },
+    });
+
+    expect(record.acceptedByRole).toBe(ConsentAcceptorRole.GUARDIAN);
+
+    await expect(
+      prisma.userConsentRecord.update({
+        where: { id: record.id },
+        data: { guardianName: "Someone else" },
+      }),
+    ).rejects.toThrow(/Consent acceptance records are immutable/);
+
+    await expect(
+      prisma.consentDocument.update({
+        where: { id: document.id },
+        data: {
+          status: ConsentDocumentStatus.RETIRED,
+          retiredAt: new Date(),
+          title: "Mutated on retire",
+        },
+      }),
+    ).rejects.toThrow(/Published consent document content is immutable/);
+
+    await prisma.consentDocument.update({
+      where: { id: document.id },
+      data: {
+        status: ConsentDocumentStatus.RETIRED,
+        retiredAt: new Date(),
+      },
+    });
+
+    await expect(
+      prisma.consentDocument.update({
+        where: { id: document.id },
+        data: { status: ConsentDocumentStatus.PUBLISHED },
+      }),
+    ).rejects.toThrow(/Retired consent documents are immutable/);
   });
 });

@@ -31,6 +31,7 @@ function user(overrides: Partial<User> = {}): User {
     passwordHash: null,
     firstName: "Active",
     lastName: "User",
+    dateOfBirth: null,
     status: UserStatus.ACTIVE,
     emailVerifiedAt: now,
     lastLoginAt: null,
