@@ -2,7 +2,7 @@
 
 ## Scope
 
-R20-A establishes the durable schema, authorization, and API primitives for automatic reports. R20-B connects those primitives to submission, automatic governed report generation, the free candidate summary, and entitlement-based detailed report access. No scientific identifiers, norms, mappings, thresholds, weights, or interpretations are seeded.
+R20-A establishes the durable schema, authorization, and API primitives for automatic reports. R20-B connects those primitives to submission, automatic governed report generation, the free candidate summary, and entitlement-based detailed report access. R20-C1 adds the report-operations and Candidate 360 interfaces while preserving those boundaries. No scientific identifiers, norms, mappings, thresholds, weights, or interpretations are seeded.
 
 ## Access concepts
 
@@ -35,6 +35,8 @@ Counsellor report search is always constrained through an active assignment in t
 
 Search supports free text, candidate name, mobile, email, submitted date/range, organization ID/name, assessment, assessment version, generation status, candidate entitlement status, and counsellor. Results are paginated metadata containing candidate, organization, assessment, generation, entitlement, and `canViewFullReport` fields only.
 
+R20-C1 exposes this projection through `/admin/reports` and `/staff/reports`. The UI never treats a visible row as report-open authority. A narrow scoped metadata endpoint for one attempt supports detail screens but returns no snapshot payload; `/full` and PDF endpoints continue to authorize independently. Platform administrators filter organizations by name rather than entering UUIDs. Staff organization and counsellor scope is derived from the authenticated context on the server.
+
 Platform-scoped administrators search platform data (optionally narrowed by organization). Organization-scoped sessions cannot select another organization. Counsellors are additionally restricted to their own active assignments.
 
 ## Automatic report configuration and generation state
@@ -60,6 +62,8 @@ All scientific stages retain their existing hashes and unique constraints. Repro
 
 `GET /admin/report-configurations/readiness/:assessmentVersionId` exposes pre-commerce readiness for one active configuration plus published norm, interpretation, and CareerFit checks. Report search includes generation attempts and sanitized failure details.
 
+The R20-C1 assessment workspace displays this readiness for published versions as ready, missing active configuration, or unpublished/version-mismatched configuration. It does not create configuration or scientific data.
+
 ## Candidate short result and detailed access
 
 `GET /candidate/assessments/:attemptId/short-result` is restricted to the authenticated candidate's own tenant-scoped attempt and never checks commerce entitlement. Before completion it returns explicit scoring/processing/configuration-blocked/failed states. Once generated, it projects only concise published construct labels/summaries and the top five governed CareerFit directions from the immutable snapshot. It omits raw scores, internal construct keys, scientific IDs, evidence, methodology, provenance, candidate contact data, and the complete premium payload.
@@ -82,6 +86,21 @@ Credit and counsellor assignment mutations, plus report configuration changes, w
 
 `AssessmentReportRelease`, its schema, historical migration, records, and compatibility API are preserved. Existing release evidence remains readable and the staff UI labels it as legacy history. New automatic reports create no release row and neither candidate nor administrator access requires one. The legacy candidate PDF path remains as a compatibility alias but now opens the authorized generation-linked immutable snapshot.
 
-## Follow-on work
+Candidate 360 and current report operations derive state from `AssessmentReportGeneration`, immutable snapshot presence, candidate entitlements, and third-party grants. They never derive current status from the count or presence of release rows.
 
-R20-C should deepen the complete report reading experience, add tenant/counsellor self-service credit purchasing, implement counselling scheduling/operations, and connect durable background recovery when the worker evolves beyond its current health-only queue. OTP, if approved, also remains later work.
+## R20-C1 operations UI
+
+The Control Centre routes Reports directly to `/admin/reports`, not through the staff results area. Its report detail renders the immutable premium payload into report overview, CareerFit, and interpreted-profile sections instead of displaying raw JSON. Candidate 360 at `/admin/users/[userId]` combines safe identity, membership, assessment, commerce, report-access, counsellor assignment, and timestamp projections according to permission.
+
+The staff workspace uses `/staff/reports`. Old `/staff/results` links redirect for URL compatibility, but the current interface has no approval/release action. Tenant administrators and counsellors can search authorized metadata; they can open a full report only when the backend projects an applicable active access grant.
+
+## Remaining R20-C2
+
+- Dedicated payments/orders UI.
+- Coupon management UI.
+- Report-credit wallet purchase/allocation UX.
+- Backend-controlled pricing UX.
+- Tenant/counsellor self-service credit purchase.
+- Counselling booking/scheduling/payment/fulfilment.
+
+Durable background recovery remains a later platform concern when the worker evolves beyond its current health-only queue. OTP, if separately approved, also remains later work.

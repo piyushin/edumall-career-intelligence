@@ -100,7 +100,7 @@ export default function AdminDashboardPage() {
                 <Metric
                   label="Assessment assignments"
                   value={data.assessments.assignments}
-                  note={`${data.assessments.attempts.submitted} submitted · ${data.assessments.reports.awaitingRelease} awaiting report`}
+                  note={`${data.assessments.attempts.submitted} submitted · ${data.assessments.reports.processing} processing`}
                 />
               ) : null}
               {data.commerce ? (
@@ -133,15 +133,15 @@ export default function AdminDashboardPage() {
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-slate-500">Reports released</dt>
+                    <dt className="text-xs text-slate-500">Reports generated</dt>
                     <dd className="mt-1 text-xl font-semibold">
-                      {data.assessments.reports.released}
+                      {data.assessments.reports.generated}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-slate-500">Awaiting release</dt>
+                    <dt className="text-xs text-slate-500">Processing</dt>
                     <dd className="mt-1 text-xl font-semibold">
-                      {data.assessments.reports.awaitingRelease}
+                      {data.assessments.reports.processing}
                     </dd>
                   </div>
                 </dl>

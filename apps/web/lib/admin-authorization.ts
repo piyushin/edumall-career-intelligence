@@ -10,6 +10,11 @@ export type AdminPermission =
   | "candidate.view"
   | "assessment.view"
   | "assessment.manage"
+  | "report.search"
+  | "report.view.full"
+  | "report.download"
+  | "report.credit.view"
+  | "report.credit.manage"
   | "report.release"
   | "commerce.view";
 
@@ -30,6 +35,11 @@ export function hasPermission(session: AuthSession | null, permission: string): 
     "candidate.view",
     "candidate.manage",
     "report.release",
+    "report.search",
+    "report.credit.view",
+    "report.credit.manage",
+    "counsellor.assignment.view",
+    "counsellor.assignment.manage",
     "commerce.view",
     "commerce.product.manage",
     "commerce.price.manage",

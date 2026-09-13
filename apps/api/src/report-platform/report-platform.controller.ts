@@ -73,6 +73,16 @@ export class AdminReportController {
     return this.search.searchAdmin(context, query);
   }
 
+  @Get(":attemptId")
+  @Permissions("report.search")
+  @Header("cache-control", "no-store")
+  public detail(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+  ) {
+    return this.search.adminDetail(context, attemptId);
+  }
+
   @Get(":attemptId/full")
   @Permissions("report.view.full")
   @Header("cache-control", "private, no-store")
@@ -180,6 +190,16 @@ export class StaffReportController {
   @Header("cache-control", "no-store")
   public list(@CurrentAuthContext() context: AuthContext, @Query() query: ReportSearchQueryDto) {
     return this.search.searchStaff(context, query);
+  }
+
+  @Get(":attemptId")
+  @Permissions("report.search")
+  @Header("cache-control", "no-store")
+  public detail(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+  ) {
+    return this.search.staffDetail(context, attemptId);
   }
 
   @Get(":attemptId/full")

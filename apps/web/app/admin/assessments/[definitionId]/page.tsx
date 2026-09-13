@@ -17,12 +17,14 @@ import {
   createAssessmentVersion,
   getAssessmentDefinition,
   getAssessmentVersionContent,
+  getAutomaticReportReadiness,
   getPublicationReadiness,
   publishAssessmentVersion,
   type AssessmentDefinitionSummary,
   type AssessmentItem,
   type AssessmentItemType,
   type AssessmentVersionContent,
+  type AutomaticReportReadiness,
   type PublicationReadiness,
 } from "../../../../lib/assessments";
 
@@ -56,6 +58,9 @@ export default function AssessmentWorkspacePage() {
   const [content, setContent] = useState<AssessmentVersionContent | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState("");
   const [readiness, setReadiness] = useState<PublicationReadiness | null>(null);
+  const [reportReadiness, setReportReadiness] = useState<Record<string, AutomaticReportReadiness>>(
+    {},
+  );
 
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
@@ -127,6 +132,26 @@ export default function AssessmentWorkspacePage() {
   useEffect(() => {
     void loadContent();
   }, [loadContent]);
+
+  useEffect(() => {
+    if (!definition || !canManage) return;
+    const published = definition.versions.filter((version) => version.status === "PUBLISHED");
+    let active = true;
+    void Promise.all(
+      published.map(
+        async (version) => [version.id, await getAutomaticReportReadiness(version.id)] as const,
+      ),
+    )
+      .then((values) => {
+        if (active) setReportReadiness(Object.fromEntries(values));
+      })
+      .catch(() => {
+        if (active) setReportReadiness({});
+      });
+    return () => {
+      active = false;
+    };
+  }, [canManage, definition]);
 
   async function refreshAll() {
     await loadDefinition();
@@ -210,6 +235,51 @@ export default function AssessmentWorkspacePage() {
           >
             {actionError}
           </div>
+        ) : null}
+
+        {definition.versions.some((version) => version.status === "PUBLISHED") && canManage ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Automatic reporting readiness</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Published assessment versions require one active, published, version-compatible report
+              configuration.
+            </p>
+            <div className="mt-4 space-y-3">
+              {definition.versions
+                .filter((version) => version.status === "PUBLISHED")
+                .map((version) => {
+                  const state = reportReadiness[version.id];
+                  return (
+                    <div
+                      key={version.id}
+                      className="flex flex-col justify-between gap-2 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          v{version.versionNumber} · {version.title}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {state?.status === "CONFIGURATION_REQUIRED"
+                            ? "Missing, unpublished, or mismatched active configuration"
+                            : state?.status === "READY"
+                              ? "Active scientific sources are published and version-compatible"
+                              : "Checking configuration…"}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${state?.status === "READY" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}
+                      >
+                        {state?.status === "READY"
+                          ? "Ready for automatic reporting"
+                          : state?.status === "CONFIGURATION_REQUIRED"
+                            ? "Configuration required"
+                            : "Checking"}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          </section>
         ) : null}
 
         <CreateVersionPanel

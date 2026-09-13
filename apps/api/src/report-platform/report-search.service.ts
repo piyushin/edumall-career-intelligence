@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
+import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   AssessmentAttemptStatus,
   CandidateCounsellorAssignmentStatus,
@@ -11,6 +11,8 @@ import {
 import type { AuthContext } from "../auth/auth.types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import type { ReportSearchQueryDto } from "./report-platform.types";
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class ReportSearchService {
@@ -45,6 +47,24 @@ export class ReportSearchService {
     return this.search(context, query, context.role === MembershipRole.COUNSELLOR);
   }
 
+  public async adminDetail(context: AuthContext, attemptId: string) {
+    const result = await this.searchAdmin(context, {
+      q: attemptId,
+      page: 1,
+      pageSize: 1,
+    } as ReportSearchQueryDto);
+    return this.detailResult(result.items[0]);
+  }
+
+  public async staffDetail(context: AuthContext, attemptId: string) {
+    const result = await this.searchStaff(context, {
+      q: attemptId,
+      page: 1,
+      pageSize: 1,
+    } as ReportSearchQueryDto);
+    return this.detailResult(result.items[0]);
+  }
+
   private async search(context: AuthContext, query: ReportSearchQueryDto, counsellorOnly: boolean) {
     const organizationId = this.resolveOrganizationScope(context, query.organizationId);
     const where = this.buildWhere(context, query, organizationId, counsellorOnly);
@@ -66,7 +86,26 @@ export class ReportSearchService {
             select: {
               organization: { select: { id: true, name: true } },
               user: {
-                select: { id: true, firstName: true, lastName: true, email: true, phoneE164: true },
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                  phoneE164: true,
+                  counsellorCandidateAssignments: {
+                    where: {
+                      status: CandidateCounsellorAssignmentStatus.ACTIVE,
+                      ...(organizationId ? { organizationId } : {}),
+                    },
+                    take: 20,
+                    orderBy: { assignedAt: "desc" },
+                    select: {
+                      counsellorUser: {
+                        select: { id: true, firstName: true, lastName: true, email: true },
+                      },
+                    },
+                  },
+                },
               },
               assessmentVersion: {
                 select: {
@@ -90,6 +129,8 @@ export class ReportSearchService {
           },
           commerceEntitlements: {
             where: { type: CommerceEntitlementType.REPORT },
+            take: 1,
+            orderBy: { grantedAt: "desc" },
             select: { status: true, expiresAt: true },
           },
           reportAccessGrants: {
@@ -107,19 +148,18 @@ export class ReportSearchService {
       (context.role === MembershipRole.SUPER_ADMIN ||
         context.role === MembershipRole.PLATFORM_ADMIN) &&
       (context.permissions?.includes("*") || context.permissions?.includes("report.view.full"));
+    const administrativeDownloadAccess =
+      administrativeFullAccess &&
+      (context.permissions?.includes("*") || context.permissions?.includes("report.download"));
+    const administrativeRetryAccess =
+      (context.role === MembershipRole.SUPER_ADMIN ||
+        context.role === MembershipRole.PLATFORM_ADMIN) &&
+      (context.permissions?.includes("*") || context.permissions?.includes("assessment.manage"));
 
     return {
-      items: attempts.map((attempt) => ({
-        attemptId: attempt.id,
-        attemptNumber: attempt.attemptNumber,
-        submittedAt: attempt.submittedAt,
-        candidate: attempt.assignment.user,
-        organization: attempt.assignment.organization,
-        assessment: attempt.assignment.assessmentVersion,
-        generationStatus: attempt.reportGeneration?.status ?? null,
-        generation: attempt.reportGeneration,
-        candidateEntitlementStatus: attempt.commerceEntitlements[0]?.status ?? "NONE",
-        canViewFullReport:
+      items: attempts.map((attempt) => {
+        const { counsellorCandidateAssignments, ...candidate } = attempt.assignment.user;
+        const canViewFullReport =
           administrativeFullAccess ||
           (context.role === MembershipRole.COUNSELLOR
             ? attempt.reportAccessGrants.some(
@@ -132,8 +172,42 @@ export class ReportSearchService {
                     grant.principalType === "ORGANIZATION" &&
                     grant.principalOrganizationId === context.organizationId,
                 )
-              : false),
-      })),
+              : false);
+        return {
+          attemptId: attempt.id,
+          attemptNumber: attempt.attemptNumber,
+          submittedAt: attempt.submittedAt,
+          candidate,
+          organization: attempt.assignment.organization,
+          assessment: attempt.assignment.assessmentVersion,
+          generationStatus: attempt.reportGeneration?.status ?? null,
+          generation: attempt.reportGeneration,
+          candidateEntitlementStatus:
+            attempt.commerceEntitlements[0]?.status === "ACTIVE" &&
+            attempt.commerceEntitlements[0].expiresAt &&
+            attempt.commerceEntitlements[0].expiresAt <= now
+              ? "EXPIRED"
+              : (attempt.commerceEntitlements[0]?.status ?? "NONE"),
+          counsellors: counsellorCandidateAssignments.map(
+            (assignment) => assignment.counsellorUser,
+          ),
+          thirdPartyAccess: {
+            activeGrantCount: attempt.reportAccessGrants.length,
+            organizationAccess: attempt.reportAccessGrants.some(
+              (grant) => grant.principalType === "ORGANIZATION",
+            ),
+            counsellorAccess: attempt.reportAccessGrants.some(
+              (grant) => grant.principalType === "USER",
+            ),
+          },
+          canViewFullReport,
+          canDownloadReport: canViewFullReport && administrativeDownloadAccess,
+          canRetryGeneration:
+            administrativeRetryAccess &&
+            (attempt.reportGeneration?.status === "FAILED" ||
+              attempt.reportGeneration?.status === "BLOCKED_CONFIGURATION"),
+        };
+      }),
       pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
   }
@@ -162,6 +236,7 @@ export class ReportSearchService {
       for (const q of query.q.trim().split(/\s+/)) {
         and.push({
           OR: [
+            ...(UUID_PATTERN.test(q) ? [{ id: q }] : []),
             { assignment: { user: { firstName: { contains: q, mode: "insensitive" } } } },
             { assignment: { user: { lastName: { contains: q, mode: "insensitive" } } } },
             { assignment: { user: { email: { contains: q, mode: "insensitive" } } } },
@@ -261,11 +336,23 @@ export class ReportSearchService {
                     some: {
                       type: CommerceEntitlementType.REPORT,
                       status: query.entitlementStatus,
+                      ...(query.entitlementStatus === "ACTIVE"
+                        ? { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }
+                        : {}),
                     },
                   },
           }
         : {}),
       ...(and.length ? { AND: and } : {}),
     };
+  }
+
+  private detailResult<T>(item: T | undefined): T {
+    if (!item)
+      throw new NotFoundException({
+        code: "ASSESSMENT_REPORT_NOT_FOUND",
+        message: "Assessment report not found in your authorized scope.",
+      });
+    return item;
   }
 }

@@ -28,7 +28,6 @@ const initial = {
   status: "",
   candidateSegment: "",
   assessmentState: "",
-  reportState: "",
   paymentState: "",
   entitlementState: "",
 };
@@ -89,7 +88,7 @@ export default function UsersPage() {
         />
         <Panel>
           <form onSubmit={apply} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Field label="Name, email or user ID">
+            <Field label="Name, mobile, email or user ID">
               <input
                 maxLength={200}
                 className={inputClass}
@@ -166,17 +165,6 @@ export default function UsersPage() {
                 <option>IN_PROGRESS</option>
                 <option>SUBMITTED</option>
                 <option>ABANDONED</option>
-              </select>
-            </Field>
-            <Field label="Report state">
-              <select
-                className={inputClass}
-                value={filters.reportState}
-                onChange={(e) => update("reportState", e.target.value)}
-              >
-                <option value="">All states</option>
-                <option>RELEASED</option>
-                <option>NOT_RELEASED</option>
               </select>
             </Field>
             {commerce ? (
@@ -257,6 +245,9 @@ export default function UsersPage() {
                           {user.firstName} {user.lastName}
                         </Link>
                         <p className="mt-1 text-xs text-slate-500">{user.email}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {user.phoneE164 ?? "No mobile recorded"}
+                        </p>
                         <p className="mt-1 font-mono text-[11px] text-slate-400">{user.id}</p>
                       </td>
                       <td className="px-5 py-4">

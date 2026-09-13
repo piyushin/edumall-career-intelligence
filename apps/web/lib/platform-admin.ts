@@ -20,7 +20,7 @@ export interface DashboardSummary {
     definitions: number;
     assignments: number;
     attempts: { inProgress: number; submitted: number; abandoned: number };
-    reports: { released: number; awaitingRelease: number };
+    reports: { generated: number; processing: number };
   };
   commerce?: {
     orders: number;
@@ -158,6 +158,7 @@ export interface OrganizationSummary {
 export interface UserSummary {
   id: string;
   email: string;
+  phoneE164: string | null;
   firstName: string;
   lastName: string;
   status: string;
@@ -186,12 +187,51 @@ export interface UserSummary {
     status: string;
     assignedAt: string;
     organizationId: string;
+    assessmentVersion: {
+      id: string;
+      title: string;
+      versionNumber: number;
+      assessmentDefinition: { id: string; code: string };
+    };
     attempts: Array<{
       id: string;
       status: string;
+      startedAt: string;
       submittedAt: string | null;
-      _count: { reportReleases: number };
+      reportGeneration?: {
+        status: string;
+        attemptCount: number;
+        lastErrorCode: string | null;
+        lastErrorMessage: string | null;
+        completedAt: string | null;
+        reportDataSnapshotId: string | null;
+      } | null;
+      commerceEntitlements?: Array<{
+        id: string;
+        status: string;
+        grantedAt: string;
+        expiresAt: string | null;
+      }>;
+      reportAccessGrants?: Array<{
+        id: string;
+        principalType: string;
+        status: string;
+        source: string;
+        grantedAt: string;
+        expiresAt: string | null;
+        principalUser: { id: string; firstName: string; lastName: string; email: string } | null;
+        principalOrganization: { id: string; name: string } | null;
+      }>;
+      reportReleases?: Array<{ id: string; reviewedAt: string; releasedAt: string }>;
     }>;
+  }>;
+  candidateCounsellorAssignments?: Array<{
+    id: string;
+    status: string;
+    assignedAt: string;
+    consentedAt: string | null;
+    organization: { id: string; name: string };
+    counsellorUser: { id: string; firstName: string; lastName: string; email: string };
   }>;
   commerceOrders?: Array<{
     id: string;
@@ -199,7 +239,19 @@ export interface UserSummary {
     status: string;
     totalMinor: number;
     currency: string;
+    couponCodeSnapshot: string | null;
     createdAt: string;
+    paidAt: string | null;
+    payments: Array<{
+      id: string;
+      provider: string;
+      method: string;
+      status: string;
+      amountMinor: number;
+      currency: string;
+      createdAt: string;
+      completedAt: string | null;
+    }>;
   }>;
   commerceEntitlements?: Array<{
     id: string;

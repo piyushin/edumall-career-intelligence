@@ -95,6 +95,19 @@ export interface PublicationReadiness {
   issues: PublicationIssue[];
 }
 
+export interface AutomaticReportReadiness {
+  assessmentVersionId: string;
+  status: "READY" | "CONFIGURATION_REQUIRED";
+  activeConfigurationId: string | null;
+  activeConfigurationCount: number;
+  checks: {
+    activeConfiguration: boolean;
+    publishedNormSource: boolean;
+    publishedInterpretation: boolean;
+    publishedCareerFitModel: boolean;
+  };
+}
+
 export interface CreateVersionInput {
   versionNumber: number;
   title: string;
@@ -261,5 +274,13 @@ export async function publishAssessmentVersion(
     {
       method: "POST",
     },
+  );
+}
+
+export function getAutomaticReportReadiness(
+  assessmentVersionId: string,
+): Promise<AutomaticReportReadiness> {
+  return apiRequest<AutomaticReportReadiness>(
+    `/admin/report-configurations/readiness/${assessmentVersionId}`,
   );
 }

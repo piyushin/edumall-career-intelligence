@@ -65,23 +65,31 @@ export class PlatformDirectoryService {
     }
 
     if (can("assessment.view")) {
-      const [definitions, assignments, inProgress, submitted, abandoned, released, unreleased] =
+      const [definitions, assignments, inProgress, submitted, abandoned, generated, processing] =
         await Promise.all([
           this.prisma.assessmentDefinition.count(),
           this.prisma.assessmentAssignment.count(),
           this.prisma.assessmentAttempt.count({ where: { status: "IN_PROGRESS" } }),
           this.prisma.assessmentAttempt.count({ where: { status: "SUBMITTED" } }),
           this.prisma.assessmentAttempt.count({ where: { status: "ABANDONED" } }),
-          this.prisma.assessmentReportRelease.count(),
           this.prisma.assessmentAttempt.count({
-            where: { status: "SUBMITTED", reportReleases: { none: {} } },
+            where: { status: "SUBMITTED", reportGeneration: { status: "GENERATED" } },
+          }),
+          this.prisma.assessmentAttempt.count({
+            where: {
+              status: "SUBMITTED",
+              OR: [
+                { reportGeneration: null },
+                { reportGeneration: { status: { in: ["PENDING", "PROCESSING"] } } },
+              ],
+            },
           }),
         ]);
       summary.assessments = {
         definitions,
         assignments,
         attempts: { inProgress, submitted, abandoned },
-        reports: { released, awaitingRelease: unreleased },
+        reports: { generated, processing },
       };
     }
 
@@ -276,6 +284,7 @@ export class PlatformDirectoryService {
         OR: [
           ...(UUID_PATTERN.test(search) ? [{ id: search }] : []),
           { email: { contains: search, mode: "insensitive" } },
+          { phoneE164: { contains: search.replace(/[\s().-]/g, "") } },
           { firstName: { contains: search, mode: "insensitive" } },
           { lastName: { contains: search, mode: "insensitive" } },
         ],
@@ -330,6 +339,7 @@ export class PlatformDirectoryService {
       select: {
         id: true,
         email: true,
+        phoneE164: true,
         firstName: true,
         lastName: true,
         status: true,
@@ -361,11 +371,15 @@ export class PlatformDirectoryService {
     this.assertPlatform(context);
     const canViewAdmins = this.can(context, "admin.view");
     const canViewCommerce = this.can(context, "commerce.view");
+    const canViewReports = this.can(context, "report.search");
+    const canViewReportAccess = this.can(context, "report.credit.view");
+    const canViewCounsellors = this.can(context, "counsellor.assignment.view");
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
       select: {
         id: true,
         email: true,
+        phoneE164: true,
         firstName: true,
         lastName: true,
         status: true,
@@ -416,18 +430,87 @@ export class PlatformDirectoryService {
             assignedAt: true,
             organizationId: true,
             metadata: true,
+            assessmentVersion: {
+              select: {
+                id: true,
+                title: true,
+                versionNumber: true,
+                assessmentDefinition: { select: { id: true, code: true } },
+              },
+            },
             attempts: {
               take: 10,
               orderBy: [{ startedAt: "desc" }, { id: "desc" }],
               select: {
                 id: true,
                 status: true,
+                startedAt: true,
                 submittedAt: true,
-                _count: { select: { reportReleases: true } },
+                reportGeneration: canViewReports
+                  ? {
+                      select: {
+                        status: true,
+                        attemptCount: true,
+                        lastErrorCode: true,
+                        lastErrorMessage: true,
+                        completedAt: true,
+                        reportDataSnapshotId: true,
+                      },
+                    }
+                  : false,
+                commerceEntitlements: canViewCommerce
+                  ? {
+                      where: { type: "REPORT" },
+                      take: 1,
+                      orderBy: { grantedAt: "desc" },
+                      select: { id: true, status: true, grantedAt: true, expiresAt: true },
+                    }
+                  : false,
+                reportAccessGrants: canViewReportAccess
+                  ? {
+                      take: 20,
+                      orderBy: { grantedAt: "desc" },
+                      select: {
+                        id: true,
+                        principalType: true,
+                        status: true,
+                        source: true,
+                        grantedAt: true,
+                        expiresAt: true,
+                        principalUser: {
+                          select: { id: true, firstName: true, lastName: true, email: true },
+                        },
+                        principalOrganization: { select: { id: true, name: true } },
+                      },
+                    }
+                  : false,
+                reportReleases: canViewReports
+                  ? {
+                      take: 5,
+                      orderBy: { releasedAt: "desc" },
+                      select: { id: true, reviewedAt: true, releasedAt: true },
+                    }
+                  : false,
               },
             },
           },
         },
+        candidateCounsellorAssignments: canViewCounsellors
+          ? {
+              take: 20,
+              orderBy: { assignedAt: "desc" },
+              select: {
+                id: true,
+                status: true,
+                assignedAt: true,
+                consentedAt: true,
+                organization: { select: { id: true, name: true } },
+                counsellorUser: {
+                  select: { id: true, firstName: true, lastName: true, email: true },
+                },
+              },
+            }
+          : false,
         commerceOrders: canViewCommerce
           ? {
               orderBy: { createdAt: "desc" },
@@ -438,7 +521,23 @@ export class PlatformDirectoryService {
                 status: true,
                 totalMinor: true,
                 currency: true,
+                couponCodeSnapshot: true,
                 createdAt: true,
+                paidAt: true,
+                payments: {
+                  take: 10,
+                  orderBy: { createdAt: "desc" },
+                  select: {
+                    id: true,
+                    provider: true,
+                    method: true,
+                    status: true,
+                    amountMinor: true,
+                    currency: true,
+                    createdAt: true,
+                    completedAt: true,
+                  },
+                },
               },
             }
           : false,

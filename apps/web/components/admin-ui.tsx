@@ -40,6 +40,8 @@ export function StatusBadge({ value }: { value: string }) {
   const normalized = value.toUpperCase();
   const tone =
     normalized.includes("ACTIVE") ||
+    normalized.includes("GENERATED") ||
+    normalized.includes("UNLOCKED") ||
     normalized.includes("SUCCEEDED") ||
     normalized.includes("SENT") ||
     normalized.includes("RELEASED")

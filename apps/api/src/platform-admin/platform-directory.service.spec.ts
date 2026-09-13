@@ -34,9 +34,9 @@ function dashboardPrisma() {
         .mockResolvedValueOnce(6)
         .mockResolvedValueOnce(7)
         .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(4)
         .mockResolvedValueOnce(3),
     },
-    assessmentReportRelease: { count: vi.fn().mockResolvedValue(4) },
     commerceOrder: { count: vi.fn().mockResolvedValueOnce(9).mockResolvedValueOnce(3) },
     commercePayment: { count: vi.fn().mockResolvedValue(3) },
     commerceEntitlement: { count: vi.fn().mockResolvedValue(2) },
@@ -54,7 +54,7 @@ describe("PlatformDirectoryService", () => {
       users: { total: 10, active: 8 },
       organizations: { total: 4, active: 3 },
       candidates: { total: 6 },
-      assessments: { definitions: 5, reports: { released: 4, awaitingRelease: 3 } },
+      assessments: { definitions: 5, reports: { generated: 4, processing: 3 } },
       commerce: { orders: 9 },
       recentActivity: [{ id: "audit-safe" }],
     });
@@ -103,9 +103,20 @@ describe("PlatformDirectoryService", () => {
     expect(result).toEqual({ items: [], pageInfo: { hasNext: false, nextCursor: null } });
     const query = JSON.stringify(findMany.mock.calls[0]);
     expect(query).not.toMatch(/passwordHash|failedLoginCount|lockedUntil|tokenHash/);
+    expect(query).toContain("phoneE164");
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: 26, orderBy: [{ createdAt: "desc" }, { id: "desc" }] }),
     );
+  });
+
+  it("matches user directory search against the existing E.164 mobile projection", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    await new PlatformDirectoryService({ user: { findMany } } as unknown as PrismaClient).users(
+      superContext,
+      { search: "+91 98765" },
+    );
+    expect(JSON.stringify(findMany.mock.calls[0]?.[0]?.where)).toContain("+9198765");
+    expect(findMany.mock.calls[0]?.[0]?.select).toHaveProperty("phoneE164", true);
   });
 
   it("combines user filters without allowing one relation filter to overwrite another", async () => {

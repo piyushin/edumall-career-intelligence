@@ -103,7 +103,7 @@ describe("ReportSearchService scope and filters", () => {
         attemptNumber: 1,
         submittedAt: new Date(),
         assignment: {
-          user: { id: "candidate" },
+          user: { id: "candidate", counsellorCandidateAssignments: [] },
           organization: { id: organizationId },
           assessmentVersion: { id: "version" },
         },
@@ -117,5 +117,33 @@ describe("ReportSearchService scope and filters", () => {
       emptyQuery,
     );
     expect(result.items[0]?.canViewFullReport).toBe(false);
+  });
+
+  it("returns a scoped detail projection without opening the full report", async () => {
+    const prisma = client([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        attemptNumber: 1,
+        submittedAt: new Date(),
+        assignment: {
+          user: { id: "candidate", counsellorCandidateAssignments: [] },
+          organization: { id: organizationId },
+          assessmentVersion: { id: "version" },
+        },
+        reportGeneration: { status: "GENERATED" },
+        commerceEntitlements: [],
+        reportAccessGrants: [],
+      },
+    ]);
+    const result = await new ReportSearchService(prisma as unknown as PrismaClient).adminDetail(
+      { ...base, role: MembershipRole.PLATFORM_ADMIN },
+      "11111111-1111-4111-8111-111111111111",
+    );
+    expect(result).toMatchObject({
+      attemptId: "11111111-1111-4111-8111-111111111111",
+      generationStatus: "GENERATED",
+      canViewFullReport: false,
+    });
+    expect(JSON.stringify(result)).not.toContain("payload");
   });
 });

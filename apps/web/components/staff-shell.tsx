@@ -109,9 +109,9 @@ export function StaffShell({ children }: { children: ReactNode }) {
             <BrandLogo className="h-auto w-[118px]" />
             <div className="hidden sm:block">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-600">
-                Counsellor workspace
+                Staff workspace
               </p>
-              <p className="text-lg font-semibold text-slate-950">Assessment Results</p>
+              <p className="text-lg font-semibold text-slate-950">Career Intelligence Reports</p>
             </div>
           </div>
 
@@ -136,10 +136,10 @@ export function StaffShell({ children }: { children: ReactNode }) {
       <div className="mx-auto max-w-7xl px-6 py-8">
         <nav className="mb-8">
           <Link
-            href="/staff/results"
+            href="/staff/reports"
             className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800"
           >
-            Results
+            Reports
           </Link>
         </nav>
 

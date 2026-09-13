@@ -30,8 +30,20 @@ const groups: NavGroup[] = [
     items: [{ label: "Dashboard", href: "/admin", permission: "admin.view", platformOnly: true }],
   },
   {
-    label: "People & access",
+    label: "People",
     items: [
+      {
+        label: "Candidates / Users",
+        href: "/admin/users",
+        permission: "candidate.view",
+        platformOnly: true,
+      },
+      {
+        label: "Organizations",
+        href: "/admin/organizations",
+        permission: "organization.view",
+        platformOnly: true,
+      },
       {
         label: "Administrators",
         href: "/admin/access",
@@ -44,17 +56,10 @@ const groups: NavGroup[] = [
         permission: "admin.view",
         platformOnly: true,
       },
-      { label: "Users", href: "/admin/users", permission: "candidate.view", platformOnly: true },
-      {
-        label: "Organizations",
-        href: "/admin/organizations",
-        permission: "organization.view",
-        platformOnly: true,
-      },
     ],
   },
   {
-    label: "Operations",
+    label: "Career Intelligence",
     items: [
       { label: "Assessments", href: "/admin/assessments", permission: "assessment.view" },
       {
@@ -62,19 +67,12 @@ const groups: NavGroup[] = [
         href: "/admin/assignments",
         permissions: ["assessment.view", "candidate.view"],
       },
-      { label: "Reports & releases", href: "/staff/results", permission: "candidate.view" },
-      {
-        label: "Commerce & entitlements",
-        href: "/admin/users?commerce=1",
-        permissions: ["candidate.view", "commerce.view"],
-      },
+      { label: "Reports", href: "/admin/reports", permission: "report.search" },
     ],
   },
   {
     label: "Governance",
-    items: [
-      { label: "Audit trail", href: "/admin/audit", permission: "audit.view", platformOnly: true },
-    ],
+    items: [{ label: "Audit", href: "/admin/audit", permission: "audit.view", platformOnly: true }],
   },
 ];
 

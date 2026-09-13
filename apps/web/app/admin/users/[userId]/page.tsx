@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { PlatformRoute } from "../../../../components/admin-route";
@@ -23,6 +24,9 @@ export default function UserDetailPage() {
   const authorized = canAccessGlobalRoute(session, "candidate.view");
   const commerce = hasPermission(session, "commerce.view");
   const administration = hasPermission(session, "admin.view");
+  const reports = hasPermission(session, "report.search");
+  const reportAccess = hasPermission(session, "report.credit.view");
+  const counselling = hasPermission(session, "counsellor.assignment.view");
   const [user, setUser] = useState<UserSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -66,9 +70,9 @@ export default function UserDetailPage() {
     <PlatformRoute permission="candidate.view">
       <div className="space-y-7">
         <PageHeader
-          eyebrow="Customer support"
+          eyebrow="Candidate 360"
           title={`${user.firstName} ${user.lastName}`}
-          description={`${user.email} · User ID ${user.id}`}
+          description={`${user.phoneE164 ?? "No mobile recorded"} · ${user.email} · User ID ${user.id}`}
         />
         <div className="grid gap-5 md:grid-cols-4">
           <Panel>
@@ -134,21 +138,90 @@ export default function UserDetailPage() {
               {user.assignedAssessments.map((assignment) => (
                 <div key={assignment.id} className="py-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-mono text-xs text-slate-500">{assignment.id}</p>
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {assignment.assessmentVersion.title}
+                      </p>
+                      <p className="font-mono text-xs text-slate-500">
+                        {assignment.assessmentVersion.assessmentDefinition.code} · v
+                        {assignment.assessmentVersion.versionNumber}
+                      </p>
+                    </div>
                     <StatusBadge value={assignment.status} />
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
                     Assigned {formatDate(assignment.assignedAt)}
                   </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 space-y-3">
                     {assignment.attempts.map((attempt) => (
-                      <span
+                      <article
                         key={attempt.id}
-                        className="rounded-lg border border-slate-200 px-3 py-2 text-xs"
+                        className="rounded-xl border border-slate-200 p-4 text-sm"
                       >
-                        Attempt: {attempt.status} · Report{" "}
-                        {attempt._count.reportReleases > 0 ? "released" : "not released"}
-                      </span>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap gap-2">
+                            <StatusBadge value={attempt.status} />
+                            {attempt.reportGeneration ? (
+                              <StatusBadge value={attempt.reportGeneration.status} />
+                            ) : (
+                              <StatusBadge value="PENDING" />
+                            )}
+                          </div>
+                          {reports ? (
+                            <Link
+                              href={`/admin/reports/${attempt.id}`}
+                              className="font-medium text-red-700 hover:underline"
+                            >
+                              Open report record
+                            </Link>
+                          ) : null}
+                        </div>
+                        <p className="mt-3 text-xs text-slate-500">
+                          Started {formatDate(attempt.startedAt)} · Submitted{" "}
+                          {formatDate(attempt.submittedAt)}
+                        </p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          <p className="text-xs text-slate-600">
+                            Short result:{" "}
+                            {attempt.reportGeneration?.status === "GENERATED"
+                              ? "Available"
+                              : "Processing"}
+                          </p>
+                          <p className="text-xs text-slate-600">
+                            Detailed report:{" "}
+                            {attempt.reportGeneration?.reportDataSnapshotId
+                              ? "Generated"
+                              : "Not generated yet"}
+                          </p>
+                          {commerce ? (
+                            <p className="text-xs text-slate-600">
+                              Candidate access:{" "}
+                              {attempt.commerceEntitlements?.[0]?.status === "ACTIVE"
+                                ? "Unlocked"
+                                : "Locked"}
+                            </p>
+                          ) : null}
+                        </div>
+                        {attempt.reportGeneration?.lastErrorMessage ? (
+                          <p className="mt-3 text-xs text-red-700">
+                            {attempt.reportGeneration.lastErrorMessage}
+                          </p>
+                        ) : null}
+                        {attempt.reportReleases?.length ? (
+                          <details className="mt-3 text-xs text-slate-500">
+                            <summary className="cursor-pointer font-medium">
+                              Legacy release history
+                            </summary>
+                            <ul className="mt-2 space-y-1">
+                              {attempt.reportReleases.map((release) => (
+                                <li key={release.id}>
+                                  Historical record dated {formatDate(release.releasedAt)}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        ) : null}
+                      </article>
                     ))}
                   </div>
                 </div>
@@ -185,6 +258,22 @@ export default function UserDetailPage() {
                         <p className="mt-2 text-xs text-slate-500">
                           {formatDate(order.createdAt)} · {order.id}
                         </p>
+                        {order.couponCodeSnapshot ? (
+                          <p className="mt-1 text-xs text-slate-500">
+                            Coupon: {order.couponCodeSnapshot}
+                          </p>
+                        ) : null}
+                        {order.payments.map((payment) => (
+                          <div
+                            key={payment.id}
+                            className="mt-2 flex items-center justify-between text-xs text-slate-600"
+                          >
+                            <span>
+                              {payment.provider} · {payment.method.replaceAll("_", " ")}
+                            </span>
+                            <StatusBadge value={payment.status} />
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>
@@ -213,6 +302,73 @@ export default function UserDetailPage() {
                 )}
               </section>
             </div>
+          </Panel>
+        ) : null}
+        {reportAccess ? (
+          <Panel>
+            <h2 className="text-lg font-semibold">Report credits & access</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Active and historical third-party grants are independent from candidate access.
+            </p>
+            {user.assignedAssessments?.some((assignment) =>
+              assignment.attempts.some((attempt) => attempt.reportAccessGrants?.length),
+            ) ? (
+              <div className="mt-4 space-y-3">
+                {user.assignedAssessments.flatMap((assignment) =>
+                  assignment.attempts.flatMap((attempt) =>
+                    (attempt.reportAccessGrants ?? []).map((grant) => (
+                      <div
+                        key={grant.id}
+                        className="rounded-xl border border-slate-200 p-3 text-sm"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <strong>
+                            {grant.principalOrganization?.name ??
+                              (grant.principalUser
+                                ? `${grant.principalUser.firstName} ${grant.principalUser.lastName}`
+                                : grant.principalType)}
+                          </strong>
+                          <StatusBadge value={grant.status} />
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">
+                          {grant.source} · Granted {formatDate(grant.grantedAt)}
+                        </p>
+                      </div>
+                    )),
+                  ),
+                )}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">No report-access grants returned.</p>
+            )}
+          </Panel>
+        ) : null}
+        {counselling ? (
+          <Panel>
+            <h2 className="text-lg font-semibold">Counselling</h2>
+            {user.candidateCounsellorAssignments?.length ? (
+              <div className="mt-4 space-y-3">
+                {user.candidateCounsellorAssignments.map((assignment) => (
+                  <div
+                    key={assignment.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"
+                  >
+                    <div>
+                      <p className="font-medium">
+                        {assignment.counsellorUser.firstName} {assignment.counsellorUser.lastName}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {assignment.organization.name} · Assigned{" "}
+                        {formatDate(assignment.assignedAt)}
+                      </p>
+                    </div>
+                    <StatusBadge value={assignment.status} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">No counsellor assignments returned.</p>
+            )}
           </Panel>
         ) : null}
         {administration && user.adminProfile ? (

@@ -71,7 +71,8 @@ describe("R19.1C source security and launch route contract", () => {
     const shell = source("../components/admin-shell.tsx");
     expect(shell).toContain("/admin/assessments");
     expect(shell).toContain("/admin/assignments");
-    expect(shell).toContain("/staff/results");
+    expect(shell).toContain('label: "Reports", href: "/admin/reports"');
+    expect(shell).not.toContain("/staff/results");
   });
 
   it("handles expired and forbidden sessions as distinct security outcomes", () => {
