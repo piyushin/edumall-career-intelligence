@@ -13,6 +13,8 @@ async function bootstrap(): Promise<void> {
   const logger = new StructuredLogger(config);
   const app = await NestFactory.create(AppModule.register(config), {
     bufferLogs: true,
+    // Payment-provider webhooks are authenticated over the exact bytes received.
+    rawBody: true,
   });
 
   configureApi(app, config, logger);

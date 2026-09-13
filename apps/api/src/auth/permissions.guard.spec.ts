@@ -70,4 +70,23 @@ describe("PermissionsGuard R19.1A", () => {
       /Insufficient administrative permission/,
     );
   });
+
+  it("keeps catalogue pricing and payment approval central-only for legacy tenant admins", () => {
+    const auth = {
+      ...base,
+      organizationId: "44444444-4444-4444-8444-444444444444",
+      role: MembershipRole.ORGANIZATION_ADMIN,
+    };
+    expect(guard(["commerce.view"]).canActivate(context(auth))).toBe(true);
+    expect(guard(["commerce.coupon.manage"]).canActivate(context(auth))).toBe(true);
+    for (const permission of [
+      "commerce.product.manage",
+      "commerce.price.manage",
+      "commerce.payment.approve",
+    ]) {
+      expect(() => guard([permission]).canActivate(context(auth)), permission).toThrow(
+        /Insufficient administrative permission/,
+      );
+    }
+  });
 });

@@ -13,11 +13,15 @@ import {
   CommerceCouponStatus,
   CommerceEntitlementStatus,
   CommerceEntitlementType,
+  CommerceOrderFulfilmentStatus,
+  CommerceOrderPurchaserType,
   CommerceOrderStatus,
   CommercePaymentMethod,
   CommercePaymentStatus,
+  CommerceProductAudience,
   CommerceProductKind,
   CommerceProductStatus,
+  MembershipRole,
   Prisma,
   type PrismaClient,
 } from "@prisma/client";
@@ -26,19 +30,31 @@ import type { AuthContext } from "../auth/auth.types";
 import { isPlatformAdministrator } from "../auth/authorization-context";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import type {
+  AdminOrderQueryDto,
   CreateCandidateOrderDto,
   CreateCommerceCouponDto,
   CreateCommerceProductDto,
   ManualApproveOrderDto,
+  OrderReferenceDto,
   UpdateCommerceProductDto,
   VerifyRazorpayPaymentDto,
 } from "./commerce.types";
+import { OrderFulfilmentService } from "./order-fulfilment.service";
+
+const CANDIDATE_PRODUCT_KINDS: CommerceProductKind[] = [
+  CommerceProductKind.REPORT,
+  CommerceProductKind.COUNSELLING,
+  CommerceProductKind.REPORT_AND_COUNSELLING,
+];
+const DEFAULT_TENANT_COUPON_MAX_BPS = 5000;
 
 @Injectable()
 export class CommerceService {
   public constructor(
     @Inject(DATABASE_PRISMA)
     private readonly prisma: PrismaClient,
+    @Inject(OrderFulfilmentService)
+    private readonly fulfilment: OrderFulfilmentService,
   ) {}
 
   public async getCandidateCheckout(context: AuthContext, attemptId: string) {
@@ -50,6 +66,8 @@ export class CommerceService {
       this.prisma.commerceProduct.findMany({
         where: {
           status: CommerceProductStatus.ACTIVE,
+          audience: CommerceProductAudience.CANDIDATE,
+          kind: { in: CANDIDATE_PRODUCT_KINDS },
           AND: [
             {
               OR: [{ organizationId: null }, { organizationId }],
@@ -154,6 +172,8 @@ export class CommerceService {
       where: {
         code: productCode,
         status: CommerceProductStatus.ACTIVE,
+        audience: CommerceProductAudience.CANDIDATE,
+        kind: { in: CANDIDATE_PRODUCT_KINDS },
         AND: [
           {
             OR: [{ organizationId: null }, { organizationId }],
@@ -187,7 +207,7 @@ export class CommerceService {
             ? await this.validateCoupon(
                 tx,
                 input.couponCode,
-                product.id,
+                product,
                 organizationId,
                 context.userId,
                 product.priceMinor,
@@ -206,6 +226,8 @@ export class CommerceService {
               attemptId,
               productId: product.id,
               couponId: couponResult?.coupon.id ?? null,
+              purchaserType: CommerceOrderPurchaserType.CANDIDATE,
+              quantity: 1,
               status: paidImmediately ? CommerceOrderStatus.PAID : CommerceOrderStatus.PENDING,
               currency: product.currency,
               subtotalMinor: product.priceMinor,
@@ -261,12 +283,9 @@ export class CommerceService {
               },
             });
 
-            await this.grantEntitlements(tx, {
-              organizationId,
-              userId: context.userId,
-              attemptId,
-              orderId: order.id,
-              productKind: product.kind,
+            await this.fulfilment.fulfil(tx, order.id, {
+              actorUserId: context.userId,
+              origin: "CHECKOUT",
               source: couponResult ? "COUPON" : "COMPLIMENTARY",
             });
           }
@@ -508,12 +527,9 @@ export class CommerceService {
         },
       });
 
-      await this.grantEntitlements(tx, {
-        organizationId: order.organizationId,
-        userId: order.userId,
-        attemptId: order.attemptId,
-        orderId: order.id,
-        productKind: order.product.kind,
+      await this.fulfilment.fulfil(tx, order.id, {
+        actorUserId: context.userId,
+        origin: "GATEWAY_VERIFY",
         source: "RAZORPAY",
       });
 
@@ -557,8 +573,10 @@ export class CommerceService {
     }
 
     const code = input.code.trim().toUpperCase();
+    const audience = this.resolveAudience(input.kind, input.audience);
+    const unitQuantity = input.unitQuantity ?? 1;
 
-    return this.prisma.commerceProduct.create({
+    const product = await this.prisma.commerceProduct.create({
       data: {
         organizationId,
         assessmentVersionId: input.assessmentVersionId ?? null,
@@ -566,11 +584,31 @@ export class CommerceService {
         name: input.name.trim(),
         description: input.description?.trim() || null,
         kind: input.kind,
+        audience,
+        unitQuantity,
         currency: (input.currency ?? "INR").trim().toUpperCase(),
         priceMinor: input.priceMinor,
         createdByUserId: context.userId,
       },
     });
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId,
+        actorUserId: context.userId,
+        action: "commerce.product.created",
+        entityType: "CommerceProduct",
+        entityId: product.id,
+        metadata: {
+          code,
+          kind: product.kind,
+          audience,
+          unitQuantity,
+          priceMinor: product.priceMinor,
+          currency: product.currency,
+        },
+      },
+    });
+    return product;
   }
 
   public async updateProduct(
@@ -583,6 +621,11 @@ export class CommerceService {
       select: {
         id: true,
         organizationId: true,
+        kind: true,
+        audience: true,
+        unitQuantity: true,
+        priceMinor: true,
+        status: true,
       },
     });
 
@@ -594,8 +637,10 @@ export class CommerceService {
     }
 
     this.assertAdminScope(context, product.organizationId);
+    const audience =
+      input.audience !== undefined ? this.resolveAudience(product.kind, input.audience) : undefined;
 
-    return this.prisma.commerceProduct.update({
+    const updated = await this.prisma.commerceProduct.update({
       where: { id: productId },
       data: {
         ...(input.name !== undefined ? { name: input.name.trim() } : {}),
@@ -603,9 +648,35 @@ export class CommerceService {
           ? { description: input.description.trim() || null }
           : {}),
         ...(input.priceMinor !== undefined ? { priceMinor: input.priceMinor } : {}),
+        ...(input.unitQuantity !== undefined ? { unitQuantity: input.unitQuantity } : {}),
+        ...(audience !== undefined ? { audience } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
       },
     });
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: product.organizationId,
+        actorUserId: context.userId,
+        action: "commerce.product.updated",
+        entityType: "CommerceProduct",
+        entityId: product.id,
+        metadata: {
+          before: {
+            priceMinor: product.priceMinor,
+            unitQuantity: product.unitQuantity,
+            audience: product.audience,
+            status: product.status,
+          },
+          after: {
+            priceMinor: updated.priceMinor,
+            unitQuantity: updated.unitQuantity,
+            audience: updated.audience,
+            status: updated.status,
+          },
+        },
+      },
+    });
+    return updated;
   }
 
   public async listProducts(context: AuthContext) {
@@ -625,8 +696,10 @@ export class CommerceService {
 
   public async createCoupon(context: AuthContext, input: CreateCommerceCouponDto) {
     const organizationId = this.resolveAdminOrganization(context, input.organizationId);
+    const central = this.isCentralAdministrator(context);
 
     let productId: string | null = null;
+    let productPriceMinor: number | null = null;
 
     if (input.productCode) {
       const product = await this.prisma.commerceProduct.findUnique({
@@ -636,6 +709,8 @@ export class CommerceService {
         select: {
           id: true,
           organizationId: true,
+          priceMinor: true,
+          kind: true,
         },
       });
 
@@ -653,7 +728,51 @@ export class CommerceService {
         });
       }
 
+      if (input.appliesToKind && product.kind !== input.appliesToKind) {
+        throw new BadRequestException({
+          code: "COUPON_KIND_MISMATCH",
+          message: "appliesToKind must match the bound product's kind.",
+        });
+      }
+
       productId = product.id;
+      productPriceMinor = product.priceMinor;
+    }
+
+    // Tenant administrators may only discount within the platform cap and only on
+    // a specific product, so a coupon can never create free platform value.
+    if (!central) {
+      const capBps = this.tenantCouponMaxBps();
+      if (input.discountType === CommerceCouponDiscountType.FREE) {
+        throw new ForbiddenException({
+          code: "COUPON_FREE_CENTRAL_ONLY",
+          message: "Free coupons can only be created by central platform administrators.",
+        });
+      }
+      if (productId === null || productPriceMinor === null) {
+        throw new ForbiddenException({
+          code: "COUPON_PRODUCT_REQUIRED",
+          message: "Organisation coupons must be bound to a specific product.",
+        });
+      }
+      if (
+        input.discountType === CommerceCouponDiscountType.PERCENTAGE &&
+        (input.percentageBps ?? 0) > capBps
+      ) {
+        throw new ForbiddenException({
+          code: "COUPON_DISCOUNT_EXCEEDS_CAP",
+          message: `Organisation coupons may discount at most ${capBps / 100}%.`,
+        });
+      }
+      if (
+        input.discountType === CommerceCouponDiscountType.FIXED &&
+        (input.fixedAmountMinor ?? 0) > Math.floor((productPriceMinor * capBps) / 10000)
+      ) {
+        throw new ForbiddenException({
+          code: "COUPON_DISCOUNT_EXCEEDS_CAP",
+          message: `Organisation coupons may discount at most ${capBps / 100}% of the product price.`,
+        });
+      }
     }
 
     if (input.discountType === CommerceCouponDiscountType.PERCENTAGE && !input.percentageBps) {
@@ -687,6 +806,7 @@ export class CommerceService {
         code: input.code.trim().toUpperCase(),
         description: input.description?.trim() || null,
         discountType: input.discountType,
+        appliesToKind: input.appliesToKind ?? null,
         percentageBps: input.percentageBps ?? null,
         fixedAmountMinor: input.fixedAmountMinor ?? null,
         validFrom,
@@ -724,48 +844,271 @@ export class CommerceService {
     });
   }
 
-  public async listOrders(context: AuthContext) {
-    const organizationId = this.adminOrganizationFilter(context);
+  public async listOrders(context: AuthContext, query: AdminOrderQueryDto) {
+    const scopedOrganizationId = this.adminOrganizationFilter(context);
+    if (
+      scopedOrganizationId !== null &&
+      query.organizationId &&
+      query.organizationId !== scopedOrganizationId
+    ) {
+      throw new ForbiddenException({
+        code: "COMMERCE_SCOPE_VIOLATION",
+        message: "You cannot view another organisation's orders.",
+      });
+    }
+    const organizationId = scopedOrganizationId ?? query.organizationId;
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 25;
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (query.from) createdAt.gte = new Date(query.from);
+    if (query.to) createdAt.lte = new Date(query.to);
+    const q = query.q?.trim();
 
-    return this.prisma.commerceOrder.findMany({
-      ...(organizationId === null
-        ? {}
-        : {
-            where: {
-              organizationId,
-            },
-          }),
-      orderBy: {
-        createdAt: "desc",
-      },
-      take: 500,
+    const where: Prisma.CommerceOrderWhereInput = {
+      ...(organizationId ? { organizationId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.fulfilmentStatus ? { fulfilmentStatus: query.fulfilmentStatus } : {}),
+      ...(query.purchaserType ? { purchaserType: query.purchaserType } : {}),
+      ...(query.productKind ? { product: { kind: query.productKind } } : {}),
+      ...(Object.keys(createdAt).length ? { createdAt } : {}),
+      ...(q
+        ? {
+            OR: [
+              ...(/^[0-9a-f-]{36}$/i.test(q) ? [{ id: q }, { attemptId: q }] : []),
+              { user: { email: { contains: q, mode: "insensitive" as const } } },
+              { user: { firstName: { contains: q, mode: "insensitive" as const } } },
+              { user: { lastName: { contains: q, mode: "insensitive" as const } } },
+              { user: { phoneE164: { contains: q.replace(/[\s().-]/g, "") } } },
+              { organization: { name: { contains: q, mode: "insensitive" as const } } },
+              { product: { code: { contains: q.toUpperCase() } } },
+              { couponCodeSnapshot: { contains: q.toUpperCase() } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      this.prisma.commerceOrder.count({ where }),
+      this.prisma.commerceOrder.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: this.orderInclude(),
+      }),
+    ]);
+    return {
+      items,
+      pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
+  }
+
+  public async getOrder(context: AuthContext, orderId: string) {
+    const order = await this.prisma.commerceOrder.findUnique({
+      where: { id: orderId },
       include: {
-        user: {
+        ...this.orderInclude(),
+        entitlements: {
           select: {
-            email: true,
-            firstName: true,
-            lastName: true,
+            id: true,
+            type: true,
+            status: true,
+            source: true,
+            grantedAt: true,
+            revokedAt: true,
+            expiresAt: true,
           },
         },
-        product: {
+        creditLedgerEntries: {
+          orderBy: { createdAt: "asc" },
           select: {
-            code: true,
-            name: true,
-            kind: true,
+            id: true,
+            walletId: true,
+            eventType: true,
+            quantity: true,
+            delta: true,
+            balanceAfter: true,
+            createdAt: true,
           },
         },
-        coupon: {
-          select: {
-            code: true,
-          },
-        },
-        payments: {
-          orderBy: {
-            createdAt: "desc",
-          },
-        },
+        couponRedemptions: { select: { id: true, discountMinor: true, redeemedAt: true } },
       },
     });
+    if (!order) {
+      throw new NotFoundException({
+        code: "COMMERCE_ORDER_NOT_FOUND",
+        message: "Order not found.",
+      });
+    }
+    this.assertAdminScope(context, order.organizationId);
+    return order;
+  }
+
+  public async cancelOrder(context: AuthContext, orderId: string, input: OrderReferenceDto) {
+    this.assertCentralAdministrator(context);
+    const order = await this.prisma.commerceOrder.findUnique({
+      where: { id: orderId },
+      select: { id: true, organizationId: true, status: true },
+    });
+    if (!order) {
+      throw new NotFoundException({
+        code: "COMMERCE_ORDER_NOT_FOUND",
+        message: "Order not found.",
+      });
+    }
+    this.assertAdminScope(context, order.organizationId);
+    if (order.status !== CommerceOrderStatus.PENDING) {
+      throw new ConflictException({
+        code: "ORDER_NOT_CANCELLABLE",
+        message: "Only pending orders can be cancelled.",
+      });
+    }
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.commercePayment.updateMany({
+        where: { orderId: order.id, status: CommercePaymentStatus.PENDING },
+        data: {
+          status: CommercePaymentStatus.FAILED,
+          failureCode: "ORDER_CANCELLED",
+          failureMessage: input.reason?.trim() || "Order cancelled by administrator.",
+        },
+      });
+      await tx.commerceOrder.update({
+        where: { id: order.id },
+        data: { status: CommerceOrderStatus.CANCELLED, cancelledAt: now },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId: order.organizationId,
+          actorUserId: context.userId,
+          action: "commerce.order.cancelled",
+          entityType: "CommerceOrder",
+          entityId: order.id,
+          metadata: { reason: input.reason ?? null, reference: input.reference ?? null },
+        },
+      });
+    });
+    return { status: "cancelled" as const, orderId: order.id };
+  }
+
+  // Records the refund and reverses value the platform still holds. Moving money
+  // back through the gateway is an operator action in the provider console; a
+  // later refund webhook for the same order is then a no-op here.
+  public async refundOrder(context: AuthContext, orderId: string, input: OrderReferenceDto) {
+    this.assertCentralAdministrator(context);
+    const order = await this.prisma.commerceOrder.findUnique({
+      where: { id: orderId },
+      select: { id: true, organizationId: true, status: true, totalMinor: true, currency: true },
+    });
+    if (!order) {
+      throw new NotFoundException({
+        code: "COMMERCE_ORDER_NOT_FOUND",
+        message: "Order not found.",
+      });
+    }
+    this.assertAdminScope(context, order.organizationId);
+    if (order.status === CommerceOrderStatus.REFUNDED) {
+      return { status: "refunded" as const, orderId: order.id };
+    }
+    if (order.status !== CommerceOrderStatus.PAID) {
+      throw new ConflictException({
+        code: "ORDER_NOT_REFUNDABLE",
+        message: "Only paid orders can be refunded.",
+      });
+    }
+    const now = new Date();
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const reversal = await this.fulfilment.reverse(
+          tx,
+          order.id,
+          { actorUserId: context.userId, origin: "ADMIN_REFUND", source: "REFUND" },
+          input.reference,
+        );
+        await tx.commercePayment.create({
+          data: {
+            orderId: order.id,
+            provider: "MANUAL",
+            method: CommercePaymentMethod.BANK_TRANSFER,
+            status: CommercePaymentStatus.REFUNDED,
+            amountMinor: order.totalMinor,
+            currency: order.currency,
+            reference: input.reference?.trim() || null,
+            approvedByUserId: context.userId,
+            completedAt: now,
+            metadata: { reason: input.reason ?? null },
+          },
+        });
+        await tx.commerceOrder.update({
+          where: { id: order.id },
+          data: { status: CommerceOrderStatus.REFUNDED, refundedAt: now },
+        });
+        await tx.auditLog.create({
+          data: {
+            organizationId: order.organizationId,
+            actorUserId: context.userId,
+            action: "commerce.order.refunded",
+            entityType: "CommerceOrder",
+            entityId: order.id,
+            metadata: {
+              reason: input.reason ?? null,
+              reference: input.reference ?? null,
+              revokedEntitlements: reversal.revokedEntitlements,
+              reversedCredits: reversal.reversedCredits,
+            },
+          },
+        });
+        return reversal;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    return { ...result, status: "refunded" as const, orderId: order.id };
+  }
+
+  public async retryFulfilment(context: AuthContext, orderId: string) {
+    this.assertCentralAdministrator(context);
+    const order = await this.prisma.commerceOrder.findUnique({
+      where: { id: orderId },
+      select: { id: true, organizationId: true, status: true, fulfilmentStatus: true },
+    });
+    if (!order) {
+      throw new NotFoundException({
+        code: "COMMERCE_ORDER_NOT_FOUND",
+        message: "Order not found.",
+      });
+    }
+    this.assertAdminScope(context, order.organizationId);
+    if (order.status !== CommerceOrderStatus.PAID) {
+      throw new ConflictException({
+        code: "ORDER_NOT_PAID",
+        message: "Only paid orders can be fulfilled.",
+      });
+    }
+    if (order.fulfilmentStatus === CommerceOrderFulfilmentStatus.FULFILLED) {
+      return { status: "fulfilled" as const, orderId: order.id, alreadyFulfilled: true };
+    }
+    await this.prisma.$transaction(
+      (tx) =>
+        this.fulfilment.fulfil(tx, order.id, {
+          actorUserId: context.userId,
+          origin: "ADMIN_RETRY",
+          source: "ADMIN_RETRY",
+        }),
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    return { status: "fulfilled" as const, orderId: order.id, alreadyFulfilled: false };
+  }
+
+  private orderInclude() {
+    return {
+      user: { select: { id: true, email: true, firstName: true, lastName: true } },
+      organization: { select: { id: true, name: true } },
+      product: {
+        select: { code: true, name: true, kind: true, audience: true, unitQuantity: true },
+      },
+      coupon: { select: { code: true } },
+      payments: { orderBy: { createdAt: "desc" as const } },
+    } satisfies Prisma.CommerceOrderInclude;
   }
 
   public async manualApproveOrder(
@@ -773,6 +1116,7 @@ export class CommerceService {
     orderId: string,
     input: ManualApproveOrderDto,
   ) {
+    this.assertCentralAdministrator(context);
     if (
       input.method === CommercePaymentMethod.ONLINE_GATEWAY ||
       input.method === CommercePaymentMethod.COUPON
@@ -843,12 +1187,9 @@ export class CommerceService {
         },
       });
 
-      await this.grantEntitlements(tx, {
-        organizationId: order.organizationId,
-        userId: order.userId,
-        attemptId: order.attemptId,
-        orderId: order.id,
-        productKind: order.product.kind,
+      await this.fulfilment.fulfil(tx, order.id, {
+        actorUserId: context.userId,
+        origin: "MANUAL_APPROVAL",
         source: input.method,
       });
 
@@ -876,11 +1217,12 @@ export class CommerceService {
   private async validateCoupon(
     tx: Prisma.TransactionClient,
     rawCode: string,
-    productId: string,
+    product: { id: string; kind: CommerceProductKind },
     organizationId: string,
     userId: string,
     subtotalMinor: number,
   ) {
+    const productId = product.id;
     const code = rawCode.trim().toUpperCase();
     const coupon = await tx.commerceCoupon.findUnique({
       where: { code },
@@ -888,6 +1230,7 @@ export class CommerceService {
         id: true,
         organizationId: true,
         productId: true,
+        appliesToKind: true,
         code: true,
         discountType: true,
         percentageBps: true,
@@ -923,7 +1266,10 @@ export class CommerceService {
       });
     }
 
-    if (coupon.productId !== null && coupon.productId !== productId) {
+    if (
+      (coupon.productId !== null && coupon.productId !== productId) ||
+      (coupon.appliesToKind !== null && coupon.appliesToKind !== product.kind)
+    ) {
       throw new BadRequestException({
         code: "COUPON_NOT_APPLICABLE",
         message: "Coupon code is not valid for this package.",
@@ -981,61 +1327,6 @@ export class CommerceService {
       coupon,
       discountMinor: Math.max(0, Math.min(subtotalMinor, discountMinor)),
     };
-  }
-
-  private async grantEntitlements(
-    tx: Prisma.TransactionClient,
-    input: {
-      organizationId: string;
-      userId: string;
-      attemptId: string;
-      orderId: string;
-      productKind: CommerceProductKind;
-      source: string;
-    },
-  ) {
-    const types: CommerceEntitlementType[] = [];
-
-    if (
-      input.productKind === CommerceProductKind.REPORT ||
-      input.productKind === CommerceProductKind.REPORT_AND_COUNSELLING
-    ) {
-      types.push(CommerceEntitlementType.REPORT);
-    }
-
-    if (
-      input.productKind === CommerceProductKind.COUNSELLING ||
-      input.productKind === CommerceProductKind.REPORT_AND_COUNSELLING
-    ) {
-      types.push(CommerceEntitlementType.COUNSELLING);
-    }
-
-    for (const type of types) {
-      await tx.commerceEntitlement.upsert({
-        where: {
-          userId_attemptId_type: {
-            userId: input.userId,
-            attemptId: input.attemptId,
-            type,
-          },
-        },
-        create: {
-          organizationId: input.organizationId,
-          userId: input.userId,
-          attemptId: input.attemptId,
-          orderId: input.orderId,
-          type,
-          status: CommerceEntitlementStatus.ACTIVE,
-          source: input.source,
-        },
-        update: {
-          orderId: input.orderId,
-          status: CommerceEntitlementStatus.ACTIVE,
-          source: input.source,
-          revokedAt: null,
-        },
-      });
-    }
   }
 
   private async findCandidateAttempt(context: AuthContext, attemptId: string) {
@@ -1211,6 +1502,48 @@ export class CommerceService {
         message: "You cannot manage another organisation's commerce data.",
       });
     }
+  }
+
+  private resolveAudience(
+    kind: CommerceProductKind,
+    requested?: CommerceProductAudience,
+  ): CommerceProductAudience {
+    if (kind === CommerceProductKind.REPORT_CREDIT_PACK) {
+      if (!requested || requested === CommerceProductAudience.CANDIDATE) {
+        throw new BadRequestException({
+          code: "COMMERCE_PRODUCT_AUDIENCE_INVALID",
+          message: "Report credit packs are sold to organisations or counsellors, not candidates.",
+        });
+      }
+      return requested;
+    }
+    if (requested && requested !== CommerceProductAudience.CANDIDATE) {
+      throw new BadRequestException({
+        code: "COMMERCE_PRODUCT_AUDIENCE_INVALID",
+        message: "Report and counselling packages are candidate products.",
+      });
+    }
+    return CommerceProductAudience.CANDIDATE;
+  }
+
+  private isCentralAdministrator(context: AuthContext): boolean {
+    return (
+      context.role === MembershipRole.SUPER_ADMIN || context.role === MembershipRole.PLATFORM_ADMIN
+    );
+  }
+
+  private assertCentralAdministrator(context: AuthContext): void {
+    if (!this.isCentralAdministrator(context)) {
+      throw new ForbiddenException({
+        code: "COMMERCE_CENTRAL_ONLY",
+        message: "This commerce operation is reserved for central platform administrators.",
+      });
+    }
+  }
+
+  private tenantCouponMaxBps(): number {
+    const raw = Number.parseInt(process.env.COMMERCE_TENANT_COUPON_MAX_BPS ?? "", 10);
+    return Number.isInteger(raw) && raw >= 0 && raw <= 10000 ? raw : DEFAULT_TENANT_COUPON_MAX_BPS;
   }
 
   private invalidPaymentSignature(): BadRequestException {

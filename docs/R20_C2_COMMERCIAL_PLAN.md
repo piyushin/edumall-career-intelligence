@@ -1,6 +1,16 @@
 # R20-C2 Commercial Plan
 
-Status: planning baseline after R20-C1 review (branch `feature/r20-automatic-report-entitlements`, commit `ee524f7`). Nothing in this document is implemented yet unless marked **exists**.
+Status: C2a implemented (see `R20_C2A_VERIFICATION.md`); C2b–C2d pending. Decisions below were confirmed on 2026-09-13 with the recommended defaults.
+
+## Confirmed decisions
+
+1. Catalogue and price mutation are central-only; tenant admins are read-only on the catalogue.
+2. `FREE` coupons are central-only; tenant coupons must be product-bound and within `COMMERCE_TENANT_COUPON_MAX_BPS` (default 50 %).
+3. One tenant/counsellor credit buys one organisation or counsellor full-report grant for one attempt. "Also unlock for the candidate" is an explicit per-unlock option that costs no extra credit and is recorded as a candidate entitlement with source `TENANT_CREDIT` (C2c).
+4. Refunds revoke candidate entitlements and reverse only unconsumed purchased credits.
+5. Public-signup candidates book counsellors from a platform-owned counsellor organisation; institutional candidates book within their tenant (C2d).
+6. Counselling defaults: 45-minute slots (`slotMinutes` per availability), cancel/reschedule allowed until 24 h before start, meeting link entered by the counsellor (C2d).
+7. Institutional credit purchases may be settled by bank transfer with central manual approval; manual approval itself is central-only.
 
 ## Product rules carried forward
 

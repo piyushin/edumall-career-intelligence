@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  Query,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
@@ -23,9 +24,11 @@ import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { CommerceService } from "./commerce.service";
 import {
+  AdminOrderQueryDto,
   CreateCommerceCouponDto,
   CreateCommerceProductDto,
   ManualApproveOrderDto,
+  OrderReferenceDto,
   UpdateCommerceProductDto,
 } from "./commerce.types";
 
@@ -47,6 +50,7 @@ export class CommerceAdminController {
   }
 
   @Post("products")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
   @Permissions("commerce.product.manage", "commerce.price.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
@@ -58,6 +62,7 @@ export class CommerceAdminController {
   }
 
   @Put("products/:productId")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
   @Permissions("commerce.product.manage", "commerce.price.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
@@ -90,11 +95,60 @@ export class CommerceAdminController {
   @Get("orders")
   @Permissions("commerce.view")
   @Header("cache-control", "no-store")
-  public orders(@CurrentAuthContext() context: AuthContext) {
-    return this.commerce.listOrders(context);
+  public orders(@CurrentAuthContext() context: AuthContext, @Query() query: AdminOrderQueryDto) {
+    return this.commerce.listOrders(context, query);
+  }
+
+  @Get("orders/:orderId")
+  @Permissions("commerce.view")
+  @Header("cache-control", "no-store")
+  public order(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("orderId", new ParseUUIDPipe()) orderId: string,
+  ) {
+    return this.commerce.getOrder(context, orderId);
+  }
+
+  @Post("orders/:orderId/cancel")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+  @Permissions("commerce.payment.approve")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public cancel(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("orderId", new ParseUUIDPipe()) orderId: string,
+    @Body() body: OrderReferenceDto,
+  ) {
+    return this.commerce.cancelOrder(context, orderId, body);
+  }
+
+  @Post("orders/:orderId/refund")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+  @Permissions("commerce.payment.approve")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public refund(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("orderId", new ParseUUIDPipe()) orderId: string,
+    @Body() body: OrderReferenceDto,
+  ) {
+    return this.commerce.refundOrder(context, orderId, body);
+  }
+
+  @Post("orders/:orderId/fulfil")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+  @Permissions("commerce.payment.approve")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public fulfil(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("orderId", new ParseUUIDPipe()) orderId: string,
+  ) {
+    return this.commerce.retryFulfilment(context, orderId);
   }
 
   @Post("orders/:orderId/manual-approve")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
   @Permissions("commerce.payment.approve")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)

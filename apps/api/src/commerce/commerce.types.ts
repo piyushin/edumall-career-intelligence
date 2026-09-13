@@ -1,10 +1,15 @@
 import {
   CommerceCouponDiscountType,
   CommerceCouponStatus,
+  CommerceOrderFulfilmentStatus,
+  CommerceOrderPurchaserType,
+  CommerceOrderStatus,
   CommercePaymentMethod,
+  CommerceProductAudience,
   CommerceProductKind,
   CommerceProductStatus,
 } from "@prisma/client";
+import { Type } from "class-transformer";
 import {
   IsEnum,
   IsISO8601,
@@ -72,6 +77,16 @@ export class CreateCommerceProductDto {
   kind!: CommerceProductKind;
 
   @IsOptional()
+  @IsEnum(CommerceProductAudience)
+  audience?: CommerceProductAudience;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  unitQuantity?: number;
+
+  @IsOptional()
   @IsString()
   @Length(3, 3)
   currency?: string;
@@ -96,6 +111,16 @@ export class UpdateCommerceProductDto {
   @IsInt()
   @Min(0)
   priceMinor?: number;
+
+  @IsOptional()
+  @IsEnum(CommerceProductAudience)
+  audience?: CommerceProductAudience;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  unitQuantity?: number;
 
   @IsOptional()
   @IsEnum(CommerceProductStatus)
@@ -123,6 +148,10 @@ export class CreateCommerceCouponDto {
 
   @IsEnum(CommerceCouponDiscountType)
   discountType!: CommerceCouponDiscountType;
+
+  @IsOptional()
+  @IsEnum(CommerceProductKind)
+  appliesToKind?: CommerceProductKind;
 
   @IsOptional()
   @IsInt()
@@ -166,4 +195,24 @@ export class ManualApproveOrderDto {
   @IsString()
   @MaxLength(200)
   reference?: string;
+}
+
+export class AdminOrderQueryDto {
+  @IsOptional() @IsString() @MaxLength(200) q?: string;
+  @IsOptional() @IsUUID() organizationId?: string;
+  @IsOptional() @IsEnum(CommerceOrderStatus) status?: CommerceOrderStatus;
+  @IsOptional()
+  @IsEnum(CommerceOrderFulfilmentStatus)
+  fulfilmentStatus?: CommerceOrderFulfilmentStatus;
+  @IsOptional() @IsEnum(CommerceOrderPurchaserType) purchaserType?: CommerceOrderPurchaserType;
+  @IsOptional() @IsEnum(CommerceProductKind) productKind?: CommerceProductKind;
+  @IsOptional() @IsISO8601() from?: string;
+  @IsOptional() @IsISO8601() to?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 25;
+}
+
+export class OrderReferenceDto {
+  @IsOptional() @IsString() @MaxLength(200) reference?: string;
+  @IsOptional() @IsString() @MaxLength(500) reason?: string;
 }

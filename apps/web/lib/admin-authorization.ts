@@ -41,10 +41,7 @@ export function hasPermission(session: AuthSession | null, permission: string): 
     "counsellor.assignment.view",
     "counsellor.assignment.manage",
     "commerce.view",
-    "commerce.product.manage",
-    "commerce.price.manage",
     "commerce.coupon.manage",
-    "commerce.payment.approve",
   ]);
   return (
     (session.session.role === "SUPER_ADMIN" && session.session.organizationId === null) ||

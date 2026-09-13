@@ -7,6 +7,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../auth/auth.types";
 import { CommerceService } from "./commerce.service";
+import { OrderFulfilmentService } from "./order-fulfilment.service";
 
 const context: AuthContext = {
   userId: "11111111-1111-4111-8111-111111111111",
@@ -47,7 +48,7 @@ function setup(entitlements: unknown[] = [], generationStatus = "GENERATED") {
   };
   return {
     prisma,
-    service: new CommerceService(prisma as unknown as PrismaClient),
+    service: new CommerceService(prisma as unknown as PrismaClient, new OrderFulfilmentService()),
   };
 }
 

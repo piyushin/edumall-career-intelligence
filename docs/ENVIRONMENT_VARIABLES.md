@@ -14,6 +14,15 @@ Only `.env.example` files are committed. Real `.env` files are ignored.
 | `REDIS_URL`            |          API/worker | Redis connection string.                                |
 | `CORS_ALLOWED_ORIGINS` |                 API | Comma-separated allowed browser origins.                |
 
+## Commerce Variables (API)
+
+| Variable                         | Required | Purpose                                                                                                                                                              |
+| -------------------------------- | -------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RAZORPAY_KEY_ID`                | Optional | Razorpay key id. When absent, online payment intents report `gatewayConfigured: false` and orders may still complete through coupons or central manual approval.     |
+| `RAZORPAY_KEY_SECRET`            | Optional | Razorpay key secret used to create gateway orders and verify browser payment signatures.                                                                             |
+| `RAZORPAY_WEBHOOK_SECRET`        | Optional | Secret configured on the Razorpay webhook. `POST /commerce/webhooks/razorpay` returns 503 until it is set; with it set, captured payments are fulfilled server-side. |
+| `COMMERCE_TENANT_COUPON_MAX_BPS` | Optional | Maximum discount (basis points, default `5000` = 50 %) that a tenant administrator may grant through a product-bound coupon. Free coupons are always central-only.   |
+
 ## CORS Rules
 
 Production must not use wildcard origins. The configuration loader rejects wildcard CORS origins when `APP_ENV=production`.

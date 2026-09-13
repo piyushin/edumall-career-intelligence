@@ -1304,6 +1304,32 @@ enum CommerceProductKind {
   REPORT
   COUNSELLING
   REPORT_AND_COUNSELLING
+  REPORT_CREDIT_PACK
+}
+
+enum CommerceProductAudience {
+  CANDIDATE
+  ORGANIZATION
+  COUNSELLOR
+}
+
+enum CommerceOrderPurchaserType {
+  CANDIDATE
+  ORGANIZATION
+  COUNSELLOR
+}
+
+enum CommerceOrderFulfilmentStatus {
+  PENDING
+  FULFILLED
+  FAILED
+}
+
+enum CommerceWebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
 }
 
 enum CommerceProductStatus {
@@ -1359,20 +1385,22 @@ enum CommerceEntitlementStatus {
 }
 
 model CommerceProduct {
-  id                  String                @id @default(uuid()) @db.Uuid
-  organizationId      String?               @map("organization_id") @db.Uuid
-  assessmentVersionId String?               @map("assessment_version_id") @db.Uuid
-  code                String                @unique @db.VarChar(120)
-  name                String                @db.VarChar(200)
-  description         String?               @db.Text
+  id                  String                  @id @default(uuid()) @db.Uuid
+  organizationId      String?                 @map("organization_id") @db.Uuid
+  assessmentVersionId String?                 @map("assessment_version_id") @db.Uuid
+  code                String                  @unique @db.VarChar(120)
+  name                String                  @db.VarChar(200)
+  description         String?                 @db.Text
   kind                CommerceProductKind
-  currency            String                @default("INR") @db.Char(3)
-  priceMinor          Int                   @map("price_minor")
-  status              CommerceProductStatus @default(ACTIVE)
-  createdByUserId     String?               @map("created_by_user_id") @db.Uuid
-  metadata            Json?                 @db.JsonB
-  createdAt           DateTime              @default(now()) @map("created_at")
-  updatedAt           DateTime              @updatedAt @map("updated_at")
+  audience            CommerceProductAudience @default(CANDIDATE)
+  unitQuantity        Int                     @default(1) @map("unit_quantity")
+  currency            String                  @default("INR") @db.Char(3)
+  priceMinor          Int                     @map("price_minor")
+  status              CommerceProductStatus   @default(ACTIVE)
+  createdByUserId     String?                 @map("created_by_user_id") @db.Uuid
+  metadata            Json?                   @db.JsonB
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
 
   organization      Organization?      @relation("CommerceProductOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
   assessmentVersion AssessmentVersion? @relation("CommerceProductAssessmentVersion", fields: [assessmentVersionId], references: [id], onDelete: Restrict)
@@ -1393,6 +1421,7 @@ model CommerceCoupon {
   code             String                     @unique @db.VarChar(80)
   description      String?                    @db.Text
   discountType     CommerceCouponDiscountType @map("discount_type")
+  appliesToKind    CommerceProductKind?       @map("applies_to_kind")
   percentageBps    Int?                       @map("percentage_bps")
   fixedAmountMinor Int?                       @map("fixed_amount_minor")
   validFrom        DateTime                   @default(now()) @map("valid_from")
@@ -1418,27 +1447,34 @@ model CommerceCoupon {
 }
 
 model CommerceOrder {
-  id                 String              @id @default(uuid()) @db.Uuid
-  organizationId     String              @map("organization_id") @db.Uuid
-  userId             String              @map("user_id") @db.Uuid
-  attemptId          String              @map("attempt_id") @db.Uuid
-  productId          String              @map("product_id") @db.Uuid
-  couponId           String?             @map("coupon_id") @db.Uuid
-  status             CommerceOrderStatus @default(PENDING)
-  currency           String              @db.Char(3)
-  subtotalMinor      Int                 @map("subtotal_minor")
-  discountMinor      Int                 @default(0) @map("discount_minor")
-  totalMinor         Int                 @map("total_minor")
-  couponCodeSnapshot String?             @map("coupon_code_snapshot") @db.VarChar(80)
-  metadata           Json?               @db.JsonB
-  createdAt          DateTime            @default(now()) @map("created_at")
-  updatedAt          DateTime            @updatedAt @map("updated_at")
-  paidAt             DateTime?           @map("paid_at")
-  cancelledAt        DateTime?           @map("cancelled_at")
+  id                 String                        @id @default(uuid()) @db.Uuid
+  organizationId     String                        @map("organization_id") @db.Uuid
+  userId             String                        @map("user_id") @db.Uuid
+  attemptId          String?                       @map("attempt_id") @db.Uuid
+  productId          String                        @map("product_id") @db.Uuid
+  couponId           String?                       @map("coupon_id") @db.Uuid
+  purchaserType      CommerceOrderPurchaserType    @default(CANDIDATE) @map("purchaser_type")
+  creditWalletId     String?                       @map("credit_wallet_id") @db.Uuid
+  quantity           Int                           @default(1)
+  status             CommerceOrderStatus           @default(PENDING)
+  fulfilmentStatus   CommerceOrderFulfilmentStatus @default(PENDING) @map("fulfilment_status")
+  currency           String                        @db.Char(3)
+  subtotalMinor      Int                           @map("subtotal_minor")
+  discountMinor      Int                           @default(0) @map("discount_minor")
+  totalMinor         Int                           @map("total_minor")
+  couponCodeSnapshot String?                       @map("coupon_code_snapshot") @db.VarChar(80)
+  metadata           Json?                         @db.JsonB
+  createdAt          DateTime                      @default(now()) @map("created_at")
+  updatedAt          DateTime                      @updatedAt @map("updated_at")
+  paidAt             DateTime?                     @map("paid_at")
+  fulfilledAt        DateTime?                     @map("fulfilled_at")
+  cancelledAt        DateTime?                     @map("cancelled_at")
+  refundedAt         DateTime?                     @map("refunded_at")
 
   organization        Organization                @relation("CommerceOrderOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
   user                User                        @relation("CommerceOrderUser", fields: [userId], references: [id], onDelete: Restrict)
-  attempt             AssessmentAttempt           @relation("CommerceOrderAttempt", fields: [attemptId], references: [id], onDelete: Restrict)
+  attempt             AssessmentAttempt?          @relation("CommerceOrderAttempt", fields: [attemptId], references: [id], onDelete: Restrict)
+  creditWallet        CommerceCreditWallet?       @relation("CommerceOrderCreditWallet", fields: [creditWalletId], references: [id], onDelete: Restrict)
   product             CommerceProduct             @relation(fields: [productId], references: [id], onDelete: Restrict)
   coupon              CommerceCoupon?             @relation(fields: [couponId], references: [id], onDelete: Restrict)
   payments            CommercePayment[]
@@ -1450,6 +1486,8 @@ model CommerceOrder {
   @@index([userId, createdAt])
   @@index([attemptId, createdAt])
   @@index([status, createdAt])
+  @@index([status, fulfilmentStatus])
+  @@index([creditWalletId])
   @@map("commerce_orders")
 }
 
@@ -1465,17 +1503,40 @@ model CommercePayment {
   currency          String                @db.Char(3)
   reference         String?               @db.VarChar(200)
   approvedByUserId  String?               @map("approved_by_user_id") @db.Uuid
+  webhookEventId    String?               @unique @map("webhook_event_id") @db.Uuid
+  failureCode       String?               @map("failure_code") @db.VarChar(120)
+  failureMessage    String?               @map("failure_message") @db.VarChar(500)
   metadata          Json?                 @db.JsonB
   createdAt         DateTime              @default(now()) @map("created_at")
   updatedAt         DateTime              @updatedAt @map("updated_at")
   completedAt       DateTime?             @map("completed_at")
 
-  order          CommerceOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  approvedByUser User?         @relation("CommercePaymentApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  order          CommerceOrder         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  approvedByUser User?                 @relation("CommercePaymentApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  webhookEvent   CommerceWebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: Restrict)
 
   @@index([orderId, status])
   @@index([status, createdAt])
   @@map("commerce_payments")
+}
+
+model CommerceWebhookEvent {
+  id             String                     @id @default(uuid()) @db.Uuid
+  provider       String                     @db.VarChar(50)
+  eventId        String                     @map("event_id") @db.VarChar(160)
+  eventType      String                     @map("event_type") @db.VarChar(120)
+  status         CommerceWebhookEventStatus @default(RECEIVED)
+  signatureValid Boolean                    @map("signature_valid")
+  payload        Json                       @db.JsonB
+  errorMessage   String?                    @map("error_message") @db.VarChar(500)
+  receivedAt     DateTime                   @default(now()) @map("received_at")
+  processedAt    DateTime?                  @map("processed_at")
+
+  payments CommercePayment[]
+
+  @@unique([provider, eventId])
+  @@index([status, receivedAt])
+  @@map("commerce_webhook_events")
 }
 
 model CommerceCouponRedemption {
@@ -1622,6 +1683,7 @@ model CommerceCreditWallet {
   ownerUser         User?                       @relation("CreditWalletUserOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   ownerOrganization Organization?               @relation("CreditWalletOrganizationOwner", fields: [ownerOrganizationId], references: [id], onDelete: Restrict)
   ledgerEntries     CommerceCreditLedgerEntry[]
+  orders            CommerceOrder[]             @relation("CommerceOrderCreditWallet")
 
   @@index([ownerUserId, status])
   @@index([ownerOrganizationId, status])

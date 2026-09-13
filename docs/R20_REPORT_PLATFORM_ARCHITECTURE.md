@@ -82,6 +82,20 @@ R20-A extends the existing R19.1 permission system with `report.search`, `report
 
 Credit and counsellor assignment mutations, plus report configuration changes, write `AuditLog` evidence inside their transactions. The existing privileged mutation interceptor remains enabled on administrative controllers.
 
+## Commerce orders, payments and fulfilment (R20-C2a)
+
+`CommerceProduct` carries backend-controlled `priceMinor`, an `audience` (`CANDIDATE`, `ORGANIZATION`, `COUNSELLOR`) and a `unitQuantity` (credits in a `REPORT_CREDIT_PACK`). Candidate checkout only lists candidate-audience report/counselling products. Catalogue creation, price changes and manual payment approval are central operations: `commerce.product.manage`, `commerce.price.manage` and `commerce.payment.approve` are no longer part of the legacy organization-admin permission set, and the service layer independently rejects non-central callers. Every product create/update writes an `AuditLog` row with the before/after price.
+
+Coupons remain redeemable by candidates as before. Tenant administrators may only create product-bound `PERCENTAGE`/`FIXED` coupons within `COMMERCE_TENANT_COUPON_MAX_BPS`; `FREE` coupons are central-only. A coupon may additionally be restricted to one product kind through `appliesToKind`.
+
+`CommerceOrder` distinguishes `purchaserType` (`CANDIDATE`, `ORGANIZATION`, `COUNSELLOR`), an optional `attemptId` (required for candidate orders by database check), an optional `creditWalletId` (required for organisation/counsellor orders), `quantity`, and a `fulfilmentStatus` separate from payment status. Historical paid orders are backfilled as `FULFILLED`.
+
+`OrderFulfilmentService.fulfil` is the single idempotent fulfilment path. It runs inside the caller's transaction after the order is marked `PAID`, and dispatches by product kind: candidate report/counselling products upsert `CommerceEntitlement` rows; `REPORT_CREDIT_PACK` products find-or-create the purchaser's `REPORT_ACCESS` wallet and append one `PURCHASE` ledger entry (`unitQuantity × quantity`, unique per order at the database level). Zero-total checkout, browser Razorpay verification, the Razorpay webhook, central manual approval and administrative retry all call the same method, so the first path to succeed fulfils and later paths are no-ops.
+
+`POST /commerce/webhooks/razorpay` is unauthenticated by design: the raw body is HMAC-verified with `RAZORPAY_WEBHOOK_SECRET`, every event is journaled once in `CommerceWebhookEvent` by provider event id, `payment.captured`/`order.paid` mark the matching intent and order paid (rejecting amount/currency mismatches) and fulfil, and `payment.failed` records sanitized failure detail. Successful payments link to their webhook event.
+
+Central administrators may cancel pending orders, record refunds, and retry fulfilment. Refund records a `REFUNDED` payment, revokes entitlements granted by the order and reverses only unconsumed purchased credits (`REVERSAL` ledger entry capped by wallet balance); consumed credits and their report grants are never clawed back. Moving funds through the gateway remains an operator action.
+
 ## Legacy compatibility
 
 `AssessmentReportRelease`, its schema, historical migration, records, and compatibility API are preserved. Existing release evidence remains readable and the staff UI labels it as legacy history. New automatic reports create no release row and neither candidate nor administrator access requires one. The legacy candidate PDF path remains as a compatibility alias but now opens the authorized generation-linked immutable snapshot.
@@ -96,11 +110,8 @@ The staff workspace uses `/staff/reports`. Old `/staff/results` links redirect f
 
 ## Remaining R20-C2
 
-- Dedicated payments/orders UI.
-- Coupon management UI.
-- Report-credit wallet purchase/allocation UX.
-- Backend-controlled pricing UX.
-- Tenant/counsellor self-service credit purchase.
-- Counselling booking/scheduling/payment/fulfilment.
+- C2b: admin commerce UI (products, coupons, orders) on the C2a backend.
+- C2c: wallet transfers, bulk consumption, self-service credit purchase for tenants/counsellors.
+- C2d: counselling booking/scheduling/fulfilment.
 
 Durable background recovery remains a later platform concern when the worker evolves beyond its current health-only queue. OTP, if separately approved, also remains later work.
