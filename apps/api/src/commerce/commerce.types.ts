@@ -5,12 +5,14 @@ import {
   CommerceOrderPurchaserType,
   CommerceOrderStatus,
   CommercePaymentMethod,
+  CommercePriceStatus,
   CommerceProductAudience,
   CommerceProductKind,
   CommerceProductStatus,
 } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
+  IsBoolean,
   IsEnum,
   IsISO8601,
   IsInt,
@@ -21,6 +23,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from "class-validator";
 
 export class CreateCandidateOrderDto {
@@ -94,6 +97,24 @@ export class CreateCommerceProductDto {
   @IsInt()
   @Min(0)
   priceMinor!: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  minPriceMinor?: number;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  maxPriceMinor?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  taxRateBps?: number | null;
 }
 
 export class UpdateCommerceProductDto {
@@ -111,6 +132,24 @@ export class UpdateCommerceProductDto {
   @IsInt()
   @Min(0)
   priceMinor?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  minPriceMinor?: number;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  maxPriceMinor?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  taxRateBps?: number | null;
 
   @IsOptional()
   @IsEnum(CommerceProductAudience)
@@ -215,4 +254,53 @@ export class AdminOrderQueryDto {
 export class OrderReferenceDto {
   @IsOptional() @IsString() @MaxLength(200) reference?: string;
   @IsOptional() @IsString() @MaxLength(500) reason?: string;
+}
+
+export class RefundOrderDto extends OrderReferenceDto {
+  // Central exceptional override for entitlements already consumed; requires a reason.
+  @IsOptional() @IsBoolean() override?: boolean;
+}
+
+export class SubmitManualPaymentDto {
+  @IsEnum(CommercePaymentMethod) method!: CommercePaymentMethod;
+  @IsString() @Length(1, 200) reference!: string;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
+export class UpdatePlatformPolicyDto {
+  @IsOptional() @IsInt() @Min(0) @Max(10000) tenantCouponMaxDiscountBps?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(10000) defaultTaxRateBps?: number;
+  @IsOptional() @IsBoolean() taxInclusivePricing?: boolean;
+  @IsOptional() @IsBoolean() counsellorFeePricingEnabled?: boolean;
+  @IsOptional() @IsInt() @Min(0) counsellorFeeMinMinor?: number;
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  counsellorFeeMaxMinor?: number | null;
+}
+
+export class UpdateOrganizationPolicyDto {
+  @IsOptional() @IsBoolean() delegatedPricingEnabled?: boolean;
+  @IsOptional() @IsBoolean() couponsEnabled?: boolean;
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  couponMaxDiscountBps?: number | null;
+  @IsOptional() @IsBoolean() manualPaymentEnabled?: boolean;
+}
+
+export class SetOrganizationPriceDto {
+  @IsOptional() @IsUUID() organizationId?: string;
+  @IsString() @Length(1, 120) productCode!: string;
+  @IsInt() @Min(1) sellingPriceMinor!: number;
+  @IsOptional() @IsEnum(CommercePriceStatus) status?: CommercePriceStatus;
+}
+
+export class SetCounsellorFeeDto {
+  @IsString() @Length(1, 120) productCode!: string;
+  @IsInt() @Min(1) feeMinor!: number;
+  @IsOptional() @IsEnum(CommercePriceStatus) status?: CommercePriceStatus;
 }

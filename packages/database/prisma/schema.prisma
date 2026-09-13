@@ -264,6 +264,9 @@ model Organization {
   commerceEntitlements     CommerceEntitlement[]           @relation("CommerceEntitlementOrganization")
   reportAccessGrants       CommerceReportAccessGrant[]     @relation("ReportAccessGrantOrganizationPrincipal")
   creditWallets            CommerceCreditWallet[]          @relation("CreditWalletOrganizationOwner")
+  commercePolicy           CommerceOrganizationPolicy?     @relation("CommerceOrganizationPolicyOrganization")
+  commercePrices           CommerceOrganizationPrice[]     @relation("CommerceOrganizationPriceOrganization")
+  counsellorFees           CommerceCounsellorFee[]         @relation("CommerceCounsellorFeeOrganization")
   counsellorAssignments    CandidateCounsellorAssignment[]
 
   adminRoleAssignments AdminRoleAssignment[]
@@ -274,48 +277,52 @@ model Organization {
 }
 
 model User {
-  id                             String                          @id @default(uuid()) @db.Uuid
-  email                          String                          @db.VarChar(320)
-  normalizedEmail                String                          @unique @map("normalized_email") @db.VarChar(320)
-  phoneE164                      String?                         @map("phone_e164") @db.VarChar(16)
-  passwordHash                   String?                         @map("password_hash") @db.VarChar(255)
-  firstName                      String                          @map("first_name") @db.VarChar(100)
-  lastName                       String                          @map("last_name") @db.VarChar(100)
-  status                         UserStatus                      @default(INVITED)
-  emailVerifiedAt                DateTime?                       @map("email_verified_at")
-  lastLoginAt                    DateTime?                       @map("last_login_at")
-  failedLoginCount               Int                             @default(0) @map("failed_login_count")
-  lockedUntil                    DateTime?                       @map("locked_until")
-  createdAt                      DateTime                        @default(now()) @map("created_at")
-  updatedAt                      DateTime                        @updatedAt @map("updated_at")
-  deletedAt                      DateTime?                       @map("deleted_at")
-  memberships                    OrganizationMembership[]
-  sessions                       Session[]
-  passwordResetTokens            PasswordResetToken[]
-  invitationTokens               InvitationToken[]
-  notificationDeliveries         NotificationDelivery[]
-  auditLogs                      AuditLog[]                      @relation("ActorAuditLogs")
-  subjectAuditLogs               AuditLog[]                      @relation("SubjectAuditLogs")
-  createdAssessmentDefinitions   AssessmentDefinition[]          @relation("AssessmentDefinitionCreatedBy")
-  createdAssessmentVersions      AssessmentVersion[]             @relation("AssessmentVersionCreatedBy")
-  publishedAssessmentVersions    AssessmentVersion[]             @relation("AssessmentVersionPublishedBy")
-  assignedAssessments            AssessmentAssignment[]          @relation("AssessmentAssignmentCandidate")
-  createdAssessmentAssignments   AssessmentAssignment[]          @relation("AssessmentAssignmentAssignedBy")
-  releasedAssessmentReports      AssessmentReportRelease[]       @relation("AssessmentReportReleaseReleasedBy")
-  createdCommerceProducts        CommerceProduct[]               @relation("CommerceProductCreatedBy")
-  createdCommerceCoupons         CommerceCoupon[]                @relation("CommerceCouponCreatedBy")
-  commerceOrders                 CommerceOrder[]                 @relation("CommerceOrderUser")
-  commercePaymentsApproved       CommercePayment[]               @relation("CommercePaymentApprovedBy")
-  commerceCouponRedemptions      CommerceCouponRedemption[]      @relation("CommerceCouponRedemptionUser")
-  commerceEntitlements           CommerceEntitlement[]           @relation("CommerceEntitlementUser")
-  configuredReportConfigurations AssessmentReportConfiguration[] @relation("AssessmentReportConfigurationConfiguredBy")
-  grantedReportAccessGrants      CommerceReportAccessGrant[]     @relation("ReportAccessGrantGrantedBy")
-  reportAccessGrants             CommerceReportAccessGrant[]     @relation("ReportAccessGrantUserPrincipal")
-  creditWallets                  CommerceCreditWallet[]          @relation("CreditWalletUserOwner")
-  creditLedgerEntries            CommerceCreditLedgerEntry[]     @relation("CreditLedgerActor")
-  candidateCounsellorAssignments CandidateCounsellorAssignment[] @relation("CandidateCounsellorAssignmentCandidate")
-  counsellorCandidateAssignments CandidateCounsellorAssignment[] @relation("CandidateCounsellorAssignmentCounsellor")
-  assignedCounsellorAssignments  CandidateCounsellorAssignment[] @relation("CandidateCounsellorAssignmentAssignedBy")
+  id                                String                          @id @default(uuid()) @db.Uuid
+  email                             String                          @db.VarChar(320)
+  normalizedEmail                   String                          @unique @map("normalized_email") @db.VarChar(320)
+  phoneE164                         String?                         @map("phone_e164") @db.VarChar(16)
+  passwordHash                      String?                         @map("password_hash") @db.VarChar(255)
+  firstName                         String                          @map("first_name") @db.VarChar(100)
+  lastName                          String                          @map("last_name") @db.VarChar(100)
+  status                            UserStatus                      @default(INVITED)
+  emailVerifiedAt                   DateTime?                       @map("email_verified_at")
+  lastLoginAt                       DateTime?                       @map("last_login_at")
+  failedLoginCount                  Int                             @default(0) @map("failed_login_count")
+  lockedUntil                       DateTime?                       @map("locked_until")
+  createdAt                         DateTime                        @default(now()) @map("created_at")
+  updatedAt                         DateTime                        @updatedAt @map("updated_at")
+  deletedAt                         DateTime?                       @map("deleted_at")
+  memberships                       OrganizationMembership[]
+  sessions                          Session[]
+  passwordResetTokens               PasswordResetToken[]
+  invitationTokens                  InvitationToken[]
+  notificationDeliveries            NotificationDelivery[]
+  auditLogs                         AuditLog[]                      @relation("ActorAuditLogs")
+  subjectAuditLogs                  AuditLog[]                      @relation("SubjectAuditLogs")
+  createdAssessmentDefinitions      AssessmentDefinition[]          @relation("AssessmentDefinitionCreatedBy")
+  createdAssessmentVersions         AssessmentVersion[]             @relation("AssessmentVersionCreatedBy")
+  publishedAssessmentVersions       AssessmentVersion[]             @relation("AssessmentVersionPublishedBy")
+  assignedAssessments               AssessmentAssignment[]          @relation("AssessmentAssignmentCandidate")
+  createdAssessmentAssignments      AssessmentAssignment[]          @relation("AssessmentAssignmentAssignedBy")
+  releasedAssessmentReports         AssessmentReportRelease[]       @relation("AssessmentReportReleaseReleasedBy")
+  createdCommerceProducts           CommerceProduct[]               @relation("CommerceProductCreatedBy")
+  createdCommerceCoupons            CommerceCoupon[]                @relation("CommerceCouponCreatedBy")
+  commerceOrders                    CommerceOrder[]                 @relation("CommerceOrderUser")
+  commercePaymentsApproved          CommercePayment[]               @relation("CommercePaymentApprovedBy")
+  commerceCouponRedemptions         CommerceCouponRedemption[]      @relation("CommerceCouponRedemptionUser")
+  commerceEntitlements              CommerceEntitlement[]           @relation("CommerceEntitlementUser")
+  configuredReportConfigurations    AssessmentReportConfiguration[] @relation("AssessmentReportConfigurationConfiguredBy")
+  grantedReportAccessGrants         CommerceReportAccessGrant[]     @relation("ReportAccessGrantGrantedBy")
+  reportAccessGrants                CommerceReportAccessGrant[]     @relation("ReportAccessGrantUserPrincipal")
+  creditWallets                     CommerceCreditWallet[]          @relation("CreditWalletUserOwner")
+  commercePlatformPolicyUpdates     CommercePlatformPolicy[]        @relation("CommercePlatformPolicyUpdatedBy")
+  commerceOrganizationPolicyUpdates CommerceOrganizationPolicy[]    @relation("CommerceOrganizationPolicyUpdatedBy")
+  commerceOrganizationPricesSet     CommerceOrganizationPrice[]     @relation("CommerceOrganizationPriceSetBy")
+  counsellorFees                    CommerceCounsellorFee[]         @relation("CommerceCounsellorFeeCounsellor")
+  creditLedgerEntries               CommerceCreditLedgerEntry[]     @relation("CreditLedgerActor")
+  candidateCounsellorAssignments    CandidateCounsellorAssignment[] @relation("CandidateCounsellorAssignmentCandidate")
+  counsellorCandidateAssignments    CandidateCounsellorAssignment[] @relation("CandidateCounsellorAssignmentCounsellor")
+  assignedCounsellorAssignments     CandidateCounsellorAssignment[] @relation("CandidateCounsellorAssignmentAssignedBy")
 
   adminProfile                AdminProfile?         @relation("AdminProfileUser")
   createdAdminProfiles        AdminProfile[]        @relation("AdminProfileCreatedBy")
@@ -1325,6 +1332,17 @@ enum CommerceOrderFulfilmentStatus {
   FAILED
 }
 
+enum CommercePricingSource {
+  PLATFORM
+  ORGANIZATION
+  COUNSELLOR
+}
+
+enum CommercePriceStatus {
+  ACTIVE
+  INACTIVE
+}
+
 enum CommerceWebhookEventStatus {
   RECEIVED
   PROCESSED
@@ -1396,22 +1414,105 @@ model CommerceProduct {
   unitQuantity        Int                     @default(1) @map("unit_quantity")
   currency            String                  @default("INR") @db.Char(3)
   priceMinor          Int                     @map("price_minor")
+  minPriceMinor       Int                     @default(0) @map("min_price_minor")
+  maxPriceMinor       Int?                    @map("max_price_minor")
+  taxRateBps          Int?                    @map("tax_rate_bps")
   status              CommerceProductStatus   @default(ACTIVE)
   createdByUserId     String?                 @map("created_by_user_id") @db.Uuid
   metadata            Json?                   @db.JsonB
   createdAt           DateTime                @default(now()) @map("created_at")
   updatedAt           DateTime                @updatedAt @map("updated_at")
 
-  organization      Organization?      @relation("CommerceProductOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
-  assessmentVersion AssessmentVersion? @relation("CommerceProductAssessmentVersion", fields: [assessmentVersionId], references: [id], onDelete: Restrict)
-  createdByUser     User?              @relation("CommerceProductCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  coupons           CommerceCoupon[]
-  orders            CommerceOrder[]
+  organization       Organization?               @relation("CommerceProductOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  assessmentVersion  AssessmentVersion?          @relation("CommerceProductAssessmentVersion", fields: [assessmentVersionId], references: [id], onDelete: Restrict)
+  createdByUser      User?                       @relation("CommerceProductCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  coupons            CommerceCoupon[]
+  orders             CommerceOrder[]
+  organizationPrices CommerceOrganizationPrice[]
+  counsellorFees     CommerceCounsellorFee[]
 
   @@index([organizationId, status])
   @@index([assessmentVersionId, status])
   @@index([kind, status])
   @@map("commerce_products")
+}
+
+// Platform-wide commercial policy. A single row keyed "DEFAULT"; every value is
+// backend-controlled and changes are audited.
+model CommercePlatformPolicy {
+  id                          String   @id @default("DEFAULT") @db.VarChar(40)
+  tenantCouponMaxDiscountBps  Int      @default(5000) @map("tenant_coupon_max_discount_bps")
+  defaultTaxRateBps           Int      @default(0) @map("default_tax_rate_bps")
+  taxInclusivePricing         Boolean  @default(true) @map("tax_inclusive_pricing")
+  counsellorFeePricingEnabled Boolean  @default(false) @map("counsellor_fee_pricing_enabled")
+  counsellorFeeMinMinor       Int      @default(0) @map("counsellor_fee_min_minor")
+  counsellorFeeMaxMinor       Int?     @map("counsellor_fee_max_minor")
+  updatedByUserId             String?  @map("updated_by_user_id") @db.Uuid
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+
+  updatedByUser User? @relation("CommercePlatformPolicyUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@map("commerce_platform_policies")
+}
+
+// Per-organization commercial delegation granted by the platform.
+model CommerceOrganizationPolicy {
+  id                      String   @id @default(uuid()) @db.Uuid
+  organizationId          String   @unique @map("organization_id") @db.Uuid
+  delegatedPricingEnabled Boolean  @default(false) @map("delegated_pricing_enabled")
+  couponsEnabled          Boolean  @default(false) @map("coupons_enabled")
+  couponMaxDiscountBps    Int?     @map("coupon_max_discount_bps")
+  manualPaymentEnabled    Boolean  @default(false) @map("manual_payment_enabled")
+  updatedByUserId         String?  @map("updated_by_user_id") @db.Uuid
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  organization  Organization @relation("CommerceOrganizationPolicyOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  updatedByUser User?        @relation("CommerceOrganizationPolicyUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@map("commerce_organization_policies")
+}
+
+// A tenant's own selling price for a platform product, valid only inside the
+// platform floor/ceiling and only while delegated pricing is enabled.
+model CommerceOrganizationPrice {
+  id                String              @id @default(uuid()) @db.Uuid
+  organizationId    String              @map("organization_id") @db.Uuid
+  productId         String              @map("product_id") @db.Uuid
+  sellingPriceMinor Int                 @map("selling_price_minor")
+  status            CommercePriceStatus @default(ACTIVE)
+  setByUserId       String              @map("set_by_user_id") @db.Uuid
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  organization Organization    @relation("CommerceOrganizationPriceOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  product      CommerceProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  setByUser    User            @relation("CommerceOrganizationPriceSetBy", fields: [setByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, productId])
+  @@index([productId, status])
+  @@map("commerce_organization_prices")
+}
+
+// A counsellor's professional fee for one COUNSELLING product, within platform bounds.
+model CommerceCounsellorFee {
+  id               String              @id @default(uuid()) @db.Uuid
+  counsellorUserId String              @map("counsellor_user_id") @db.Uuid
+  organizationId   String              @map("organization_id") @db.Uuid
+  productId        String              @map("product_id") @db.Uuid
+  feeMinor         Int                 @map("fee_minor")
+  status           CommercePriceStatus @default(ACTIVE)
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  counsellorUser User            @relation("CommerceCounsellorFeeCounsellor", fields: [counsellorUserId], references: [id], onDelete: Restrict)
+  organization   Organization    @relation("CommerceCounsellorFeeOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  product        CommerceProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([counsellorUserId, organizationId, productId])
+  @@index([organizationId, status])
+  @@map("commerce_counsellor_fees")
 }
 
 model CommerceCoupon {
@@ -1456,6 +1557,10 @@ model CommerceOrder {
   purchaserType      CommerceOrderPurchaserType    @default(CANDIDATE) @map("purchaser_type")
   creditWalletId     String?                       @map("credit_wallet_id") @db.Uuid
   quantity           Int                           @default(1)
+  basePriceMinor     Int?                          @map("base_price_minor")
+  pricingSource      CommercePricingSource         @default(PLATFORM) @map("pricing_source")
+  taxRateBps         Int                           @default(0) @map("tax_rate_bps")
+  taxMinor           Int                           @default(0) @map("tax_minor")
   status             CommerceOrderStatus           @default(PENDING)
   fulfilmentStatus   CommerceOrderFulfilmentStatus @default(PENDING) @map("fulfilment_status")
   currency           String                        @db.Char(3)

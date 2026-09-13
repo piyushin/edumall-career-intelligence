@@ -1,7 +1,8 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { MembershipRole, type PrismaClient } from "@prisma/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../auth/auth.types";
+import type { CommercePricingService } from "./commerce-pricing.service";
 import { CommerceService } from "./commerce.service";
 import type { OrderFulfilmentService } from "./order-fulfilment.service";
 
@@ -22,7 +23,10 @@ const tenantAdmin: AuthContext = {
   permissions: [],
 };
 
-function setup(product: Record<string, unknown> | null = null) {
+function setup(
+  product: Record<string, unknown> | null = null,
+  options: { capBps?: number; couponsEnabled?: boolean } = {},
+) {
   const prisma = {
     commerceProduct: {
       findUnique: vi.fn().mockResolvedValue(product),
@@ -43,14 +47,29 @@ function setup(product: Record<string, unknown> | null = null) {
     $transaction: vi.fn(),
   };
   const fulfilment = { fulfil: vi.fn(), reverse: vi.fn() };
+  const pricing = {
+    tenantCouponCapBps: vi
+      .fn()
+      .mockImplementation(() =>
+        options.couponsEnabled === false
+          ? Promise.reject(new ForbiddenException({ code: "COMMERCE_TENANT_COUPONS_DISABLED" }))
+          : Promise.resolve(options.capBps ?? 5000),
+      ),
+    resolvePrice: vi.fn(),
+    computeTotals: vi.fn(),
+  };
   return {
     prisma,
+    pricing,
     service: new CommerceService(
       prisma as unknown as PrismaClient,
       fulfilment as unknown as OrderFulfilmentService,
+      pricing as unknown as CommercePricingService,
     ),
   };
 }
+
+const limits = { validUntil: "2027-01-01T00:00:00.000Z", maxRedemptions: 100 };
 
 const boundProduct = {
   id: "product",
@@ -60,10 +79,6 @@ const boundProduct = {
 };
 
 describe("commerce authority boundaries (R20-C2a)", () => {
-  afterEach(() => {
-    delete process.env.COMMERCE_TENANT_COUPON_MAX_BPS;
-  });
-
   it("lets central administrators create free coupons", async () => {
     const { service, prisma } = setup();
     await service.createCoupon(central, { code: "free1", discountType: "FREE" });
@@ -91,6 +106,7 @@ describe("commerce authority boundaries (R20-C2a)", () => {
         code: "unbound",
         discountType: "PERCENTAGE",
         percentageBps: 1000,
+        ...limits,
       }),
     ).rejects.toMatchObject({ response: { code: "COUPON_PRODUCT_REQUIRED" } });
     await expect(
@@ -99,6 +115,7 @@ describe("commerce authority boundaries (R20-C2a)", () => {
         discountType: "PERCENTAGE",
         percentageBps: 7500,
         productCode: "REPORT_STD",
+        ...limits,
       }),
     ).rejects.toMatchObject({ response: { code: "COUPON_DISCOUNT_EXCEEDS_CAP" } });
     await expect(
@@ -107,31 +124,71 @@ describe("commerce authority boundaries (R20-C2a)", () => {
         discountType: "FIXED",
         fixedAmountMinor: 60000,
         productCode: "REPORT_STD",
+        ...limits,
       }),
     ).rejects.toMatchObject({ response: { code: "COUPON_DISCOUNT_EXCEEDS_CAP" } });
+    await expect(
+      service.createCoupon(tenantAdmin, {
+        code: "nolimits",
+        discountType: "PERCENTAGE",
+        percentageBps: 2000,
+        productCode: "REPORT_STD",
+      }),
+    ).rejects.toMatchObject({ response: { code: "COUPON_LIMITS_REQUIRED" } });
 
     await service.createCoupon(tenantAdmin, {
       code: "ok20",
       discountType: "PERCENTAGE",
       percentageBps: 2000,
       productCode: "REPORT_STD",
+      ...limits,
     });
     expect(prisma.commerceCoupon.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ code: "OK20", organizationId, productId: "product" }),
     });
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ action: "commerce.coupon.created" }),
+    });
   });
 
-  it("honours a configured tenant discount cap", async () => {
-    process.env.COMMERCE_TENANT_COUPON_MAX_BPS = "1000";
-    const { service } = setup(boundProduct);
+  it("uses the platform/organization policy cap rather than a hardcoded percentage", async () => {
+    const { service, pricing } = setup(boundProduct, { capBps: 1000 });
     await expect(
       service.createCoupon(tenantAdmin, {
         code: "cap",
         discountType: "PERCENTAGE",
         percentageBps: 2000,
         productCode: "REPORT_STD",
+        ...limits,
       }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    ).rejects.toMatchObject({ response: { code: "COUPON_DISCOUNT_EXCEEDS_CAP" } });
+    expect(pricing.tenantCouponCapBps).toHaveBeenCalledWith(organizationId);
+  });
+
+  it("refuses tenant coupons entirely when the platform has not enabled them", async () => {
+    const { service } = setup(boundProduct, { couponsEnabled: false });
+    await expect(
+      service.createCoupon(tenantAdmin, {
+        code: "off",
+        discountType: "PERCENTAGE",
+        percentageBps: 500,
+        productCode: "REPORT_STD",
+        ...limits,
+      }),
+    ).rejects.toMatchObject({ response: { code: "COMMERCE_TENANT_COUPONS_DISABLED" } });
+  });
+
+  it("never lets a tenant coupon discount report-credit packs", async () => {
+    const { service } = setup({ ...boundProduct, kind: "REPORT_CREDIT_PACK" });
+    await expect(
+      service.createCoupon(tenantAdmin, {
+        code: "packs",
+        discountType: "PERCENTAGE",
+        percentageBps: 500,
+        productCode: "PACK_5",
+        ...limits,
+      }),
+    ).rejects.toMatchObject({ response: { code: "COUPON_CREDIT_PACK_CENTRAL_ONLY" } });
   });
 
   it("keeps manual payment approval central-only", async () => {

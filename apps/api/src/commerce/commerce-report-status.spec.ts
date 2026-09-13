@@ -6,6 +6,7 @@ import {
 } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../auth/auth.types";
+import type { CommercePricingService } from "./commerce-pricing.service";
 import { CommerceService } from "./commerce.service";
 import { OrderFulfilmentService } from "./order-fulfilment.service";
 
@@ -48,7 +49,10 @@ function setup(entitlements: unknown[] = [], generationStatus = "GENERATED") {
   };
   return {
     prisma,
-    service: new CommerceService(prisma as unknown as PrismaClient, new OrderFulfilmentService()),
+    service: new CommerceService(prisma as unknown as PrismaClient, new OrderFulfilmentService(), {
+      resolvePrice: vi.fn(),
+      computeTotals: vi.fn(),
+    } as unknown as CommercePricingService),
   };
 }
 

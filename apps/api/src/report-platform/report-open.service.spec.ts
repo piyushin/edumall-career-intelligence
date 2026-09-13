@@ -47,4 +47,45 @@ describe("ReportOpenService", () => {
     expect(policy.assertCanDownloadFullReport).toHaveBeenCalled();
     expect((prisma as Record<string, unknown>).assessmentReportRelease).toBeUndefined();
   });
+
+  it("marks a candidate's paid entitlement consumed on first delivery only", async () => {
+    const snapshot = { id: "snapshot", payload: {} };
+    const prisma = {
+      assessmentAttempt: {
+        findUnique: vi.fn().mockResolvedValue({
+          reportGeneration: { status: "GENERATED", reportDataSnapshot: snapshot },
+          scoringRuns: [],
+        }),
+      },
+      commerceEntitlement: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    };
+    const policy = {
+      assertCanOpenFullReport: vi
+        .fn()
+        .mockResolvedValueOnce({ allowed: true, basis: "CANDIDATE_ENTITLEMENT" })
+        .mockResolvedValueOnce({ allowed: true, basis: "ADMINISTRATIVE_SCOPE" }),
+    };
+    const service = new ReportOpenService(
+      prisma as unknown as PrismaClient,
+      policy as unknown as ReportAccessPolicyService,
+    );
+    const candidate = {
+      ...context,
+      organizationId: "22222222-2222-4222-8222-222222222222",
+      role: MembershipRole.STUDENT,
+    };
+    await service.open(candidate, "attempt");
+    expect(prisma.commerceEntitlement.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        attemptId: "attempt",
+        userId: candidate.userId,
+        type: "REPORT",
+        status: "ACTIVE",
+        consumedAt: null,
+      }),
+      data: { consumedAt: expect.any(Date) },
+    });
+    await service.open(context, "attempt");
+    expect(prisma.commerceEntitlement.updateMany).toHaveBeenCalledTimes(1);
+  });
 });

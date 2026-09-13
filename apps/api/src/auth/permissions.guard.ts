@@ -12,9 +12,10 @@ import type { RequestWithAuth } from "./auth.types";
 
 // Compatibility is deliberately finite: legacy organization administrators retain
 // only the operational permissions exposed to them before delegated R19 roles.
-// Catalogue/price mutation and payment approval are central platform operations
-// (R20-C2): a tenant must never be able to price its own access to zero or mark
-// its own orders as paid.
+// Platform catalogue mutation, payment approval and refunds are central platform
+// operations (R20-C2): a tenant must never mark its own orders as paid. Tenant
+// `commerce.price.manage` and `commerce.coupon.manage` act only inside the
+// organization's own scope and only when the platform has delegated them.
 const LEGACY_ORGANIZATION_ADMIN_PERMISSIONS = new Set([
   "assessment.view",
   "assessment.manage",
@@ -28,6 +29,7 @@ const LEGACY_ORGANIZATION_ADMIN_PERMISSIONS = new Set([
   "counsellor.assignment.view",
   "counsellor.assignment.manage",
   "commerce.view",
+  "commerce.price.manage",
   "commerce.coupon.manage",
 ]);
 

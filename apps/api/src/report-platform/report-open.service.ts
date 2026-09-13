@@ -1,5 +1,9 @@
 import { ConflictException, Inject, Injectable } from "@nestjs/common";
-import type { PrismaClient } from "@prisma/client";
+import {
+  CommerceEntitlementStatus,
+  CommerceEntitlementType,
+  type PrismaClient,
+} from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
 import { ReportAccessPolicyService } from "./report-access-policy.service";
@@ -12,13 +16,34 @@ export class ReportOpenService {
   ) {}
 
   public async open(context: AuthContext, attemptId: string) {
-    await this.policy.assertCanOpenFullReport(context, attemptId);
-    return this.loadGeneratedReport(attemptId);
+    const decision = await this.policy.assertCanOpenFullReport(context, attemptId);
+    const report = await this.loadGeneratedReport(attemptId);
+    await this.recordCandidateConsumption(context, attemptId, decision.basis);
+    return report;
   }
 
   public async openForDownload(context: AuthContext, attemptId: string) {
-    await this.policy.assertCanDownloadFullReport(context, attemptId);
-    return this.loadGeneratedReport(attemptId);
+    const decision = await this.policy.assertCanDownloadFullReport(context, attemptId);
+    const report = await this.loadGeneratedReport(attemptId);
+    await this.recordCandidateConsumption(context, attemptId, decision.basis);
+    return report;
+  }
+
+  // Commercial consumption rule: a candidate's paid report entitlement counts as
+  // consumed the first time the complete report is actually delivered. The
+  // entitlement stays ACTIVE so the candidate keeps access; refunds read this.
+  private async recordCandidateConsumption(context: AuthContext, attemptId: string, basis: string) {
+    if (basis !== "CANDIDATE_ENTITLEMENT") return;
+    await this.prisma.commerceEntitlement.updateMany({
+      where: {
+        attemptId,
+        userId: context.userId,
+        type: CommerceEntitlementType.REPORT,
+        status: CommerceEntitlementStatus.ACTIVE,
+        consumedAt: null,
+      },
+      data: { consumedAt: new Date() },
+    });
   }
 
   private async loadGeneratedReport(attemptId: string) {

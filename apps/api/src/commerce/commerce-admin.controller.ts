@@ -22,6 +22,7 @@ import { PermissionsGuard } from "../auth/permissions.guard";
 import { PrivilegedMutationAuditInterceptor } from "../auth/privileged-mutation-audit.interceptor";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { CommercePricingService } from "./commerce-pricing.service";
 import { CommerceService } from "./commerce.service";
 import {
   AdminOrderQueryDto,
@@ -29,7 +30,12 @@ import {
   CreateCommerceProductDto,
   ManualApproveOrderDto,
   OrderReferenceDto,
+  RefundOrderDto,
+  SetOrganizationPriceDto,
+  SubmitManualPaymentDto,
   UpdateCommerceProductDto,
+  UpdateOrganizationPolicyDto,
+  UpdatePlatformPolicyDto,
 } from "./commerce.types";
 
 @Controller("admin/commerce")
@@ -40,7 +46,74 @@ export class CommerceAdminController {
   public constructor(
     @Inject(CommerceService)
     private readonly commerce: CommerceService,
+    @Inject(CommercePricingService)
+    private readonly pricing: CommercePricingService,
   ) {}
+
+  @Get("policy")
+  @Permissions("commerce.view")
+  @Header("cache-control", "no-store")
+  public platformPolicy() {
+    return this.pricing.getPlatformPolicy();
+  }
+
+  @Put("policy")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+  @Permissions("commerce.price.manage")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public updatePlatformPolicy(
+    @CurrentAuthContext() context: AuthContext,
+    @Body() body: UpdatePlatformPolicyDto,
+  ) {
+    return this.pricing.updatePlatformPolicy(context, body);
+  }
+
+  @Get("organizations/:organizationId/policy")
+  @Permissions("commerce.view")
+  @Header("cache-control", "no-store")
+  public organizationPolicy(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("organizationId", new ParseUUIDPipe()) organizationId: string,
+  ) {
+    return this.pricing.getOrganizationPolicy(context, organizationId);
+  }
+
+  @Put("organizations/:organizationId/policy")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+  @Permissions("commerce.price.manage")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public updateOrganizationPolicy(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("organizationId", new ParseUUIDPipe()) organizationId: string,
+    @Body() body: UpdateOrganizationPolicyDto,
+  ) {
+    return this.pricing.updateOrganizationPolicy(context, organizationId, body);
+  }
+
+  @Get("organization-prices")
+  @Permissions("commerce.view")
+  @Header("cache-control", "no-store")
+  public organizationPrices(
+    @CurrentAuthContext() context: AuthContext,
+    @Query("organizationId") organizationId?: string,
+  ) {
+    return this.pricing.listOrganizationPrices(context, organizationId);
+  }
+
+  // Tenant selling price: available to organization admins only when the
+  // platform has delegated pricing to that organization (checked in the service).
+  @Put("organization-prices")
+  @Permissions("commerce.price.manage")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public setOrganizationPrice(
+    @CurrentAuthContext() context: AuthContext,
+    @Body() body: SetOrganizationPriceDto,
+  ) {
+    return this.pricing.setOrganizationPrice(context, body);
+  }
 
   @Get("products")
   @Permissions("commerce.view")
@@ -124,15 +197,29 @@ export class CommerceAdminController {
 
   @Post("orders/:orderId/refund")
   @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
-  @Permissions("commerce.payment.approve")
+  @Permissions("commerce.refund.manage")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)
   public refund(
     @CurrentAuthContext() context: AuthContext,
     @Param("orderId", new ParseUUIDPipe()) orderId: string,
-    @Body() body: OrderReferenceDto,
+    @Body() body: RefundOrderDto,
   ) {
     return this.commerce.refundOrder(context, orderId, body);
+  }
+
+  // Institutional manual payment: the purchasing organization records its bank
+  // transfer / UPI reference here; approval is the separate central route.
+  @Post("orders/:orderId/manual-payment")
+  @Permissions("commerce.view")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public submitManualPayment(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("orderId", new ParseUUIDPipe()) orderId: string,
+    @Body() body: SubmitManualPaymentDto,
+  ) {
+    return this.commerce.submitManualPayment(context, orderId, body);
   }
 
   @Post("orders/:orderId/fulfil")

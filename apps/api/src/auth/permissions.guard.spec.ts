@@ -79,10 +79,11 @@ describe("PermissionsGuard R19.1A", () => {
     };
     expect(guard(["commerce.view"]).canActivate(context(auth))).toBe(true);
     expect(guard(["commerce.coupon.manage"]).canActivate(context(auth))).toBe(true);
+    expect(guard(["commerce.price.manage"]).canActivate(context(auth))).toBe(true);
     for (const permission of [
       "commerce.product.manage",
-      "commerce.price.manage",
       "commerce.payment.approve",
+      "commerce.refund.manage",
     ]) {
       expect(() => guard([permission]).canActivate(context(auth)), permission).toThrow(
         /Insufficient administrative permission/,

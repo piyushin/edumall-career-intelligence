@@ -10,6 +10,14 @@ const migration = readFileSync(
   "utf8",
 );
 
+const pricingMigration = readFileSync(
+  new URL(
+    "../prisma/migrations/20260913010000_r20_c2a_pricing_policy/migration.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
 const model = (name: string) => Prisma.dmmf.datamodel.models.find((item) => item.name === name);
 
 describe("R20-C2a commerce schema", () => {
@@ -51,6 +59,38 @@ describe("R20-C2a commerce schema", () => {
   it("prevents a credit purchase from being ledgered twice per order", () => {
     expect(migration).toContain('"commerce_credit_ledger_entries_purchase_order_key"');
     expect(migration).toContain("WHERE \"event_type\" = 'PURCHASE'");
+  });
+
+  it("adds platform pricing policy, delegation, tenant prices and counsellor fees", () => {
+    for (const name of [
+      "CommercePlatformPolicy",
+      "CommerceOrganizationPolicy",
+      "CommerceOrganizationPrice",
+      "CommerceCounsellorFee",
+    ]) {
+      expect(model(name), name).toBeDefined();
+    }
+    expect(pricingMigration).toContain('CONSTRAINT "commerce_products_price_bounds_check"');
+    expect(pricingMigration).toContain('CONSTRAINT "commerce_organization_prices_positive_check"');
+    expect(pricingMigration).toContain(
+      '"commerce_organization_prices_organization_id_product_id_key"',
+    );
+    expect(pricingMigration).toContain('INSERT INTO "commerce_platform_policies"');
+    expect(pricingMigration).toContain('ON CONFLICT ("id") DO NOTHING');
+  });
+
+  it("snapshots the charged price on every order and backfills history", () => {
+    const order = model("CommerceOrder");
+    for (const field of ["basePriceMinor", "pricingSource", "taxRateBps", "taxMinor"]) {
+      expect(
+        order?.fields.some((item) => item.name === field),
+        field,
+      ).toBe(true);
+    }
+    expect(pricingMigration).toContain(
+      'UPDATE "commerce_orders" SET "base_price_minor" = "subtotal_minor"',
+    );
+    expect(pricingMigration).not.toMatch(/DROP TABLE|DROP COLUMN|DELETE FROM/i);
   });
 
   it("remains additive for historical commerce and release data", () => {

@@ -36,9 +36,12 @@ import type {
   CreateCommerceProductDto,
   ManualApproveOrderDto,
   OrderReferenceDto,
+  RefundOrderDto,
+  SubmitManualPaymentDto,
   UpdateCommerceProductDto,
   VerifyRazorpayPaymentDto,
 } from "./commerce.types";
+import { CommercePricingService } from "./commerce-pricing.service";
 import { OrderFulfilmentService } from "./order-fulfilment.service";
 
 const CANDIDATE_PRODUCT_KINDS: CommerceProductKind[] = [
@@ -46,7 +49,10 @@ const CANDIDATE_PRODUCT_KINDS: CommerceProductKind[] = [
   CommerceProductKind.COUNSELLING,
   CommerceProductKind.REPORT_AND_COUNSELLING,
 ];
-const DEFAULT_TENANT_COUPON_MAX_BPS = 5000;
+const MANUAL_PAYMENT_METHODS = new Set<CommercePaymentMethod>([
+  CommercePaymentMethod.BANK_TRANSFER,
+  CommercePaymentMethod.UPI,
+]);
 
 @Injectable()
 export class CommerceService {
@@ -55,6 +61,8 @@ export class CommerceService {
     private readonly prisma: PrismaClient,
     @Inject(OrderFulfilmentService)
     private readonly fulfilment: OrderFulfilmentService,
+    @Inject(CommercePricingService)
+    private readonly pricing: CommercePricingService,
   ) {}
 
   public async getCandidateCheckout(context: AuthContext, attemptId: string) {
@@ -84,8 +92,12 @@ export class CommerceService {
           name: true,
           description: true,
           kind: true,
+          organizationId: true,
           currency: true,
           priceMinor: true,
+          minPriceMinor: true,
+          maxPriceMinor: true,
+          taxRateBps: true,
         },
       }),
       this.prisma.commerceEntitlement.findMany({
@@ -104,6 +116,25 @@ export class CommerceService {
         },
       }),
     ]);
+
+    // The candidate sees the price the backend will charge for their organization;
+    // priceMinor stays the displayed selling price for existing checkout clients.
+    const pricedProducts = await Promise.all(
+      products.map(async (product) => {
+        const resolved = await this.pricing.resolvePrice(this.prisma, product, organizationId);
+        return {
+          id: product.id,
+          code: product.code,
+          name: product.name,
+          description: product.description,
+          kind: product.kind,
+          currency: product.currency,
+          priceMinor: resolved.unitPriceMinor,
+          basePriceMinor: resolved.basePriceMinor,
+          pricingSource: resolved.pricingSource,
+        };
+      }),
+    );
 
     const publicSignup = this.isPublicSignup(attempt.assignment.metadata);
     const reportEntitlement = entitlements.some(
@@ -145,7 +176,7 @@ export class CommerceService {
       reportAccess,
       counsellingAccess: counsellingEntitlement,
       candidate: attempt.assignment.user,
-      products,
+      products: pricedProducts,
       entitlements,
     };
   }
@@ -188,8 +219,12 @@ export class CommerceService {
         code: true,
         name: true,
         kind: true,
+        organizationId: true,
         currency: true,
         priceMinor: true,
+        minPriceMinor: true,
+        maxPriceMinor: true,
+        taxRateBps: true,
       },
     });
 
@@ -203,6 +238,7 @@ export class CommerceService {
     try {
       return await this.prisma.$transaction(
         async (tx) => {
+          const resolved = await this.pricing.resolvePrice(tx, product, organizationId);
           const couponResult = input.couponCode
             ? await this.validateCoupon(
                 tx,
@@ -210,12 +246,18 @@ export class CommerceService {
                 product,
                 organizationId,
                 context.userId,
-                product.priceMinor,
+                resolved.unitPriceMinor,
+                resolved.floorMinor,
               )
             : null;
 
-          const discountMinor = couponResult?.discountMinor ?? 0;
-          const totalMinor = Math.max(0, product.priceMinor - discountMinor);
+          const totals = await this.pricing.computeTotals(
+            product,
+            resolved.unitPriceMinor,
+            1,
+            couponResult?.discountMinor ?? 0,
+          );
+          const { discountMinor, totalMinor } = totals;
           const paidImmediately = totalMinor === 0;
           const now = new Date();
 
@@ -228,9 +270,13 @@ export class CommerceService {
               couponId: couponResult?.coupon.id ?? null,
               purchaserType: CommerceOrderPurchaserType.CANDIDATE,
               quantity: 1,
+              basePriceMinor: resolved.basePriceMinor,
+              pricingSource: resolved.pricingSource,
+              taxRateBps: totals.taxRateBps,
+              taxMinor: totals.taxMinor,
               status: paidImmediately ? CommerceOrderStatus.PAID : CommerceOrderStatus.PENDING,
               currency: product.currency,
-              subtotalMinor: product.priceMinor,
+              subtotalMinor: totals.subtotalMinor,
               discountMinor,
               totalMinor,
               couponCodeSnapshot: couponResult?.coupon.code ?? null,
@@ -238,6 +284,8 @@ export class CommerceService {
               metadata: {
                 assessmentVersionId,
                 productCode: product.code,
+                organizationPriceId: resolved.organizationPriceId,
+                unitPriceMinor: resolved.unitPriceMinor,
               },
             },
             select: {
@@ -300,8 +348,11 @@ export class CommerceService {
               metadata: {
                 attemptId,
                 productCode: product.code,
-                subtotalMinor: product.priceMinor,
+                subtotalMinor: totals.subtotalMinor,
+                basePriceMinor: resolved.basePriceMinor,
+                pricingSource: resolved.pricingSource,
                 discountMinor,
+                taxMinor: totals.taxMinor,
                 totalMinor,
                 couponCode: couponResult?.coupon.code ?? null,
               },
@@ -575,6 +626,7 @@ export class CommerceService {
     const code = input.code.trim().toUpperCase();
     const audience = this.resolveAudience(input.kind, input.audience);
     const unitQuantity = input.unitQuantity ?? 1;
+    this.assertPriceBounds(input.priceMinor, input.minPriceMinor ?? 0, input.maxPriceMinor ?? null);
 
     const product = await this.prisma.commerceProduct.create({
       data: {
@@ -588,6 +640,9 @@ export class CommerceService {
         unitQuantity,
         currency: (input.currency ?? "INR").trim().toUpperCase(),
         priceMinor: input.priceMinor,
+        minPriceMinor: input.minPriceMinor ?? 0,
+        maxPriceMinor: input.maxPriceMinor ?? null,
+        taxRateBps: input.taxRateBps ?? null,
         createdByUserId: context.userId,
       },
     });
@@ -604,6 +659,9 @@ export class CommerceService {
           audience,
           unitQuantity,
           priceMinor: product.priceMinor,
+          minPriceMinor: product.minPriceMinor,
+          maxPriceMinor: product.maxPriceMinor,
+          taxRateBps: product.taxRateBps,
           currency: product.currency,
         },
       },
@@ -625,6 +683,9 @@ export class CommerceService {
         audience: true,
         unitQuantity: true,
         priceMinor: true,
+        minPriceMinor: true,
+        maxPriceMinor: true,
+        taxRateBps: true,
         status: true,
       },
     });
@@ -639,6 +700,11 @@ export class CommerceService {
     this.assertAdminScope(context, product.organizationId);
     const audience =
       input.audience !== undefined ? this.resolveAudience(product.kind, input.audience) : undefined;
+    this.assertPriceBounds(
+      input.priceMinor ?? product.priceMinor,
+      input.minPriceMinor ?? product.minPriceMinor,
+      input.maxPriceMinor === undefined ? product.maxPriceMinor : input.maxPriceMinor,
+    );
 
     const updated = await this.prisma.commerceProduct.update({
       where: { id: productId },
@@ -648,6 +714,9 @@ export class CommerceService {
           ? { description: input.description.trim() || null }
           : {}),
         ...(input.priceMinor !== undefined ? { priceMinor: input.priceMinor } : {}),
+        ...(input.minPriceMinor !== undefined ? { minPriceMinor: input.minPriceMinor } : {}),
+        ...(input.maxPriceMinor !== undefined ? { maxPriceMinor: input.maxPriceMinor } : {}),
+        ...(input.taxRateBps !== undefined ? { taxRateBps: input.taxRateBps } : {}),
         ...(input.unitQuantity !== undefined ? { unitQuantity: input.unitQuantity } : {}),
         ...(audience !== undefined ? { audience } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
@@ -663,12 +732,18 @@ export class CommerceService {
         metadata: {
           before: {
             priceMinor: product.priceMinor,
+            minPriceMinor: product.minPriceMinor,
+            maxPriceMinor: product.maxPriceMinor,
+            taxRateBps: product.taxRateBps,
             unitQuantity: product.unitQuantity,
             audience: product.audience,
             status: product.status,
           },
           after: {
             priceMinor: updated.priceMinor,
+            minPriceMinor: updated.minPriceMinor,
+            maxPriceMinor: updated.maxPriceMinor,
+            taxRateBps: updated.taxRateBps,
             unitQuantity: updated.unitQuantity,
             audience: updated.audience,
             status: updated.status,
@@ -700,6 +775,7 @@ export class CommerceService {
 
     let productId: string | null = null;
     let productPriceMinor: number | null = null;
+    let productKind: CommerceProductKind | null = null;
 
     if (input.productCode) {
       const product = await this.prisma.commerceProduct.findUnique({
@@ -737,22 +813,42 @@ export class CommerceService {
 
       productId = product.id;
       productPriceMinor = product.priceMinor;
+      productKind = product.kind;
     }
 
-    // Tenant administrators may only discount within the platform cap and only on
-    // a specific product, so a coupon can never create free platform value.
+    // Tenant administrators may only discount when the platform has enabled
+    // organization coupons, within the platform/organization cap, on a specific
+    // non-credit product, with validity and usage limits, so a coupon can never
+    // create free platform value or manufacture report credits.
     if (!central) {
-      const capBps = this.tenantCouponMaxBps();
       if (input.discountType === CommerceCouponDiscountType.FREE) {
         throw new ForbiddenException({
           code: "COUPON_FREE_CENTRAL_ONLY",
           message: "Free coupons can only be created by central platform administrators.",
         });
       }
+      const capBps = await this.pricing.tenantCouponCapBps(
+        organizationId ?? this.requireOrganization(context),
+      );
       if (productId === null || productPriceMinor === null) {
         throw new ForbiddenException({
           code: "COUPON_PRODUCT_REQUIRED",
           message: "Organisation coupons must be bound to a specific product.",
+        });
+      }
+      if (
+        productKind === CommerceProductKind.REPORT_CREDIT_PACK ||
+        input.appliesToKind === CommerceProductKind.REPORT_CREDIT_PACK
+      ) {
+        throw new ForbiddenException({
+          code: "COUPON_CREDIT_PACK_CENTRAL_ONLY",
+          message: "Organisation coupons cannot discount report-credit packs.",
+        });
+      }
+      if (!input.validUntil || !input.maxRedemptions) {
+        throw new BadRequestException({
+          code: "COUPON_LIMITS_REQUIRED",
+          message: "Organisation coupons require an expiry and a maximum redemption count.",
         });
       }
       if (
@@ -799,7 +895,7 @@ export class CommerceService {
       });
     }
 
-    return this.prisma.commerceCoupon.create({
+    const coupon = await this.prisma.commerceCoupon.create({
       data: {
         organizationId,
         productId,
@@ -817,6 +913,27 @@ export class CommerceService {
         createdByUserId: context.userId,
       },
     });
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId,
+        actorUserId: context.userId,
+        action: "commerce.coupon.created",
+        entityType: "CommerceCoupon",
+        entityId: coupon.id,
+        metadata: {
+          code: coupon.code,
+          discountType: coupon.discountType,
+          percentageBps: coupon.percentageBps,
+          fixedAmountMinor: coupon.fixedAmountMinor,
+          productId,
+          appliesToKind: coupon.appliesToKind,
+          validUntil: coupon.validUntil,
+          maxRedemptions: coupon.maxRedemptions,
+          central,
+        },
+      },
+    });
+    return coupon;
   }
 
   public async listCoupons(context: AuthContext) {
@@ -994,11 +1111,18 @@ export class CommerceService {
   // Records the refund and reverses value the platform still holds. Moving money
   // back through the gateway is an operator action in the provider console; a
   // later refund webhook for the same order is then a no-op here.
-  public async refundOrder(context: AuthContext, orderId: string, input: OrderReferenceDto) {
+  public async refundOrder(context: AuthContext, orderId: string, input: RefundOrderDto) {
     this.assertCentralAdministrator(context);
     const order = await this.prisma.commerceOrder.findUnique({
       where: { id: orderId },
-      select: { id: true, organizationId: true, status: true, totalMinor: true, currency: true },
+      select: {
+        id: true,
+        organizationId: true,
+        status: true,
+        totalMinor: true,
+        currency: true,
+        entitlements: { select: { id: true, type: true, status: true, consumedAt: true } },
+      },
     });
     if (!order) {
       throw new NotFoundException({
@@ -1014,6 +1138,20 @@ export class CommerceService {
       throw new ConflictException({
         code: "ORDER_NOT_REFUNDABLE",
         message: "Only paid orders can be refunded.",
+      });
+    }
+    // Consumption rule: a candidate entitlement counts as consumed once the
+    // complete report has been opened. Refunding it afterwards is an exceptional
+    // central override that must carry a reason.
+    const consumed = order.entitlements.filter(
+      (entitlement) =>
+        entitlement.status === CommerceEntitlementStatus.ACTIVE && entitlement.consumedAt !== null,
+    );
+    if (consumed.length > 0 && (!input.override || !input.reason?.trim())) {
+      throw new ConflictException({
+        code: "ORDER_ENTITLEMENT_CONSUMED",
+        message:
+          "The report entitlement has already been opened. Refund requires a central override with a reason.",
       });
     }
     const now = new Date();
@@ -1053,6 +1191,8 @@ export class CommerceService {
             metadata: {
               reason: input.reason ?? null,
               reference: input.reference ?? null,
+              override: Boolean(input.override),
+              consumedEntitlementIds: consumed.map((entitlement) => entitlement.id),
               revokedEntitlements: reversal.revokedEntitlements,
               reversedCredits: reversal.reversedCredits,
             },
@@ -1111,6 +1251,111 @@ export class CommerceService {
     } satisfies Prisma.CommerceOrderInclude;
   }
 
+  // Institutional workflow step 1: the purchaser (tenant admin for an organisation
+  // order, or the candidate for their own order) records the manual payment
+  // reference. Nothing is fulfilled until a central administrator approves it.
+  public async submitManualPayment(
+    context: AuthContext,
+    orderId: string,
+    input: SubmitManualPaymentDto,
+  ) {
+    if (!MANUAL_PAYMENT_METHODS.has(input.method)) {
+      throw new BadRequestException({
+        code: "MANUAL_PAYMENT_METHOD_INVALID",
+        message: "Manual payment references may use bank transfer or UPI.",
+      });
+    }
+    const order = await this.prisma.commerceOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        organizationId: true,
+        userId: true,
+        purchaserType: true,
+        status: true,
+        totalMinor: true,
+        currency: true,
+      },
+    });
+    if (!order) {
+      throw new NotFoundException({
+        code: "COMMERCE_ORDER_NOT_FOUND",
+        message: "Order not found.",
+      });
+    }
+    const central = this.isCentralAdministrator(context);
+    const ownOrganizationOrder =
+      context.role === MembershipRole.ORGANIZATION_ADMIN &&
+      context.organizationId === order.organizationId &&
+      order.purchaserType === CommerceOrderPurchaserType.ORGANIZATION;
+    const ownCandidateOrder =
+      order.purchaserType === CommerceOrderPurchaserType.CANDIDATE &&
+      order.userId === context.userId &&
+      context.organizationId === order.organizationId;
+    if (!central && !ownOrganizationOrder && !ownCandidateOrder) {
+      throw new ForbiddenException({
+        code: "COMMERCE_SCOPE_VIOLATION",
+        message: "You cannot record a payment for this order.",
+      });
+    }
+    if (!central) {
+      const policy = await this.prisma.commerceOrganizationPolicy.findUnique({
+        where: { organizationId: order.organizationId },
+        select: { manualPaymentEnabled: true },
+      });
+      if (!policy?.manualPaymentEnabled) {
+        throw new ForbiddenException({
+          code: "COMMERCE_MANUAL_PAYMENT_DISABLED",
+          message: "Manual payment is not enabled for this organization.",
+        });
+      }
+    }
+    if (order.status !== CommerceOrderStatus.PENDING) {
+      throw new ConflictException({
+        code: "ORDER_NOT_PAYABLE",
+        message: "This order cannot accept a payment reference.",
+      });
+    }
+    const reference = input.reference.trim();
+    const payment = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.commercePayment.findFirst({
+        where: { orderId: order.id, provider: "MANUAL", status: CommercePaymentStatus.PENDING },
+        select: { id: true },
+      });
+      const row = existing
+        ? await tx.commercePayment.update({
+            where: { id: existing.id },
+            data: { method: input.method, reference, metadata: { note: input.note ?? null } },
+          })
+        : await tx.commercePayment.create({
+            data: {
+              orderId: order.id,
+              provider: "MANUAL",
+              method: input.method,
+              status: CommercePaymentStatus.PENDING,
+              amountMinor: order.totalMinor,
+              currency: order.currency,
+              reference,
+              metadata: { note: input.note ?? null, submittedByUserId: context.userId },
+            },
+          });
+      await tx.auditLog.create({
+        data: {
+          organizationId: order.organizationId,
+          actorUserId: context.userId,
+          action: "commerce.payment.reference_submitted",
+          entityType: "CommercePayment",
+          entityId: row.id,
+          metadata: { orderId: order.id, method: input.method, reference },
+        },
+      });
+      return row;
+    });
+    return { status: "awaiting_approval" as const, orderId: order.id, paymentId: payment.id };
+  }
+
+  // Institutional workflow step 2: central verification. Tenant administrators can
+  // never approve their own payments; the same fulfilment service completes it.
   public async manualApproveOrder(
     context: AuthContext,
     orderId: string,
@@ -1165,19 +1410,36 @@ export class CommerceService {
     const now = new Date();
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.commercePayment.create({
-        data: {
-          orderId: order.id,
-          provider: "MANUAL",
-          method: input.method,
-          status: CommercePaymentStatus.MANUAL_APPROVED,
-          amountMinor: order.totalMinor,
-          currency: order.currency,
-          reference: input.reference?.trim() || null,
-          approvedByUserId: context.userId,
-          completedAt: now,
-        },
+      const pending = await tx.commercePayment.findFirst({
+        where: { orderId: order.id, provider: "MANUAL", status: CommercePaymentStatus.PENDING },
+        select: { id: true, reference: true },
       });
+      if (pending) {
+        await tx.commercePayment.update({
+          where: { id: pending.id },
+          data: {
+            method: input.method,
+            status: CommercePaymentStatus.MANUAL_APPROVED,
+            reference: input.reference?.trim() || pending.reference,
+            approvedByUserId: context.userId,
+            completedAt: now,
+          },
+        });
+      } else {
+        await tx.commercePayment.create({
+          data: {
+            orderId: order.id,
+            provider: "MANUAL",
+            method: input.method,
+            status: CommercePaymentStatus.MANUAL_APPROVED,
+            amountMinor: order.totalMinor,
+            currency: order.currency,
+            reference: input.reference?.trim() || null,
+            approvedByUserId: context.userId,
+            completedAt: now,
+          },
+        });
+      }
 
       await tx.commerceOrder.update({
         where: { id: order.id },
@@ -1221,6 +1483,7 @@ export class CommerceService {
     organizationId: string,
     userId: string,
     subtotalMinor: number,
+    floorMinor = 0,
   ) {
     const productId = product.id;
     const code = rawCode.trim().toUpperCase();
@@ -1313,6 +1576,14 @@ export class CommerceService {
       });
     }
 
+    const tenantCoupon = coupon.organizationId !== null;
+    if (tenantCoupon && product.kind === CommerceProductKind.REPORT_CREDIT_PACK) {
+      throw new BadRequestException({
+        code: "COUPON_NOT_APPLICABLE",
+        message: "Coupon code is not valid for this package.",
+      });
+    }
+
     let discountMinor = 0;
 
     if (coupon.discountType === CommerceCouponDiscountType.FREE) {
@@ -1321,6 +1592,12 @@ export class CommerceService {
       discountMinor = Math.floor((subtotalMinor * (coupon.percentageBps ?? 0)) / 10000);
     } else if (coupon.discountType === CommerceCouponDiscountType.FIXED) {
       discountMinor = Math.min(subtotalMinor, coupon.fixedAmountMinor ?? 0);
+    }
+
+    // Organization coupons can never take the charged price below the platform
+    // floor; only a central coupon may go lower (including to zero).
+    if (tenantCoupon) {
+      discountMinor = Math.min(discountMinor, Math.max(0, subtotalMinor - floorMinor));
     }
 
     return {
@@ -1541,9 +1818,20 @@ export class CommerceService {
     }
   }
 
-  private tenantCouponMaxBps(): number {
-    const raw = Number.parseInt(process.env.COMMERCE_TENANT_COUPON_MAX_BPS ?? "", 10);
-    return Number.isInteger(raw) && raw >= 0 && raw <= 10000 ? raw : DEFAULT_TENANT_COUPON_MAX_BPS;
+  private assertPriceBounds(
+    priceMinor: number,
+    minPriceMinor: number,
+    maxPriceMinor: number | null,
+  ) {
+    if (
+      priceMinor < minPriceMinor ||
+      (maxPriceMinor !== null && (maxPriceMinor < minPriceMinor || priceMinor > maxPriceMinor))
+    ) {
+      throw new BadRequestException({
+        code: "COMMERCE_PRICE_OUT_OF_BOUNDS",
+        message: "Base price must lie within the product's floor and ceiling.",
+      });
+    }
   }
 
   private invalidPaymentSignature(): BadRequestException {
