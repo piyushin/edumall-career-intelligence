@@ -197,7 +197,11 @@ export default function UserDetailPage() {
                             <p className="text-xs text-slate-600">
                               Candidate access:{" "}
                               {attempt.commerceEntitlements?.[0]?.status === "ACTIVE"
-                                ? "Unlocked"
+                                ? `Unlocked (${
+                                    attempt.commerceEntitlements[0].source === "TENANT_CREDIT"
+                                      ? "sponsored by organization credit"
+                                      : (attempt.commerceEntitlements[0].source ?? "entitlement")
+                                  })`
                                 : "Locked"}
                             </p>
                           ) : null}

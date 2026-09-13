@@ -17,7 +17,9 @@ import {
   ReportConfigurationController,
   ReportCreditController,
   StaffReportController,
+  StaffReportCreditController,
 } from "./report-platform.controller";
+import { ReportUnlockService } from "./report-unlock.service";
 import { ReportOpenService } from "./report-open.service";
 import { ReportSearchService } from "./report-search.service";
 
@@ -29,6 +31,7 @@ import { ReportSearchService } from "./report-search.service";
     StaffReportController,
     ReportConfigurationController,
     ReportCreditController,
+    StaffReportCreditController,
     CounsellorAssignmentAdminController,
     CounsellorAssignmentStaffController,
   ],
@@ -43,6 +46,7 @@ import { ReportSearchService } from "./report-search.service";
     ReportOpenService,
     ReportConfigurationService,
     ReportCreditService,
+    ReportUnlockService,
     CandidateCounsellorAssignmentService,
   ],
   exports: [

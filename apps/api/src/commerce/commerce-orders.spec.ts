@@ -94,7 +94,10 @@ function harness(
         reportReleases: [],
       }),
     },
-    commerceProduct: { findFirst: vi.fn().mockResolvedValue(product) },
+    commerceProduct: {
+      findFirst: vi.fn().mockResolvedValue(product),
+      findMany: vi.fn().mockResolvedValue([product]),
+    },
     commerceOrder: {
       ...tx.commerceOrder,
       findUnique: vi.fn().mockResolvedValue(options.order === undefined ? null : options.order),
@@ -218,6 +221,112 @@ describe("candidate orders: backend pricing, floors and snapshots", () => {
       orderId,
       expect.objectContaining({ origin: "CHECKOUT", source: "COUPON" }),
     );
+  });
+});
+
+describe("staff self-service credit-pack orders", () => {
+  const pack = {
+    ...product,
+    id: "pack",
+    code: "PACK_10",
+    name: "10 credits",
+    kind: "REPORT_CREDIT_PACK",
+    unitQuantity: 10,
+    priceMinor: 500000,
+    minPriceMinor: 500000,
+  };
+  const counsellor: AuthContext = {
+    ...candidate,
+    userId: "88888888-8888-4888-8888-888888888888",
+    role: MembershipRole.COUNSELLOR,
+  };
+
+  function staffHarness(fulfilmentWallet = { id: "wallet", status: "ACTIVE" }) {
+    const h = harness();
+    h.prisma.commerceProduct.findFirst = vi.fn().mockResolvedValue(pack);
+    h.prisma.commerceProduct.findMany = vi.fn().mockResolvedValue([pack]);
+    (h.fulfilment as Record<string, unknown>).ensureWalletForPurchaser = vi
+      .fn()
+      .mockResolvedValue(fulfilmentWallet);
+    h.pricing.resolvePrice.mockResolvedValue({
+      unitPriceMinor: 500000,
+      basePriceMinor: 500000,
+      pricingSource: "PLATFORM",
+      organizationPriceId: null,
+      counsellorFeeId: null,
+      floorMinor: 500000,
+    });
+    return h;
+  }
+
+  it("derives the organisation purchaser, wallet and platform price from the session", async () => {
+    const { service, tx, prisma, fulfilment } = staffHarness();
+    const order = await service.createStaffOrder(tenantAdmin, {
+      productCode: "pack_10",
+      quantity: 2,
+    });
+    expect(prisma.commerceProduct.findFirst.mock.calls[0]![0].where).toMatchObject({
+      kind: "REPORT_CREDIT_PACK",
+      audience: "ORGANIZATION",
+    });
+    expect(
+      (fulfilment as unknown as { ensureWalletForPurchaser: ReturnType<typeof vi.fn> })
+        .ensureWalletForPurchaser,
+    ).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ purchaserType: "ORGANIZATION", organizationId }),
+    );
+    expect(tx.commerceOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          purchaserType: "ORGANIZATION",
+          creditWalletId: "wallet",
+          attemptId: null,
+          quantity: 2,
+          subtotalMinor: 1000000,
+          basePriceMinor: 500000,
+          pricingSource: "PLATFORM",
+          status: "PENDING",
+        }),
+      }),
+    );
+    expect(order.credits).toBe(20);
+    expect(order.paymentRequired).toBe(true);
+    expect(fulfilment.fulfil).not.toHaveBeenCalled();
+  });
+
+  it("derives the counsellor purchaser and audience and ignores any client amount", async () => {
+    const { service, prisma, tx } = staffHarness();
+    await service.createStaffOrder(counsellor, {
+      productCode: "PACK_10",
+      quantity: 1,
+      ...({ totalMinor: 1 } as Record<string, unknown>),
+    } as never);
+    expect(prisma.commerceProduct.findFirst.mock.calls[0]![0].where).toMatchObject({
+      audience: "COUNSELLOR",
+    });
+    expect(tx.commerceOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          purchaserType: "COUNSELLOR",
+          userId: counsellor.userId,
+          totalMinor: 500000,
+        }),
+      }),
+    );
+  });
+
+  it("refuses staff orders from candidates and lists packs by audience", async () => {
+    const { service, prisma } = staffHarness();
+    await expect(
+      service.createStaffOrder(candidate, { productCode: "PACK_10" }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    const packs = await service.listStaffCreditPacks(tenantAdmin);
+    expect(prisma.commerceProduct.findMany.mock.calls[0]![0].where).toMatchObject({
+      audience: "ORGANIZATION",
+      kind: "REPORT_CREDIT_PACK",
+    });
+    expect(packs[0]).toMatchObject({ code: "PACK_10", priceMinor: 500000, unitQuantity: 10 });
   });
 });
 

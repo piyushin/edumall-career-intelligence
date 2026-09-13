@@ -176,19 +176,19 @@ export class ReportConfigurationService {
       version.reportConfigurations.length === 1 ? version.reportConfigurations[0] : null;
     const normReady = Boolean(
       configuration &&
-        configuration.normGroup.normSet.assessmentVersionId === version.id &&
-        configuration.normGroup.normSet.normVersion === version.normVersion &&
-        configuration.normGroup.normSet.status === AssessmentNormSetStatus.PUBLISHED,
+      configuration.normGroup.normSet.assessmentVersionId === version.id &&
+      configuration.normGroup.normSet.normVersion === version.normVersion &&
+      configuration.normGroup.normSet.status === AssessmentNormSetStatus.PUBLISHED,
     );
     const interpretationReady = Boolean(
       configuration &&
-        configuration.interpretationSet.assessmentVersionId === version.id &&
-        configuration.interpretationSet.status === AssessmentInterpretationSetStatus.PUBLISHED,
+      configuration.interpretationSet.assessmentVersionId === version.id &&
+      configuration.interpretationSet.status === AssessmentInterpretationSetStatus.PUBLISHED,
     );
     const careerFitReady = Boolean(
       configuration &&
-        configuration.careerFitModel.assessmentVersionId === version.id &&
-        configuration.careerFitModel.status === CareerFitModelStatus.PUBLISHED,
+      configuration.careerFitModel.assessmentVersionId === version.id &&
+      configuration.careerFitModel.status === CareerFitModelStatus.PUBLISHED,
     );
     return {
       assessmentVersionId,

@@ -14,6 +14,7 @@ import {
   formatDate,
 } from "../../../../components/admin-ui";
 import { OrganizationCommercePolicy } from "../../../../components/organization-commerce-policy";
+import { OrganizationCreditWallet } from "../../../../components/organization-credit-wallet";
 import { ApiError } from "../../../../lib/api";
 import { canAccessGlobalRoute, hasPermission } from "../../../../lib/admin-authorization";
 import { platformAdminApi, type OrganizationSummary } from "../../../../lib/platform-admin";
@@ -127,6 +128,9 @@ export default function OrganizationDetailPage() {
           </p>
         </Panel>
         {commerce ? <OrganizationCommercePolicy organizationId={organization.id} /> : null}
+        {hasPermission(session, "report.credit.view") ? (
+          <OrganizationCreditWallet organizationId={organization.id} />
+        ) : null}
       </div>
     </PlatformRoute>
   );

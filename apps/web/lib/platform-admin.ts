@@ -209,6 +209,7 @@ export interface UserSummary {
       commerceEntitlements?: Array<{
         id: string;
         status: string;
+        source?: string;
         grantedAt: string;
         expiresAt: string | null;
       }>;

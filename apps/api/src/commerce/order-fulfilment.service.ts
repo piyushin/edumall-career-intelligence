@@ -225,7 +225,17 @@ export class OrderFulfilmentService {
     return reversible;
   }
 
-  private async walletForPurchaser(tx: Prisma.TransactionClient, order: FulfilmentOrder) {
+  public async ensureWalletForPurchaser(
+    tx: Prisma.TransactionClient,
+    order: { purchaserType: CommerceOrderPurchaserType; organizationId: string; userId: string },
+  ) {
+    return this.walletForPurchaser(tx, order);
+  }
+
+  private async walletForPurchaser(
+    tx: Prisma.TransactionClient,
+    order: { purchaserType: CommerceOrderPurchaserType; organizationId: string; userId: string },
+  ) {
     const where =
       order.purchaserType === CommerceOrderPurchaserType.ORGANIZATION
         ? {

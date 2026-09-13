@@ -463,7 +463,13 @@ export class PlatformDirectoryService {
                       where: { type: "REPORT" },
                       take: 1,
                       orderBy: { grantedAt: "desc" },
-                      select: { id: true, status: true, grantedAt: true, expiresAt: true },
+                      select: {
+                        id: true,
+                        status: true,
+                        source: true,
+                        grantedAt: true,
+                        expiresAt: true,
+                      },
                     }
                   : false,
                 reportAccessGrants: canViewReportAccess

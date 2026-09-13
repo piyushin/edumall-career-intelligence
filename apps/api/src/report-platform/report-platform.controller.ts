@@ -34,7 +34,9 @@ import { ReportAccessPolicyService } from "./report-access-policy.service";
 import { ReportCreditService } from "./report-credit.service";
 import { ReportOpenService } from "./report-open.service";
 import { ReportSearchService } from "./report-search.service";
+import { ReportUnlockService } from "./report-unlock.service";
 import {
+  BulkUnlockDto,
   ConfigureAutomaticReportDto,
   ConsumeReportCreditDto,
   CreateCounsellorAssignmentDto,
@@ -42,6 +44,10 @@ import {
   CreditLedgerQueryDto,
   CreditQuantityDto,
   ReportSearchQueryDto,
+  TransferReportCreditsDto,
+  UnlockReportDto,
+  WalletSearchQueryDto,
+  WalletStatusDto,
 } from "./report-platform.types";
 
 const ADMIN_ROLES = [
@@ -263,7 +269,39 @@ export class ReportConfigurationController {
 @Roles(...ADMIN_ROLES)
 @UseInterceptors(PrivilegedMutationAuditInterceptor)
 export class ReportCreditController {
-  public constructor(@Inject(ReportCreditService) private readonly credits: ReportCreditService) {}
+  public constructor(
+    @Inject(ReportCreditService) private readonly credits: ReportCreditService,
+    @Inject(ReportUnlockService) private readonly unlocks: ReportUnlockService,
+  ) {}
+  @Get("wallets")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+  @Permissions("report.credit.view")
+  @Header("cache-control", "no-store")
+  public searchWallets(
+    @CurrentAuthContext() context: AuthContext,
+    @Query() query: WalletSearchQueryDto,
+  ) {
+    return this.credits.searchWallets(context, query);
+  }
+  @Get("organizations/:organizationId/wallet")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+  @Permissions("report.credit.view")
+  @Header("cache-control", "no-store")
+  public organizationWallet(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("organizationId", new ParseUUIDPipe()) organizationId: string,
+  ) {
+    return this.credits.organizationWallet(context, organizationId);
+  }
+  @Get("counsellors")
+  @Permissions("report.credit.view")
+  @Header("cache-control", "no-store")
+  public counsellors(
+    @CurrentAuthContext() context: AuthContext,
+    @Query("organizationId") organizationId?: string,
+  ) {
+    return this.credits.listCounsellors(context, organizationId);
+  }
   @Post("wallets")
   @Permissions("report.credit.manage")
   @UseGuards(CsrfGuard)
@@ -322,6 +360,91 @@ export class ReportCreditController {
     @Body() body: ConsumeReportCreditDto,
   ) {
     return this.credits.consumeForAttempt(context, id, body);
+  }
+  @Post("wallets/:walletId/status")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+  @Permissions("report.credit.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public status(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("walletId", new ParseUUIDPipe()) id: string,
+    @Body() body: WalletStatusDto,
+  ) {
+    return this.credits.setStatus(context, id, body);
+  }
+  // Central transfer inside scope; the body names the organisation wallet.
+  @Post("transfers")
+  @Permissions("report.credit.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public transfer(
+    @CurrentAuthContext() context: AuthContext,
+    @Body() body: TransferReportCreditsDto,
+  ) {
+    return this.credits.transfer(context, body);
+  }
+  @Post("unlock")
+  @Roles(MembershipRole.SUPER_ADMIN, MembershipRole.PLATFORM_ADMIN)
+  @Permissions("report.credit.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "no-store")
+  public unlock(@CurrentAuthContext() context: AuthContext, @Body() body: UnlockReportDto) {
+    return this.unlocks.unlock(context, body);
+  }
+}
+
+// Staff self-service: own wallet, explicit report unlock, bulk unlock and
+// organisation -> counsellor transfers. Every principal and wallet is derived
+// from the authenticated session; the body only names attempts, mode and
+// quantity.
+@Controller("staff/report-credits")
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
+@Roles(MembershipRole.ORGANIZATION_ADMIN, MembershipRole.COUNSELLOR)
+@UseInterceptors(PrivilegedMutationAuditInterceptor)
+export class StaffReportCreditController {
+  public constructor(
+    @Inject(ReportCreditService) private readonly credits: ReportCreditService,
+    @Inject(ReportUnlockService) private readonly unlocks: ReportUnlockService,
+  ) {}
+  @Get("wallet")
+  @Permissions("report.credit.view")
+  @Header("cache-control", "private, no-store")
+  public wallet(@CurrentAuthContext() context: AuthContext) {
+    return this.credits.myWallet(context);
+  }
+  @Get("counsellors")
+  @Roles(MembershipRole.ORGANIZATION_ADMIN)
+  @Permissions("report.credit.view")
+  @Header("cache-control", "private, no-store")
+  public counsellors(@CurrentAuthContext() context: AuthContext) {
+    return this.credits.listCounsellors(context);
+  }
+  @Post("unlock")
+  @Permissions("report.credit.view")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "private, no-store")
+  public unlock(@CurrentAuthContext() context: AuthContext, @Body() body: UnlockReportDto) {
+    return this.unlocks.unlock(context, body);
+  }
+  @Post("bulk-unlock")
+  @Roles(MembershipRole.ORGANIZATION_ADMIN)
+  @Permissions("report.credit.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "private, no-store")
+  public bulkUnlock(@CurrentAuthContext() context: AuthContext, @Body() body: BulkUnlockDto) {
+    return this.unlocks.bulkUnlock(context, body);
+  }
+  @Post("transfers")
+  @Roles(MembershipRole.ORGANIZATION_ADMIN)
+  @Permissions("report.credit.manage")
+  @UseGuards(CsrfGuard)
+  @Header("cache-control", "private, no-store")
+  public transfer(
+    @CurrentAuthContext() context: AuthContext,
+    @Body() body: TransferReportCreditsDto,
+  ) {
+    return this.credits.transfer(context, body);
   }
 }
 

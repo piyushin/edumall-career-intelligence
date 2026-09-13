@@ -1678,10 +1678,11 @@ model CommerceEntitlement {
   expiresAt      DateTime?                 @map("expires_at")
   metadata       Json?                     @db.JsonB
 
-  organization Organization      @relation("CommerceEntitlementOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
-  user         User              @relation("CommerceEntitlementUser", fields: [userId], references: [id], onDelete: Restrict)
-  attempt      AssessmentAttempt @relation("CommerceEntitlementAttempt", fields: [attemptId], references: [id], onDelete: Restrict)
-  order        CommerceOrder?    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  organization          Organization               @relation("CommerceEntitlementOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  user                  User                       @relation("CommerceEntitlementUser", fields: [userId], references: [id], onDelete: Restrict)
+  attempt               AssessmentAttempt          @relation("CommerceEntitlementAttempt", fields: [attemptId], references: [id], onDelete: Restrict)
+  order                 CommerceOrder?             @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  sponsoringLedgerEntry CommerceCreditLedgerEntry? @relation("LedgerSponsoredEntitlement")
 
   @@unique([userId, attemptId, type])
   @@index([organizationId, status])
@@ -1797,18 +1798,26 @@ model CommerceCreditWallet {
 }
 
 model CommerceCreditLedgerEntry {
-  id           String                        @id @default(uuid()) @db.Uuid
-  walletId     String                        @map("wallet_id") @db.Uuid
-  eventType    CommerceCreditLedgerEventType @map("event_type")
-  quantity     Int
-  delta        Int
-  balanceAfter Int                           @map("balance_after")
-  attemptId    String?                       @map("attempt_id") @db.Uuid
-  orderId      String?                       @map("order_id") @db.Uuid
-  actorUserId  String                        @map("actor_user_id") @db.Uuid
-  reference    String?                       @db.VarChar(200)
-  metadata     Json?                         @db.JsonB
-  createdAt    DateTime                      @default(now()) @map("created_at")
+  id            String                        @id @default(uuid()) @db.Uuid
+  walletId      String                        @map("wallet_id") @db.Uuid
+  eventType     CommerceCreditLedgerEventType @map("event_type")
+  quantity      Int
+  delta         Int
+  balanceAfter  Int                           @map("balance_after")
+  attemptId     String?                       @map("attempt_id") @db.Uuid
+  orderId       String?                       @map("order_id") @db.Uuid
+  actorUserId   String                        @map("actor_user_id") @db.Uuid
+  reference     String?                       @db.VarChar(200)
+  // Consumption principal ("ORGANIZATION:<id>", "USER:<id>", "CANDIDATE:<id>") so
+  // one wallet can legitimately spend separate credits on separate principals for
+  // the same attempt while never charging the same principal twice.
+  principalKey  String?                       @map("principal_key") @db.VarChar(160)
+  // Shared by the TRANSFER_OUT / TRANSFER_IN pair of one atomic transfer and used
+  // as the idempotency key for replays.
+  transferId    String?                       @map("transfer_id") @db.Uuid
+  entitlementId String?                       @unique @map("entitlement_id") @db.Uuid
+  metadata      Json?                         @db.JsonB
+  createdAt     DateTime                      @default(now()) @map("created_at")
 
   wallet                CommerceCreditWallet       @relation(fields: [walletId], references: [id], onDelete: Restrict)
   attempt               AssessmentAttempt?         @relation(fields: [attemptId], references: [id], onDelete: Restrict)
@@ -1817,11 +1826,13 @@ model CommerceCreditLedgerEntry {
   reportAccessGrantId   String?                    @unique @map("report_access_grant_id") @db.Uuid
   reportAccessGrant     CommerceReportAccessGrant? @relation("LedgerReportAccessGrant", fields: [reportAccessGrantId], references: [id], onDelete: Restrict)
   accessGrantUsingEntry CommerceReportAccessGrant? @relation("GrantCreditLedgerEntry")
+  entitlement           CommerceEntitlement?       @relation("LedgerSponsoredEntitlement", fields: [entitlementId], references: [id], onDelete: Restrict)
 
   @@index([walletId, createdAt])
   @@index([attemptId, eventType])
   @@index([orderId])
   @@index([actorUserId, createdAt])
+  @@index([transferId])
   @@map("commerce_credit_ledger_entries")
 }
 

@@ -1,12 +1,12 @@
 # R20-C2 Commercial Plan
 
-Status: C2a and C2b implemented (see `R20_C2A_VERIFICATION.md`, `R20_C2B_VERIFICATION.md`); C2c–C2d pending. Decisions below were confirmed on 2026-09-13 with the recommended defaults.
+Status: C2a, C2b and C2c implemented (see `R20_C2A_VERIFICATION.md`, `R20_C2B_VERIFICATION.md`, `R20_C2C_VERIFICATION.md`); C2d pending. Decisions below were confirmed on 2026-09-13 with the recommended defaults.
 
 ## Authoritative business decisions (2026-09-13)
 
 1. **Pricing authority.** Platform controls base price, floor, ceiling, tax policy, per-organization delegation, report-credit cost and platform-wide products. A delegated organization admin may set its own selling price for its own organization within floor/ceiling, never zero. Counsellors may set their own counselling fee within platform bounds when enabled; they never control report price or credit cost. Orders snapshot the actual charged price. _(Implemented in C2a.)_
 2. **Coupon authority.** FREE/100 %/complimentary coupons are central-only. Tenants create organization-scoped percentage/fixed discounts only when the platform enables it, within a backend-configurable cap, product-bound, with validity and usage limits, never below the platform floor, never on credit packs; all audited. _(Implemented in C2a.)_
-3. **One report credit = one full-report grant for one attempt to one principal** (candidate/user, organization, counsellor/user). No silent multi-principal unlock. Exception: the temporary counsellor `CONTRACT` grant created by a paid counselling booking. _(Rule documented; candidate-principal consumption in C2c.)_
+3. **One report credit = one full-report grant for one attempt to one principal** (candidate/user, organization, counsellor/user). No silent multi-principal unlock. Exception: the temporary counsellor `CONTRACT` grant created by a paid counselling booking. _(Implemented in C2c: explicit `CANDIDATE` unlock mode, separate credit, ledger records the principal.)_
 4. **Refunds.** Candidate report: refundable while unconsumed; once opened, only by central override with audit reason. Credit packs: only unused purchased credits reversed, partial allowed, wallet never negative. Counselling: per cancellation policy. All idempotent and audited. _(Implemented in C2a except counselling.)_
 5. **Public-signup counsellor pool.** Platform-owned counsellor organization for public candidates; institutional candidates preferentially see their own tenant's authorized counsellors; no cross-tenant visibility. _(C2d.)_
 6. **Counselling logistics.** Default 45-minute sessions, duration product-configurable; candidate cancel/reschedule up to 24 h before, inside 24 h only by admin exception; no-show consumes the entitlement with counsellor/admin exceptions audited; provider-neutral meeting URL entered by counsellor/admin; ONLINE and OFFLINE (centre/address/date/time) supported. _(C2d.)_

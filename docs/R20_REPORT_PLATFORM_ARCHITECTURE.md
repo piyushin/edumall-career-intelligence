@@ -21,7 +21,7 @@ Platform Super Admin and delegated Platform Admin sessions with `report.view.ful
 
 `CommerceCreditLedgerEntry` is the immutable accounting source of truth. Every positive quantity has a signed delta and `balanceAfter`. Purchase, admin allotment, transfers, consumption, reversal, and revocation are represented as business events. Database constraints validate quantity/direction/balance, and triggers reject ledger updates and deletes.
 
-All balance changes run in `SERIALIZABLE` transactions. Consumption atomically decrements one credit, appends the ledger entry, creates the matching `CommerceReportAccessGrant`, and writes `AuditLog` evidence. A partial unique ledger index prevents charging the same wallet twice for an attempt; duplicate requests return the existing credit grant when available. Revocation is capped by both current balance and net administrator-allotted credits so consumed allotments cannot be revoked. Complimentary allotment and its revocation are central platform operations (Super Admin or a permitted Platform Admin within scope); tenant administrators can view their wallets and consume credits they hold but cannot create credit value without a purchase.
+All balance changes run in `SERIALIZABLE` transactions. Consumption atomically decrements one credit, appends the ledger entry, creates the matching `CommerceReportAccessGrant` (or, for sponsored candidate access, the candidate `REPORT` entitlement with source `TENANT_CREDIT`), and writes `AuditLog` evidence. Since C2c every consumption row carries its `principalKey`; a partial unique ledger index on `(wallet, attempt, principal)` prevents charging the same principal twice for an attempt while allowing separate credits for separate principals. Duplicate requests return the existing grant/entitlement without charge. Revocation is capped by both current balance and net administrator-allotted credits so consumed allotments cannot be revoked. Complimentary allotment and its revocation are central platform operations (Super Admin or a permitted Platform Admin within scope); tenant administrators can view their wallets and consume credits they hold but cannot create credit value without a purchase.
 
 ## Candidate and counsellor ownership
 
@@ -111,7 +111,7 @@ Every order snapshots what was actually charged: `basePriceMinor`, `pricingSourc
 
 ## Report-credit accounting rule
 
-One report credit = one full-report access grant for one assessment attempt to one principal (candidate/user, organization, or counsellor/user). A consumed credit never unlocks a second principal; each additional principal requires its own credit, entitlement, or explicit contract grant. The only exception is the temporary counsellor `CONTRACT` grant created by a paid counselling booking (C2d), which is part of delivering the purchased service. Candidate-principal consumption (institution spends a credit to give a candidate the report) is implemented in C2c on top of this rule.
+One report credit = one full-report access grant for one assessment attempt to one principal (candidate/user, organization, or counsellor/user). A consumed credit never unlocks a second principal; each additional principal requires its own credit, entitlement, or explicit contract grant. The only exception is the temporary counsellor `CONTRACT` grant created by a paid counselling booking (C2d), which is part of delivering the purchased service. Candidate-principal consumption (institution spends a credit to give a candidate the report) is an explicit `CANDIDATE` unlock mode since C2c; it is a separate credit from organization access and only applies to commercial (public-signup) candidates.
 
 ## Legacy compatibility
 
@@ -129,9 +129,13 @@ The staff workspace uses `/staff/reports`. Old `/staff/results` links redirect f
 
 The Control Centre **Commerce** group (Products & Pricing, Orders & Payments, Coupons, Report Credits) renders the C2a backend. Platform sessions manage the catalogue, platform policy and per-organization delegation (on the organization detail route); tenant sessions see the platform base price and, when delegated, set a separate selling price for their own candidates. Coupon lifecycle (validity, limits, status, redemption drill-down) uses `PUT /admin/commerce/coupons/:id` and `GET /admin/commerce/coupons/:id/redemptions`; discount type/value and code are immutable. Order detail exposes the pricing snapshot, payment timeline, manual-payment reference recording (purchasing organization), central approval, cancel, refund with override, and fulfilment retry. UI visibility mirrors permissions but never substitutes for server authorization. See `R20_C2B_VERIFICATION.md`.
 
+## R20-C2c credit operations
+
+`ReportUnlockService` is the only path that spends a report credit. The request names attempts, an explicit mode (`ORGANIZATION`, `COUNSELLOR`, `CANDIDATE`) and nothing else; wallet and principal are derived from the authenticated role, tenant scope, wallet owner and the attempt's candidate, and every condition (scope, assignment, submitted attempt, generated report, active wallet, balance) is re-checked inside one `SERIALIZABLE` transaction. Bulk unlock (tenant administrators, ≤ 200 attempts, one principal mode) reports `charged` / `already_granted` / `skipped:<reason>` per attempt and never partially charges on failure. Organization → counsellor transfers are atomic `TRANSFER_OUT`/`TRANSFER_IN` pairs sharing a `transferId`, idempotent on a client key, limited to active counsellors of the source organization. The central Report Credits workspace (`/admin/report-credits`, `/admin/report-credits/[walletId]`) provides wallet search, ledger, complimentary allotment, revoke-unused, suspend/close and central transfers; tenant administrators and counsellors use `/staff/credits` for their own wallet, credit-pack purchase (audience and price resolved server-side through the C2a order, gateway, webhook, manual-payment and fulfilment services) and transfers, and unlock reports from `/staff/reports`. See `R20_C2C_VERIFICATION.md`.
+
 ## Remaining R20-C2
 
-- C2c: wallet lookup/transfers/bulk consumption, candidate-principal unlock, self-service credit purchase for tenants/counsellors.
 - C2d: counselling booking/scheduling/fulfilment.
+- Deferred: counsellor bulk unlock (single-attempt only in C2c).
 
 Durable background recovery remains a later platform concern when the worker evolves beyond its current health-only queue. OTP, if separately approved, also remains later work.

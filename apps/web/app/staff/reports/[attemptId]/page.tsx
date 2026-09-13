@@ -2,8 +2,15 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { GeneratedReportView } from "../../../../components/generated-report-view";
+import {
+  UnlockActions,
+  WalletBalanceBadge,
+  staffRoleOf,
+  useStaffWallet,
+} from "../../../../components/report-unlock-actions";
+import { useStaffSession } from "../../../../components/staff-shell";
 import { ApiError } from "../../../../lib/api";
 import {
   reportPlatformApi,
@@ -13,30 +20,29 @@ import {
 
 export default function StaffReportDetailPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
+  const session = useStaffSession();
+  const role = staffRoleOf(session?.session.role);
+  const staffWallet = useStaffWallet(role);
   const [record, setRecord] = useState<ReportSearchItem | null>(null);
   const [report, setReport] = useState<OpenedReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const detail = await reportPlatformApi.staffDetail(attemptId);
-        if (!active) return;
-        setRecord(detail);
-        if (detail.canViewFullReport && detail.generationStatus === "GENERATED")
-          setReport(await reportPlatformApi.staffFull(attemptId));
-      } catch (caught) {
-        if (active)
-          setError(caught instanceof ApiError ? caught.message : "Report could not be loaded.");
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
+  // The access state is always re-read from the server; the page never assumes
+  // a grant exists because a button was clicked.
+  const load = useCallback(async () => {
+    try {
+      const detail = await reportPlatformApi.staffDetail(attemptId);
+      setRecord(detail);
+      if (detail.canViewFullReport && detail.generationStatus === "GENERATED")
+        setReport(await reportPlatformApi.staffFull(attemptId));
+      else setReport(null);
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Report could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
   }, [attemptId]);
+  useEffect(() => void load(), [load]);
   if (loading)
     return (
       <p aria-busy="true" className="text-sm text-slate-600">
@@ -108,6 +114,28 @@ export default function StaffReportDetailPage() {
           record to be found, but a separate active report-access grant is required to open the
           complete report.
         </div>
+      ) : null}
+      {role && status === "GENERATED" ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-xl font-semibold">Report credits</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            One credit = one full-report grant for one attempt to one principal. Each action below
+            is a separate, explicit unlock.
+          </p>
+          <div className="mt-3">
+            <WalletBalanceBadge wallet={staffWallet.wallet} error={staffWallet.error} role={role} />
+          </div>
+          <div className="mt-4">
+            <UnlockActions
+              role={role}
+              item={record}
+              wallet={staffWallet.wallet}
+              onUnlocked={async () => {
+                await Promise.all([load(), staffWallet.reload()]);
+              }}
+            />
+          </div>
+        </section>
       ) : null}
       {report ? (
         <GeneratedReportView

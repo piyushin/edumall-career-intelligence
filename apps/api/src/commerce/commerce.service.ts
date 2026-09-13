@@ -32,6 +32,7 @@ import { DATABASE_PRISMA } from "../database/database.tokens";
 import type {
   AdminOrderQueryDto,
   CreateCandidateOrderDto,
+  CreateStaffOrderDto,
   CreateCommerceCouponDto,
   CreateCommerceProductDto,
   ManualApproveOrderDto,
@@ -384,6 +385,274 @@ export class CommerceService {
 
       throw error;
     }
+  }
+
+  // Credit packs visible to a staff purchaser: audience derived from the role,
+  // platform-wide or own-organisation scope, backend price and tax preview.
+  public async listStaffCreditPacks(context: AuthContext) {
+    const { organizationId, audience } = this.staffPurchaser(context);
+    const products = await this.prisma.commerceProduct.findMany({
+      where: {
+        status: CommerceProductStatus.ACTIVE,
+        kind: CommerceProductKind.REPORT_CREDIT_PACK,
+        audience,
+        OR: [{ organizationId: null }, { organizationId }],
+      },
+      orderBy: [{ unitQuantity: "asc" }, { priceMinor: "asc" }],
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        kind: true,
+        organizationId: true,
+        unitQuantity: true,
+        currency: true,
+        priceMinor: true,
+        minPriceMinor: true,
+        maxPriceMinor: true,
+        taxRateBps: true,
+      },
+    });
+    return Promise.all(
+      products.map(async (product) => {
+        // Credit-pack cost is platform-controlled; resolvePrice never applies a
+        // delegated tenant price or counsellor fee to this kind.
+        const resolved = await this.pricing.resolvePrice(this.prisma, product, organizationId);
+        const totals = await this.pricing.computeTotals(product, resolved.unitPriceMinor, 1, 0);
+        return {
+          id: product.id,
+          code: product.code,
+          name: product.name,
+          description: product.description,
+          unitQuantity: product.unitQuantity,
+          currency: product.currency,
+          priceMinor: resolved.unitPriceMinor,
+          pricingSource: resolved.pricingSource,
+          taxRateBps: totals.taxRateBps,
+          taxMinor: totals.taxMinor,
+          totalMinor: totals.totalMinor,
+        };
+      }),
+    );
+  }
+
+  public async listStaffOrders(context: AuthContext) {
+    const { organizationId, purchaserType } = this.staffPurchaser(context);
+    return this.prisma.commerceOrder.findMany({
+      where: {
+        organizationId,
+        purchaserType,
+        ...(purchaserType === CommerceOrderPurchaserType.COUNSELLOR
+          ? { userId: context.userId }
+          : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 100,
+      include: {
+        product: { select: { code: true, name: true, kind: true, unitQuantity: true } },
+        payments: { orderBy: { createdAt: "desc" } },
+        creditLedgerEntries: { select: { id: true, eventType: true, quantity: true } },
+      },
+    });
+  }
+
+  // Tenant / counsellor credit-pack order. The purchaser, wallet, price and tax
+  // are all derived server-side; the body carries a product code, a quantity
+  // and an optional coupon.
+  public async createStaffOrder(context: AuthContext, input: CreateStaffOrderDto) {
+    const { organizationId, audience, purchaserType } = this.staffPurchaser(context);
+    const product = await this.prisma.commerceProduct.findFirst({
+      where: {
+        code: input.productCode.trim().toUpperCase(),
+        status: CommerceProductStatus.ACTIVE,
+        kind: CommerceProductKind.REPORT_CREDIT_PACK,
+        audience,
+        OR: [{ organizationId: null }, { organizationId }],
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        kind: true,
+        organizationId: true,
+        currency: true,
+        priceMinor: true,
+        minPriceMinor: true,
+        maxPriceMinor: true,
+        taxRateBps: true,
+        unitQuantity: true,
+      },
+    });
+    if (!product) {
+      throw new NotFoundException({
+        code: "COMMERCE_PRODUCT_NOT_FOUND",
+        message: "The selected credit pack is not available to you.",
+      });
+    }
+    const quantity = input.quantity ?? 1;
+
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const wallet = await this.fulfilment.ensureWalletForPurchaser(tx, {
+            purchaserType,
+            organizationId,
+            userId: context.userId,
+          });
+          if (wallet.status === "CLOSED") {
+            throw new ConflictException({
+              code: "REPORT_CREDIT_WALLET_INACTIVE",
+              message: "Your report-credit wallet is closed.",
+            });
+          }
+          const resolved = await this.pricing.resolvePrice(tx, product, organizationId);
+          const couponResult = input.couponCode
+            ? await this.validateCoupon(
+                tx,
+                input.couponCode,
+                product,
+                organizationId,
+                context.userId,
+                resolved.unitPriceMinor * quantity,
+                resolved.floorMinor * quantity,
+              )
+            : null;
+          const totals = await this.pricing.computeTotals(
+            product,
+            resolved.unitPriceMinor,
+            quantity,
+            couponResult?.discountMinor ?? 0,
+          );
+          const paidImmediately = totals.totalMinor === 0;
+          const now = new Date();
+          const order = await tx.commerceOrder.create({
+            data: {
+              organizationId,
+              userId: context.userId,
+              attemptId: null,
+              productId: product.id,
+              couponId: couponResult?.coupon.id ?? null,
+              purchaserType,
+              creditWalletId: wallet.id,
+              quantity,
+              basePriceMinor: resolved.basePriceMinor,
+              pricingSource: resolved.pricingSource,
+              taxRateBps: totals.taxRateBps,
+              taxMinor: totals.taxMinor,
+              status: paidImmediately ? CommerceOrderStatus.PAID : CommerceOrderStatus.PENDING,
+              currency: product.currency,
+              subtotalMinor: totals.subtotalMinor,
+              discountMinor: totals.discountMinor,
+              totalMinor: totals.totalMinor,
+              couponCodeSnapshot: couponResult?.coupon.code ?? null,
+              paidAt: paidImmediately ? now : null,
+              metadata: { productCode: product.code, credits: product.unitQuantity * quantity },
+            },
+            select: {
+              id: true,
+              status: true,
+              currency: true,
+              subtotalMinor: true,
+              discountMinor: true,
+              taxMinor: true,
+              totalMinor: true,
+              paidAt: true,
+              quantity: true,
+            },
+          });
+          if (couponResult) {
+            await tx.commerceCouponRedemption.create({
+              data: {
+                couponId: couponResult.coupon.id,
+                userId: context.userId,
+                orderId: order.id,
+                discountMinor: totals.discountMinor,
+                metadata: { couponCode: couponResult.coupon.code },
+              },
+            });
+          }
+          if (paidImmediately) {
+            await tx.commercePayment.create({
+              data: {
+                orderId: order.id,
+                provider: couponResult ? "COUPON" : "SYSTEM",
+                method: couponResult
+                  ? CommercePaymentMethod.COUPON
+                  : CommercePaymentMethod.COMPLIMENTARY,
+                status: CommercePaymentStatus.SUCCEEDED,
+                amountMinor: 0,
+                currency: product.currency,
+                completedAt: now,
+              },
+            });
+            await this.fulfilment.fulfil(tx, order.id, {
+              actorUserId: context.userId,
+              origin: "CHECKOUT",
+              source: couponResult ? "COUPON" : "COMPLIMENTARY",
+            });
+          }
+          await tx.auditLog.create({
+            data: {
+              organizationId,
+              actorUserId: context.userId,
+              action: paidImmediately ? "commerce.order.completed" : "commerce.order.created",
+              entityType: "CommerceOrder",
+              entityId: order.id,
+              metadata: {
+                purchaserType,
+                walletId: wallet.id,
+                productCode: product.code,
+                quantity,
+                credits: product.unitQuantity * quantity,
+                subtotalMinor: totals.subtotalMinor,
+                discountMinor: totals.discountMinor,
+                taxMinor: totals.taxMinor,
+                totalMinor: totals.totalMinor,
+                couponCode: couponResult?.coupon.code ?? null,
+              },
+            },
+          });
+          return {
+            ...order,
+            product: { code: product.code, name: product.name, kind: product.kind },
+            credits: product.unitQuantity * quantity,
+            paymentRequired: !paidImmediately,
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+        throw new ConflictException({
+          code: "COMMERCE_CONCURRENT_UPDATE",
+          message: "The order changed concurrently. Please try again.",
+        });
+      }
+      throw error;
+    }
+  }
+
+  private staffPurchaser(context: AuthContext) {
+    const organizationId = this.requireOrganization(context);
+    if (context.role === MembershipRole.ORGANIZATION_ADMIN) {
+      return {
+        organizationId,
+        audience: CommerceProductAudience.ORGANIZATION,
+        purchaserType: CommerceOrderPurchaserType.ORGANIZATION,
+      };
+    }
+    if (context.role === MembershipRole.COUNSELLOR) {
+      return {
+        organizationId,
+        audience: CommerceProductAudience.COUNSELLOR,
+        purchaserType: CommerceOrderPurchaserType.COUNSELLOR,
+      };
+    }
+    throw new ForbiddenException({
+      code: "COMMERCE_PURCHASER_INVALID",
+      message: "Credit packs are purchased by organisation administrators or counsellors.",
+    });
   }
 
   public async createRazorpayPaymentIntent(context: AuthContext, orderId: string) {
@@ -1416,9 +1685,7 @@ export class CommerceService {
       context.organizationId === order.organizationId &&
       order.purchaserType === CommerceOrderPurchaserType.ORGANIZATION;
     const ownCandidateOrder =
-      order.purchaserType === CommerceOrderPurchaserType.CANDIDATE &&
-      order.userId === context.userId &&
-      context.organizationId === order.organizationId;
+      order.userId === context.userId && context.organizationId === order.organizationId;
     if (!central && !ownOrganizationOrder && !ownCandidateOrder) {
       throw new ForbiddenException({
         code: "COMMERCE_SCOPE_VIOLATION",
@@ -1817,6 +2084,9 @@ export class CommerceService {
     return attempt;
   }
 
+  // An order is payable by the user who placed it inside the same organisation,
+  // and an organisation purchase may also be completed by any administrator of
+  // that organisation. Cross-tenant and cross-user access is never possible.
   private async findCandidateOrder(context: AuthContext, orderId: string) {
     const organizationId = this.requireOrganization(context);
 
@@ -1824,7 +2094,12 @@ export class CommerceService {
       where: {
         id: orderId,
         organizationId,
-        userId: context.userId,
+        OR: [
+          { userId: context.userId },
+          ...(context.role === MembershipRole.ORGANIZATION_ADMIN
+            ? [{ purchaserType: CommerceOrderPurchaserType.ORGANIZATION }]
+            : []),
+        ],
       },
       include: {
         product: {

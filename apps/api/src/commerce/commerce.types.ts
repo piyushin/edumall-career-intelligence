@@ -320,3 +320,9 @@ export class UpdateCommerceCouponDto {
   @IsOptional() @IsInt() @Min(1) perUserLimit?: number;
   @IsOptional() @IsEnum(CommerceCouponStatus) status?: CommerceCouponStatus;
 }
+
+export class CreateStaffOrderDto {
+  @IsString() @Length(1, 120) productCode!: string;
+  @IsOptional() @IsInt() @Min(1) @Max(100) quantity?: number;
+  @IsOptional() @IsString() @Length(1, 80) couponCode?: string;
+}

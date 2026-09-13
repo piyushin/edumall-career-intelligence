@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { BrandLogo } from "./brand-logo";
 import { ApiError } from "../lib/api";
 import { getSession, logout, type AuthSession } from "../lib/auth";
@@ -14,6 +14,13 @@ type StaffState =
   | { status: "ready"; session: AuthSession }
   | { status: "forbidden" }
   | { status: "error" };
+
+const StaffSessionContext = createContext<AuthSession | null>(null);
+
+// Server-validated staff session for staff pages; null while loading.
+export function useStaffSession(): AuthSession | null {
+  return useContext(StaffSessionContext);
+}
 
 export function StaffShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -134,16 +141,29 @@ export function StaffShell({ children }: { children: ReactNode }) {
       </header>
 
       <div className="mx-auto max-w-7xl px-6 py-8">
-        <nav className="mb-8">
-          <Link
-            href="/staff/reports"
-            className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800"
-          >
-            Reports
-          </Link>
+        <nav className="mb-8 flex flex-wrap gap-2">
+          {[
+            { href: "/staff/reports", label: "Reports" },
+            { href: "/staff/credits", label: "Credits" },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={pathname.startsWith(item.href) ? "page" : undefined}
+              className={
+                pathname.startsWith(item.href)
+                  ? "rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800"
+                  : "rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              }
+            >
+              {item.label}
+            </Link>
+          ))}
         </nav>
 
-        {children}
+        <StaffSessionContext.Provider value={state.session}>
+          {children}
+        </StaffSessionContext.Provider>
       </div>
     </div>
   );

@@ -33,10 +33,13 @@ const LEGACY_ORGANIZATION_ADMIN_PERMISSIONS = new Set([
   "commerce.coupon.manage",
 ]);
 
+// Counsellors see their own wallet and spend their own credits (R20-C2c); they
+// never manage, allot or transfer credits.
 const LEGACY_COUNSELLOR_PERMISSIONS = new Set([
   "candidate.view",
   "report.release",
   "report.search",
+  "report.credit.view",
   "counsellor.assignment.view",
 ]);
 

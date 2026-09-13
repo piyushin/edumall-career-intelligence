@@ -2,10 +2,14 @@ import {
   AssessmentReportConfigurationStatus,
   AssessmentReportGenerationStatus,
   CommerceCreditWalletOwnerType,
+  CommerceCreditWalletStatus,
   CommerceReportPrincipalType,
 } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsEnum,
   IsIn,
   IsInt,
@@ -81,4 +85,49 @@ export class CreateCounsellorAssignmentDto {
   @IsUUID() candidateUserId!: string;
   @IsUUID() counsellorUserId!: string;
   @IsOptional() @IsISO8601() consentedAt?: string;
+}
+
+export const UNLOCK_MODES = ["ORGANIZATION", "COUNSELLOR", "CANDIDATE"] as const;
+export type UnlockMode = (typeof UNLOCK_MODES)[number];
+
+export class UnlockReportDto {
+  @IsUUID() attemptId!: string;
+  @IsIn(UNLOCK_MODES) mode!: UnlockMode;
+  // Central administrators only; tenant and counsellor wallets are derived from the session.
+  @IsOptional() @IsUUID() walletId?: string;
+  @IsOptional() @IsString() @MaxLength(200) reference?: string;
+}
+
+export class BulkUnlockDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @IsUUID(undefined, { each: true })
+  attemptIds!: string[];
+  @IsIn(UNLOCK_MODES) mode!: UnlockMode;
+  @IsOptional() @IsUUID() walletId?: string;
+  @IsOptional() @IsString() @MaxLength(200) reference?: string;
+}
+
+export class TransferReportCreditsDto {
+  @IsUUID() counsellorUserId!: string;
+  @IsInt() @Min(1) @Max(10000) quantity!: number;
+  // Central administrators name the organisation wallet; tenants use their own.
+  @IsOptional() @IsUUID() sourceWalletId?: string;
+  // Client idempotency key: replaying the same key never transfers twice.
+  @IsOptional() @IsUUID() transferKey?: string;
+  @IsOptional() @IsString() @MaxLength(200) reference?: string;
+}
+
+export class WalletSearchQueryDto {
+  @IsOptional() @IsString() @MaxLength(200) q?: string;
+  @IsOptional() @IsEnum(CommerceCreditWalletOwnerType) ownerType?: CommerceCreditWalletOwnerType;
+  @IsOptional() @IsEnum(CommerceCreditWalletStatus) status?: CommerceCreditWalletStatus;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 25;
+}
+
+export class WalletStatusDto {
+  @IsEnum(CommerceCreditWalletStatus) status!: CommerceCreditWalletStatus;
+  @IsOptional() @IsString() @MaxLength(500) reason?: string;
 }

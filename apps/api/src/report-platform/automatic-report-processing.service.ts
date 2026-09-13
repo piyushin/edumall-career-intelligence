@@ -145,10 +145,7 @@ export class AutomaticReportProcessingService {
 
       if (
         !configuration ||
-        !this.isConfigurationReady(
-          configuration,
-          attempt.assignment.assessmentVersion.normVersion,
-        )
+        !this.isConfigurationReady(configuration, attempt.assignment.assessmentVersion.normVersion)
       ) {
         return this.blockConfiguration(generation.id, attempt);
       }
@@ -271,23 +268,23 @@ export class AutomaticReportProcessingService {
 
   private isConfigurationReady(
     configuration: {
-    assessmentVersionId: string;
-    normGroup: {
-      normSet: {
-        assessmentVersionId: string;
-        normVersion: string;
-        status: AssessmentNormSetStatus;
+      assessmentVersionId: string;
+      normGroup: {
+        normSet: {
+          assessmentVersionId: string;
+          normVersion: string;
+          status: AssessmentNormSetStatus;
+        };
       };
-    };
-    interpretationSet: {
-      assessmentVersionId: string;
-      status: AssessmentInterpretationSetStatus;
-    };
-    careerFitModel: {
-      assessmentVersionId: string;
-      status: CareerFitModelStatus;
-      careerTaxonomyVersion: { status: CareerTaxonomyVersionStatus };
-    };
+      interpretationSet: {
+        assessmentVersionId: string;
+        status: AssessmentInterpretationSetStatus;
+      };
+      careerFitModel: {
+        assessmentVersionId: string;
+        status: CareerFitModelStatus;
+        careerTaxonomyVersion: { status: CareerTaxonomyVersionStatus };
+      };
     },
     expectedNormVersion: string,
   ): boolean {
