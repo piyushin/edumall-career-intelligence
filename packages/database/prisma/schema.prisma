@@ -103,6 +103,12 @@ enum AssessmentInterpretationMetric {
   PERCENTILE
 }
 
+enum AssessmentReportReleaseStatus {
+  PENDING_REVIEW
+  RELEASED
+  WITHDRAWN
+}
+
 /// Technical metadata only. This is not a business-domain model.
 model SystemMetadata {
   id        String   @id @default(uuid()) @db.Uuid
@@ -115,19 +121,21 @@ model SystemMetadata {
 }
 
 model Organization {
-  id                    String                   @id @default(uuid()) @db.Uuid
-  name                  String                   @db.VarChar(200)
-  slug                  String                   @unique @db.VarChar(120)
-  status                OrganizationStatus       @default(ACTIVE)
+  id                    String                     @id @default(uuid()) @db.Uuid
+  name                  String                     @db.VarChar(200)
+  slug                  String                     @unique @db.VarChar(120)
+  status                OrganizationStatus         @default(ACTIVE)
   type                  OrganizationType
-  createdAt             DateTime                 @default(now()) @map("created_at")
-  updatedAt             DateTime                 @updatedAt @map("updated_at")
-  deletedAt             DateTime?                @map("deleted_at")
+  createdAt             DateTime                   @default(now()) @map("created_at")
+  updatedAt             DateTime                   @updatedAt @map("updated_at")
+  deletedAt             DateTime?                  @map("deleted_at")
   memberships           OrganizationMembership[]
   sessions              Session[]
-  auditLogs             AuditLog[]               @relation("OrganizationAuditLogs")
+  auditLogs             AuditLog[]                 @relation("OrganizationAuditLogs")
   assessmentDefinitions AssessmentDefinition[]
   assessmentAssignments AssessmentAssignment[]
+  reportReleases        AssessmentReportRelease[]
+  counsellorNotes       AssessmentCounsellorNote[]
 
   @@index([status])
   @@index([type, status])
@@ -135,30 +143,32 @@ model Organization {
 }
 
 model User {
-  id                           String                   @id @default(uuid()) @db.Uuid
-  email                        String                   @db.VarChar(320)
-  normalizedEmail              String                   @unique @map("normalized_email") @db.VarChar(320)
-  passwordHash                 String?                  @map("password_hash") @db.VarChar(255)
-  firstName                    String                   @map("first_name") @db.VarChar(100)
-  lastName                     String                   @map("last_name") @db.VarChar(100)
-  status                       UserStatus               @default(INVITED)
-  emailVerifiedAt              DateTime?                @map("email_verified_at")
-  lastLoginAt                  DateTime?                @map("last_login_at")
-  failedLoginCount             Int                      @default(0) @map("failed_login_count")
-  lockedUntil                  DateTime?                @map("locked_until")
-  createdAt                    DateTime                 @default(now()) @map("created_at")
-  updatedAt                    DateTime                 @updatedAt @map("updated_at")
-  deletedAt                    DateTime?                @map("deleted_at")
+  id                           String                     @id @default(uuid()) @db.Uuid
+  email                        String                     @db.VarChar(320)
+  normalizedEmail              String                     @unique @map("normalized_email") @db.VarChar(320)
+  passwordHash                 String?                    @map("password_hash") @db.VarChar(255)
+  firstName                    String                     @map("first_name") @db.VarChar(100)
+  lastName                     String                     @map("last_name") @db.VarChar(100)
+  status                       UserStatus                 @default(INVITED)
+  emailVerifiedAt              DateTime?                  @map("email_verified_at")
+  lastLoginAt                  DateTime?                  @map("last_login_at")
+  failedLoginCount             Int                        @default(0) @map("failed_login_count")
+  lockedUntil                  DateTime?                  @map("locked_until")
+  createdAt                    DateTime                   @default(now()) @map("created_at")
+  updatedAt                    DateTime                   @updatedAt @map("updated_at")
+  deletedAt                    DateTime?                  @map("deleted_at")
   memberships                  OrganizationMembership[]
   sessions                     Session[]
   passwordResetTokens          PasswordResetToken[]
   invitationTokens             InvitationToken[]
-  auditLogs                    AuditLog[]               @relation("ActorAuditLogs")
-  createdAssessmentDefinitions AssessmentDefinition[]   @relation("AssessmentDefinitionCreatedBy")
-  createdAssessmentVersions    AssessmentVersion[]      @relation("AssessmentVersionCreatedBy")
-  publishedAssessmentVersions  AssessmentVersion[]      @relation("AssessmentVersionPublishedBy")
-  assignedAssessments          AssessmentAssignment[]   @relation("AssessmentAssignmentCandidate")
-  createdAssessmentAssignments AssessmentAssignment[]   @relation("AssessmentAssignmentAssignedBy")
+  auditLogs                    AuditLog[]                 @relation("ActorAuditLogs")
+  createdAssessmentDefinitions AssessmentDefinition[]     @relation("AssessmentDefinitionCreatedBy")
+  createdAssessmentVersions    AssessmentVersion[]        @relation("AssessmentVersionCreatedBy")
+  publishedAssessmentVersions  AssessmentVersion[]        @relation("AssessmentVersionPublishedBy")
+  assignedAssessments          AssessmentAssignment[]     @relation("AssessmentAssignmentCandidate")
+  createdAssessmentAssignments AssessmentAssignment[]     @relation("AssessmentAssignmentAssignedBy")
+  reviewedReportReleases       AssessmentReportRelease[]  @relation("AssessmentReportReleaseReviewedBy")
+  authoredCounsellorNotes      AssessmentCounsellorNote[] @relation("AssessmentCounsellorNoteAuthor")
 
   @@index([status])
   @@index([status, lockedUntil])
@@ -420,18 +430,20 @@ model AssessmentAssignment {
 
 /// One actual sitting/attempt under an assignment.
 model AssessmentAttempt {
-  id             String                  @id @default(uuid()) @db.Uuid
-  assignmentId   String                  @map("assignment_id") @db.Uuid
-  attemptNumber  Int                     @map("attempt_number")
-  status         AssessmentAttemptStatus @default(IN_PROGRESS)
-  startedAt      DateTime                @default(now()) @map("started_at")
-  lastActivityAt DateTime                @default(now()) @map("last_activity_at")
-  submittedAt    DateTime?               @map("submitted_at")
-  abandonedAt    DateTime?               @map("abandoned_at")
-  metadata       Json?                   @db.JsonB
-  assignment     AssessmentAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
-  responses      AssessmentResponse[]
-  scoringRuns    AssessmentScoringRun[]
+  id              String                     @id @default(uuid()) @db.Uuid
+  assignmentId    String                     @map("assignment_id") @db.Uuid
+  attemptNumber   Int                        @map("attempt_number")
+  status          AssessmentAttemptStatus    @default(IN_PROGRESS)
+  startedAt       DateTime                   @default(now()) @map("started_at")
+  lastActivityAt  DateTime                   @default(now()) @map("last_activity_at")
+  submittedAt     DateTime?                  @map("submitted_at")
+  abandonedAt     DateTime?                  @map("abandoned_at")
+  metadata        Json?                      @db.JsonB
+  assignment      AssessmentAssignment       @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  responses       AssessmentResponse[]
+  scoringRuns     AssessmentScoringRun[]
+  reportRelease   AssessmentReportRelease?
+  counsellorNotes AssessmentCounsellorNote[]
 
   @@unique([assignmentId, attemptNumber])
   @@index([assignmentId, status])
@@ -710,12 +722,57 @@ model AssessmentReportDataSnapshot {
   scoringRun          AssessmentScoringRun         @relation(fields: [scoringRunId], references: [id], onDelete: Restrict)
   assessmentVersion   AssessmentVersion            @relation(fields: [assessmentVersionId], references: [id], onDelete: Restrict)
   interpretationSet   AssessmentInterpretationSet? @relation(fields: [interpretationSetId], references: [id], onDelete: Restrict)
+  reportReleases      AssessmentReportRelease[]
 
   @@unique([scoringRunId, reportVersion, inputHash])
   @@index([assessmentVersionId, reportVersion])
   @@index([interpretationSetId])
   @@index([generatedAt])
   @@map("assessment_report_data_snapshots")
+}
+
+/// Counsellor review and release gate for one attempt's report-data snapshot.
+/// Candidates may only view report data once this record reaches RELEASED.
+model AssessmentReportRelease {
+  id                   String                        @id @default(uuid()) @db.Uuid
+  attemptId            String                        @unique @map("attempt_id") @db.Uuid
+  organizationId       String                        @map("organization_id") @db.Uuid
+  reportDataSnapshotId String                        @map("report_data_snapshot_id") @db.Uuid
+  status               AssessmentReportReleaseStatus @default(PENDING_REVIEW)
+  reviewedByUserId     String?                       @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt           DateTime?                     @map("reviewed_at")
+  releasedAt           DateTime?                     @map("released_at")
+  withdrawnAt          DateTime?                     @map("withdrawn_at")
+  withdrawnReason      String?                       @map("withdrawn_reason") @db.Text
+  createdAt            DateTime                      @default(now()) @map("created_at")
+  updatedAt            DateTime                      @updatedAt @map("updated_at")
+  attempt              AssessmentAttempt             @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  organization         Organization                  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  reportDataSnapshot   AssessmentReportDataSnapshot  @relation(fields: [reportDataSnapshotId], references: [id], onDelete: Restrict)
+  reviewedByUser       User?                         @relation("AssessmentReportReleaseReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status])
+  @@index([reportDataSnapshotId])
+  @@map("assessment_report_releases")
+}
+
+/// Private counsellor working notes for one attempt. Never visible to candidates,
+/// parents/guardians, or schools (D-010, D-012).
+model AssessmentCounsellorNote {
+  id             String            @id @default(uuid()) @db.Uuid
+  attemptId      String            @map("attempt_id") @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  authorUserId   String            @map("author_user_id") @db.Uuid
+  body           String            @db.Text
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  attempt        AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  authorUser     User              @relation("AssessmentCounsellorNoteAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([attemptId, createdAt])
+  @@index([organizationId])
+  @@map("assessment_counsellor_notes")
 }
 
 model AuditLog {

@@ -17,6 +17,7 @@ import { CsrfGuard } from "../auth/csrf.guard";
 import { CurrentAuthContext } from "../auth/current-auth-context.decorator";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { AssessmentReportViewService } from "./assessment-report-view.service";
 import { AssessmentService } from "./assessment.service";
 import { SaveAssessmentResponseDto } from "./assessment.types";
 
@@ -27,6 +28,8 @@ export class AssessmentController {
   public constructor(
     @Inject(AssessmentService)
     private readonly assessments: AssessmentService,
+    @Inject(AssessmentReportViewService)
+    private readonly reportView: AssessmentReportViewService,
   ) {}
 
   @Get("assignments")
@@ -79,5 +82,15 @@ export class AssessmentController {
     attemptId: string,
   ) {
     return this.assessments.submitAttempt(context, attemptId);
+  }
+
+  @Get("attempts/:attemptId/report")
+  @Header("cache-control", "no-store")
+  public getMyReport(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("attemptId", new ParseUUIDPipe())
+    attemptId: string,
+  ) {
+    return this.reportView.getMyReport(context, attemptId);
   }
 }

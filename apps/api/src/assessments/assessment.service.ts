@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -15,16 +16,18 @@ import {
 } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
-import { AssessmentScoringService } from "./assessment-scoring.service";
+import { AssessmentReportPipelineService } from "./assessment-report-pipeline.service";
 import type { SaveAssessmentResponseDto } from "./assessment.types";
 
 @Injectable()
 export class AssessmentService {
+  private readonly logger = new Logger(AssessmentService.name);
+
   public constructor(
     @Inject(DATABASE_PRISMA)
     private readonly prisma: PrismaClient,
-    @Inject(AssessmentScoringService)
-    private readonly scoring: AssessmentScoringService,
+    @Inject(AssessmentReportPipelineService)
+    private readonly reportPipeline: AssessmentReportPipelineService,
   ) {}
 
   public async listAssignments(context: AuthContext) {
@@ -507,7 +510,19 @@ export class AssessmentService {
       };
     });
 
-    await this.scoring.scoreSubmittedAttempt(attemptId);
+    try {
+      await this.reportPipeline.generateReportIfReady(attemptId);
+    } catch (error) {
+      // Report generation problems (unpublished norm/interpretation content, an
+      // authoring ambiguity) must never fail the candidate's submission. The
+      // attempt stays SUBMITTED and the report simply remains pending; the
+      // failure is logged so it can be investigated and re-run later.
+      this.logger.error(
+        `Report generation failed for attempt ${attemptId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
 
     return submission;
   }

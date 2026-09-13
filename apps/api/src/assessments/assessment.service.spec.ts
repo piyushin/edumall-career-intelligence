@@ -8,7 +8,7 @@ import {
 } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../auth/auth.types";
-import type { AssessmentScoringService } from "./assessment-scoring.service";
+import type { AssessmentReportPipelineService } from "./assessment-report-pipeline.service";
 import { AssessmentService } from "./assessment.service";
 
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -67,8 +67,8 @@ describe("AssessmentService", () => {
     service = new AssessmentService(
       prisma as unknown as PrismaClient,
       {
-        scoreSubmittedAttempt: vi.fn().mockResolvedValue({}),
-      } as unknown as AssessmentScoringService,
+        generateReportIfReady: vi.fn().mockResolvedValue({ generated: false }),
+      } as unknown as AssessmentReportPipelineService,
     );
   });
 
@@ -267,5 +267,45 @@ describe("AssessmentService", () => {
         }),
       }),
     );
+  });
+
+  it("still confirms submission when report generation fails", async () => {
+    const reportPipeline = {
+      generateReportIfReady: vi.fn().mockRejectedValue(new Error("norm set not published")),
+    } as unknown as AssessmentReportPipelineService;
+
+    service = new AssessmentService(prisma as unknown as PrismaClient, reportPipeline);
+
+    prisma.assessmentAttempt.findFirst.mockResolvedValue({
+      id: attemptId,
+      status: AssessmentAttemptStatus.IN_PROGRESS,
+      submittedAt: null,
+      assignment: {
+        assessmentVersion: {
+          items: [
+            {
+              id: itemId,
+              type: AssessmentItemType.BOOLEAN,
+            },
+          ],
+        },
+      },
+      responses: [
+        {
+          itemId,
+          textValue: null,
+          numericValue: null,
+          booleanValue: false,
+          selections: [],
+        },
+      ],
+    });
+
+    prisma.assessmentAttempt.update.mockResolvedValue({});
+
+    const result = await service.submitAttempt(context, attemptId);
+
+    expect(result.status).toBe("submitted");
+    expect(reportPipeline.generateReportIfReady).toHaveBeenCalledWith(attemptId);
   });
 });

@@ -136,3 +136,26 @@ export function submitCandidateAttempt(
     },
   );
 }
+
+export type CandidateAssessmentReport =
+  | { status: "PENDING" }
+  | { status: "WITHDRAWN" }
+  | {
+      status: "RELEASED";
+      releasedAt: string | null;
+      assessment: {
+        title: string;
+        edition: string;
+        form: string;
+        language: string;
+      };
+      results: Array<{
+        constructCode: string | null;
+        constructName: string | null;
+        outputData: unknown;
+      }>;
+    };
+
+export function getCandidateReport(attemptId: string): Promise<CandidateAssessmentReport> {
+  return apiRequest<CandidateAssessmentReport>(`/assessments/attempts/${attemptId}/report`);
+}

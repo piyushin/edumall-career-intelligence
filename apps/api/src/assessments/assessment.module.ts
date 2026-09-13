@@ -6,6 +6,10 @@ import { AssessmentAdminService } from "./assessment-admin.service";
 import { AssessmentController } from "./assessment.controller";
 import { AssessmentInterpretationService } from "./assessment-interpretation.service";
 import { AssessmentReportDataService } from "./assessment-report-data.service";
+import { AssessmentReportPipelineService } from "./assessment-report-pipeline.service";
+import { AssessmentReportReviewController } from "./assessment-report-review.controller";
+import { AssessmentReportReviewService } from "./assessment-report-review.service";
+import { AssessmentReportViewService } from "./assessment-report-view.service";
 import { AssessmentNormService } from "./assessment-norm.service";
 import { AssessmentScoringService } from "./assessment-scoring.service";
 import { AssessmentService } from "./assessment.service";
@@ -15,6 +19,7 @@ import { AssessmentService } from "./assessment.service";
     AssessmentController,
     AssessmentAdminController,
     AssessmentAssignmentAdminController,
+    AssessmentReportReviewController,
   ],
   providers: [
     AssessmentAdminService,
@@ -22,6 +27,9 @@ import { AssessmentService } from "./assessment.service";
     AssessmentInterpretationService,
     AssessmentNormService,
     AssessmentReportDataService,
+    AssessmentReportPipelineService,
+    AssessmentReportReviewService,
+    AssessmentReportViewService,
     AssessmentScoringService,
     AssessmentService,
   ],
