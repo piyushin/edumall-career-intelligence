@@ -304,3 +304,19 @@ export class SetCounsellorFeeDto {
   @IsInt() @Min(1) feeMinor!: number;
   @IsOptional() @IsEnum(CommercePriceStatus) status?: CommercePriceStatus;
 }
+
+export class UpdateCommerceCouponDto {
+  @IsOptional() @IsString() @MaxLength(500) description?: string;
+  @IsOptional() @IsISO8601() validFrom?: string;
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsISO8601()
+  validUntil?: string | null;
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  maxRedemptions?: number | null;
+  @IsOptional() @IsInt() @Min(1) perUserLimit?: number;
+  @IsOptional() @IsEnum(CommerceCouponStatus) status?: CommerceCouponStatus;
+}

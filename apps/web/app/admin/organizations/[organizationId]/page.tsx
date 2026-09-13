@@ -13,6 +13,7 @@ import {
   StatusBadge,
   formatDate,
 } from "../../../../components/admin-ui";
+import { OrganizationCommercePolicy } from "../../../../components/organization-commerce-policy";
 import { ApiError } from "../../../../lib/api";
 import { canAccessGlobalRoute, hasPermission } from "../../../../lib/admin-authorization";
 import { platformAdminApi, type OrganizationSummary } from "../../../../lib/platform-admin";
@@ -121,10 +122,11 @@ export default function OrganizationDetailPage() {
             </div>
           </dl>
           <p className="mt-5 text-xs text-slate-500">
-            This workspace is read-only. Organization mutations are not exposed by the approved
-            R19.1 backend.
+            Organization identity is read-only. Commercial delegation below is the only mutable
+            section and is controlled centrally.
           </p>
         </Panel>
+        {commerce ? <OrganizationCommercePolicy organizationId={organization.id} /> : null}
       </div>
     </PlatformRoute>
   );

@@ -1,6 +1,6 @@
 # R20-C2 Commercial Plan
 
-Status: C2a implemented (see `R20_C2A_VERIFICATION.md`); C2b–C2d pending. Decisions below were confirmed on 2026-09-13 with the recommended defaults.
+Status: C2a and C2b implemented (see `R20_C2A_VERIFICATION.md`, `R20_C2B_VERIFICATION.md`); C2c–C2d pending. Decisions below were confirmed on 2026-09-13 with the recommended defaults.
 
 ## Authoritative business decisions (2026-09-13)
 

@@ -71,6 +71,19 @@ const groups: NavGroup[] = [
     ],
   },
   {
+    label: "Commerce",
+    items: [
+      {
+        label: "Products & Pricing",
+        href: "/admin/commerce/products",
+        permission: "commerce.view",
+      },
+      { label: "Orders & Payments", href: "/admin/commerce/orders", permission: "commerce.view" },
+      { label: "Coupons", href: "/admin/commerce/coupons", permission: "commerce.view" },
+      { label: "Report Credits", href: "/admin/report-credits", permission: "report.credit.view" },
+    ],
+  },
+  {
     label: "Governance",
     items: [{ label: "Audit", href: "/admin/audit", permission: "audit.view", platformOnly: true }],
   },

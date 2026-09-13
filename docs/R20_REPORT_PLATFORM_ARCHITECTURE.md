@@ -125,10 +125,13 @@ The Control Centre routes Reports directly to `/admin/reports`, not through the 
 
 The staff workspace uses `/staff/reports`. Old `/staff/results` links redirect for URL compatibility, but the current interface has no approval/release action. Tenant administrators and counsellors can search authorized metadata; they can open a full report only when the backend projects an applicable active access grant.
 
+## R20-C2b commerce operations UI
+
+The Control Centre **Commerce** group (Products & Pricing, Orders & Payments, Coupons, Report Credits) renders the C2a backend. Platform sessions manage the catalogue, platform policy and per-organization delegation (on the organization detail route); tenant sessions see the platform base price and, when delegated, set a separate selling price for their own candidates. Coupon lifecycle (validity, limits, status, redemption drill-down) uses `PUT /admin/commerce/coupons/:id` and `GET /admin/commerce/coupons/:id/redemptions`; discount type/value and code are immutable. Order detail exposes the pricing snapshot, payment timeline, manual-payment reference recording (purchasing organization), central approval, cancel, refund with override, and fulfilment retry. UI visibility mirrors permissions but never substitutes for server authorization. See `R20_C2B_VERIFICATION.md`.
+
 ## Remaining R20-C2
 
-- C2b: admin commerce UI (products, coupons, orders) on the C2a backend.
-- C2c: wallet transfers, bulk consumption, self-service credit purchase for tenants/counsellors.
+- C2c: wallet lookup/transfers/bulk consumption, candidate-principal unlock, self-service credit purchase for tenants/counsellors.
 - C2d: counselling booking/scheduling/fulfilment.
 
 Durable background recovery remains a later platform concern when the worker evolves beyond its current health-only queue. OTP, if separately approved, also remains later work.

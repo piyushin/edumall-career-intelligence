@@ -34,6 +34,8 @@ function setup(
     },
     commerceCoupon: {
       create: vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: "coupon", ...data })),
+      findUnique: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({}),
     },
     commerceOrder: {
       findUnique: vi.fn().mockResolvedValue({
@@ -189,6 +191,53 @@ describe("commerce authority boundaries (R20-C2a)", () => {
         ...limits,
       }),
     ).rejects.toMatchObject({ response: { code: "COUPON_CREDIT_PACK_CENTRAL_ONLY" } });
+  });
+
+  it("scopes coupon edits: tenants cannot touch platform coupons or drop their limits", async () => {
+    const platformCoupon = {
+      id: "coupon",
+      organizationId: null,
+      validFrom: new Date("2026-01-01T00:00:00.000Z"),
+      validUntil: null,
+      maxRedemptions: null,
+      perUserLimit: 1,
+      status: "ACTIVE",
+    };
+    const { service, prisma } = setup();
+    prisma.commerceCoupon.findUnique = vi.fn().mockResolvedValue(platformCoupon);
+    prisma.commerceCoupon.update = vi
+      .fn()
+      .mockImplementation(({ data }) => Promise.resolve({ ...platformCoupon, ...data }));
+    await expect(
+      service.updateCoupon(tenantAdmin, "coupon", { status: "INACTIVE" }),
+    ).rejects.toMatchObject({ response: { code: "COMMERCE_SCOPE_VIOLATION" } });
+
+    prisma.commerceCoupon.findUnique = vi.fn().mockResolvedValue({
+      ...platformCoupon,
+      organizationId,
+      validUntil: new Date("2027-01-01"),
+      maxRedemptions: 10,
+    });
+    await expect(
+      service.updateCoupon(tenantAdmin, "coupon", { validUntil: null }),
+    ).rejects.toMatchObject({ response: { code: "COUPON_LIMITS_REQUIRED" } });
+    await service.updateCoupon(tenantAdmin, "coupon", { status: "INACTIVE", maxRedemptions: 5 });
+    expect(prisma.commerceCoupon.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "INACTIVE", maxRedemptions: 5 }),
+      }),
+    );
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ action: "commerce.coupon.updated", organizationId }),
+    });
+
+    prisma.commerceCoupon.findUnique = vi.fn().mockResolvedValue({
+      ...platformCoupon,
+      organizationId: "99999999-9999-4999-8999-999999999999",
+    });
+    await expect(
+      service.updateCoupon(tenantAdmin, "coupon", { status: "INACTIVE" }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("keeps manual payment approval central-only", async () => {

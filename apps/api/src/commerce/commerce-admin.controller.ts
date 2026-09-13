@@ -33,6 +33,7 @@ import {
   RefundOrderDto,
   SetOrganizationPriceDto,
   SubmitManualPaymentDto,
+  UpdateCommerceCouponDto,
   UpdateCommerceProductDto,
   UpdateOrganizationPolicyDto,
   UpdatePlatformPolicyDto,
@@ -163,6 +164,28 @@ export class CommerceAdminController {
     @Body() body: CreateCommerceCouponDto,
   ) {
     return this.commerce.createCoupon(context, body);
+  }
+
+  @Put("coupons/:couponId")
+  @Permissions("commerce.coupon.manage")
+  @Header("cache-control", "no-store")
+  @UseGuards(CsrfGuard)
+  public updateCoupon(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("couponId", new ParseUUIDPipe()) couponId: string,
+    @Body() body: UpdateCommerceCouponDto,
+  ) {
+    return this.commerce.updateCoupon(context, couponId, body);
+  }
+
+  @Get("coupons/:couponId/redemptions")
+  @Permissions("commerce.view")
+  @Header("cache-control", "no-store")
+  public couponRedemptions(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("couponId", new ParseUUIDPipe()) couponId: string,
+  ) {
+    return this.commerce.couponRedemptions(context, couponId);
   }
 
   @Get("orders")

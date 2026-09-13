@@ -38,6 +38,7 @@ import type {
   OrderReferenceDto,
   RefundOrderDto,
   SubmitManualPaymentDto,
+  UpdateCommerceCouponDto,
   UpdateCommerceProductDto,
   VerifyRazorpayPaymentDto,
 } from "./commerce.types";
@@ -955,10 +956,136 @@ export class CommerceService {
           select: {
             code: true,
             name: true,
+            kind: true,
+          },
+        },
+        organization: { select: { id: true, name: true } },
+        _count: { select: { redemptions: true } },
+      },
+    });
+  }
+
+  // Discount type/value and code are immutable after creation; only lifecycle,
+  // validity and usage limits change. Tenants stay inside their organization and
+  // must keep the expiry and redemption cap the platform requires of them.
+  public async updateCoupon(
+    context: AuthContext,
+    couponId: string,
+    input: UpdateCommerceCouponDto,
+  ) {
+    const coupon = await this.prisma.commerceCoupon.findUnique({ where: { id: couponId } });
+    if (!coupon) {
+      throw new NotFoundException({
+        code: "COMMERCE_COUPON_NOT_FOUND",
+        message: "Coupon not found.",
+      });
+    }
+    const central = this.isCentralAdministrator(context);
+    if (!central) {
+      if (coupon.organizationId === null) {
+        throw new ForbiddenException({
+          code: "COMMERCE_SCOPE_VIOLATION",
+          message: "Platform coupons can only be changed by central administrators.",
+        });
+      }
+      this.assertAdminScope(context, coupon.organizationId);
+      if (input.validUntil === null || input.maxRedemptions === null) {
+        throw new BadRequestException({
+          code: "COUPON_LIMITS_REQUIRED",
+          message: "Organisation coupons require an expiry and a maximum redemption count.",
+        });
+      }
+    } else {
+      this.assertAdminScope(context, coupon.organizationId);
+    }
+    const validFrom = input.validFrom ? new Date(input.validFrom) : coupon.validFrom;
+    const validUntil =
+      input.validUntil === undefined
+        ? coupon.validUntil
+        : input.validUntil === null
+          ? null
+          : new Date(input.validUntil);
+    if (validUntil && validUntil <= validFrom) {
+      throw new BadRequestException({
+        code: "COUPON_VALIDITY_INVALID",
+        message: "Coupon expiry must be after its start time.",
+      });
+    }
+    const updated = await this.prisma.commerceCoupon.update({
+      where: { id: couponId },
+      data: {
+        ...(input.description !== undefined
+          ? { description: input.description.trim() || null }
+          : {}),
+        validFrom,
+        validUntil,
+        ...(input.maxRedemptions !== undefined ? { maxRedemptions: input.maxRedemptions } : {}),
+        ...(input.perUserLimit !== undefined ? { perUserLimit: input.perUserLimit } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: coupon.organizationId,
+        actorUserId: context.userId,
+        action: "commerce.coupon.updated",
+        entityType: "CommerceCoupon",
+        entityId: coupon.id,
+        metadata: {
+          before: {
+            validFrom: coupon.validFrom,
+            validUntil: coupon.validUntil,
+            maxRedemptions: coupon.maxRedemptions,
+            perUserLimit: coupon.perUserLimit,
+            status: coupon.status,
+          },
+          after: {
+            validFrom: updated.validFrom,
+            validUntil: updated.validUntil,
+            maxRedemptions: updated.maxRedemptions,
+            perUserLimit: updated.perUserLimit,
+            status: updated.status,
           },
         },
       },
     });
+    return updated;
+  }
+
+  public async couponRedemptions(context: AuthContext, couponId: string) {
+    const coupon = await this.prisma.commerceCoupon.findUnique({
+      where: { id: couponId },
+      select: { id: true, code: true, organizationId: true },
+    });
+    if (!coupon) {
+      throw new NotFoundException({
+        code: "COMMERCE_COUPON_NOT_FOUND",
+        message: "Coupon not found.",
+      });
+    }
+    this.assertAdminScope(context, coupon.organizationId);
+    const scoped = this.adminOrganizationFilter(context);
+    const redemptions = await this.prisma.commerceCouponRedemption.findMany({
+      where: { couponId, ...(scoped ? { order: { organizationId: scoped } } : {}) },
+      orderBy: { redeemedAt: "desc" },
+      take: 200,
+      select: {
+        id: true,
+        discountMinor: true,
+        redeemedAt: true,
+        user: { select: { id: true, email: true, firstName: true, lastName: true } },
+        order: {
+          select: {
+            id: true,
+            status: true,
+            totalMinor: true,
+            currency: true,
+            organization: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    return { coupon, redemptions };
   }
 
   public async listOrders(context: AuthContext, query: AdminOrderQueryDto) {
