@@ -57,7 +57,7 @@ describe("PlatformAdminService session isolation", () => {
             {
               id: "66666666-6666-4666-8666-666666666666",
               createdAt,
-              expiresAt: new Date("2026-09-01T10:00:00Z"),
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
               usedAt: null,
               revokedAt: null,
               deliveries: [{ status: NotificationDeliveryStatus.BLOCKED_CONFIGURATION }],

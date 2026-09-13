@@ -21,7 +21,7 @@ Platform Super Admin and delegated Platform Admin sessions with `report.view.ful
 
 `CommerceCreditLedgerEntry` is the immutable accounting source of truth. Every positive quantity has a signed delta and `balanceAfter`. Purchase, admin allotment, transfers, consumption, reversal, and revocation are represented as business events. Database constraints validate quantity/direction/balance, and triggers reject ledger updates and deletes.
 
-All balance changes run in `SERIALIZABLE` transactions. Consumption atomically decrements one credit, appends the ledger entry, creates the matching `CommerceReportAccessGrant`, and writes `AuditLog` evidence. A partial unique ledger index prevents charging the same wallet twice for an attempt; duplicate requests return the existing credit grant when available. Revocation is capped by both current balance and net administrator-allotted credits so consumed allotments cannot be revoked.
+All balance changes run in `SERIALIZABLE` transactions. Consumption atomically decrements one credit, appends the ledger entry, creates the matching `CommerceReportAccessGrant`, and writes `AuditLog` evidence. A partial unique ledger index prevents charging the same wallet twice for an attempt; duplicate requests return the existing credit grant when available. Revocation is capped by both current balance and net administrator-allotted credits so consumed allotments cannot be revoked. Complimentary allotment and its revocation are central platform operations (Super Admin or a permitted Platform Admin within scope); tenant administrators can view their wallets and consume credits they hold but cannot create credit value without a purchase.
 
 ## Candidate and counsellor ownership
 

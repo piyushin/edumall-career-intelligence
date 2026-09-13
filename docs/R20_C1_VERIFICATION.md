@@ -22,6 +22,12 @@ Backend authorization remains authoritative. Search uses `report.search`; centra
 
 The new attempt-detail endpoints return the same safe report-search projection for one scoped attempt. They do not return the immutable report payload. Complete payloads remain on the separately protected `/full` endpoints.
 
+## Post-implementation review fixes
+
+- Complimentary report-credit allotment and revocation (`POST /admin/report-credits/wallets/:id/allot` and `/revoke-unused`) now require a central Super Admin or Platform Admin session. `report.credit.manage` remains in the legacy organization-admin permission set for wallet creation and consumption, but a tenant administrator can no longer create free credit value for their own wallet.
+- `GET /admin/reports/:attemptId` and `GET /staff/reports/:attemptId` match the attempt identifier exactly within the caller's scope instead of routing it through the free-text `contains` search, and reject any projection whose `attemptId` differs from the requested one.
+- A platform-admin directory spec used a fixed invitation expiry date that had elapsed; the fixture is now relative to the current time.
+
 ## Verification commands
 
 Run from the repository root:

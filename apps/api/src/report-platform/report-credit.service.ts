@@ -15,6 +15,7 @@ import {
   CommerceReportAccessGrantSource,
   CommerceReportAccessGrantStatus,
   CommerceReportPrincipalType,
+  MembershipRole,
   MembershipStatus,
   Prisma,
   type PrismaClient,
@@ -102,7 +103,8 @@ export class ReportCreditService {
     };
   }
 
-  public allot(context: AuthContext, walletId: string, quantity: number, reference?: string) {
+  public async allot(context: AuthContext, walletId: string, quantity: number, reference?: string) {
+    this.assertCentralAdministrator(context);
     return this.applyCredit(
       context,
       walletId,
@@ -118,6 +120,7 @@ export class ReportCreditService {
     quantity: number,
     reference?: string,
   ) {
+    this.assertCentralAdministrator(context);
     if (!Number.isInteger(quantity) || quantity <= 0) this.invalidQuantity();
     return this.prisma.$transaction(
       async (tx) => {
@@ -497,6 +500,20 @@ export class ReportCreditService {
         code: "REPORT_ACCESS_PRINCIPAL_INVALID",
         message: "Exactly one report access principal matching principalType is required.",
       });
+  }
+  // Complimentary allotment and its revocation create or destroy value without a
+  // purchase, so they are reserved for central (platform) administration. Tenant
+  // administrators keep wallet visibility and consumption of credits they already hold.
+  private assertCentralAdministrator(context: AuthContext) {
+    if (
+      context.role !== MembershipRole.SUPER_ADMIN &&
+      context.role !== MembershipRole.PLATFORM_ADMIN
+    ) {
+      throw new ForbiddenException({
+        code: "REPORT_CREDIT_ALLOTMENT_CENTRAL_ONLY",
+        message: "Complimentary report-credit allotment is a central platform operation.",
+      });
+    }
   }
   private invalidQuantity(): never {
     throw new BadRequestException({

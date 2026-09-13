@@ -1,4 +1,4 @@
-import { ForbiddenException } from "@nestjs/common";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { MembershipRole, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { ReportSearchService } from "./report-search.service";
@@ -145,5 +145,33 @@ describe("ReportSearchService scope and filters", () => {
       canViewFullReport: false,
     });
     expect(JSON.stringify(result)).not.toContain("payload");
+    expect(prisma.assessmentAttempt.findMany.mock.calls[0]![0].where).toMatchObject({
+      id: "11111111-1111-4111-8111-111111111111",
+      status: "SUBMITTED",
+    });
+  });
+
+  it("does not return a different record when the detail identifier is not matched exactly", async () => {
+    const prisma = client([
+      {
+        id: "55555555-5555-4555-8555-555555555555",
+        attemptNumber: 1,
+        submittedAt: new Date(),
+        assignment: {
+          user: { id: "candidate", counsellorCandidateAssignments: [] },
+          organization: { id: organizationId },
+          assessmentVersion: { id: "version" },
+        },
+        reportGeneration: null,
+        commerceEntitlements: [],
+        reportAccessGrants: [],
+      },
+    ]);
+    await expect(
+      new ReportSearchService(prisma as unknown as PrismaClient).staffDetail(
+        { ...base, organizationId, role: MembershipRole.COUNSELLOR },
+        "11111111-1111-4111-8111-111111111111",
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

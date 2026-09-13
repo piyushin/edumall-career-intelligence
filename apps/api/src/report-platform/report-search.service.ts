@@ -48,24 +48,26 @@ export class ReportSearchService {
   }
 
   public async adminDetail(context: AuthContext, attemptId: string) {
-    const result = await this.searchAdmin(context, {
-      q: attemptId,
-      page: 1,
-      pageSize: 1,
-    } as ReportSearchQueryDto);
-    return this.detailResult(result.items[0]);
+    const result = await this.searchAdmin(context, this.detailQuery(attemptId));
+    return this.detailResult(result.items[0], attemptId);
   }
 
   public async staffDetail(context: AuthContext, attemptId: string) {
-    const result = await this.searchStaff(context, {
-      q: attemptId,
-      page: 1,
-      pageSize: 1,
-    } as ReportSearchQueryDto);
-    return this.detailResult(result.items[0]);
+    const result = await this.searchStaff(context, this.detailQuery(attemptId));
+    return this.detailResult(result.items[0], attemptId);
   }
 
-  private async search(context: AuthContext, query: ReportSearchQueryDto, counsellorOnly: boolean) {
+  // Detail lookups reuse the scoped search projection but match the attempt
+  // identifier exactly instead of through the free-text `contains` filters.
+  private detailQuery(attemptId: string): ReportSearchQueryDto & { attemptId: string } {
+    return { page: 1, pageSize: 1, attemptId };
+  }
+
+  private async search(
+    context: AuthContext,
+    query: ReportSearchQueryDto & { attemptId?: string },
+    counsellorOnly: boolean,
+  ) {
     const organizationId = this.resolveOrganizationScope(context, query.organizationId);
     const where = this.buildWhere(context, query, organizationId, counsellorOnly);
     const page = query.page ?? 1;
@@ -227,7 +229,7 @@ export class ReportSearchService {
 
   private buildWhere(
     context: AuthContext,
-    query: ReportSearchQueryDto,
+    query: ReportSearchQueryDto & { attemptId?: string },
     organizationId: string | undefined,
     counsellorOnly: boolean,
   ): Prisma.AssessmentAttemptWhereInput {
@@ -323,6 +325,7 @@ export class ReportSearchService {
     };
 
     return {
+      ...(query.attemptId ? { id: query.attemptId } : {}),
       status: AssessmentAttemptStatus.SUBMITTED,
       ...(Object.keys(submittedAt).length ? { submittedAt } : {}),
       assignment,
@@ -347,8 +350,8 @@ export class ReportSearchService {
     };
   }
 
-  private detailResult<T>(item: T | undefined): T {
-    if (!item)
+  private detailResult<T extends { attemptId: string }>(item: T | undefined, attemptId: string): T {
+    if (!item || item.attemptId !== attemptId)
       throw new NotFoundException({
         code: "ASSESSMENT_REPORT_NOT_FOUND",
         message: "Assessment report not found in your authorized scope.",

@@ -1,4 +1,4 @@
-import { ConflictException } from "@nestjs/common";
+import { ConflictException, ForbiddenException } from "@nestjs/common";
 import {
   CommerceCreditWalletOwnerType,
   CommerceCreditWalletStatus,
@@ -110,6 +110,40 @@ describe("ReportCreditService", () => {
     expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     });
+  });
+
+  it("refuses complimentary allotment and revocation from tenant administrators", async () => {
+    const { prisma, tx } = client();
+    const service = new ReportCreditService(prisma as unknown as PrismaClient);
+    const tenantAdmin: AuthContext = {
+      ...context,
+      organizationId,
+      role: MembershipRole.ORGANIZATION_ADMIN,
+      permissions: ["report.credit.manage"],
+    };
+    await expect(service.allot(tenantAdmin, walletId, 5)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    await expect(service.revokeUnusedAdminCredits(tenantAdmin, walletId, 1)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(tx.commerceCreditWallet.update).not.toHaveBeenCalled();
+    expect(tx.commerceCreditLedgerEntry.create).not.toHaveBeenCalled();
+  });
+
+  it("still lets tenant administrators consume credits they already hold", async () => {
+    const { prisma, tx } = client();
+    const tenantAdmin: AuthContext = {
+      ...context,
+      organizationId,
+      role: MembershipRole.ORGANIZATION_ADMIN,
+      permissions: ["report.credit.manage"],
+    };
+    const result = await new ReportCreditService(
+      prisma as unknown as PrismaClient,
+    ).consumeForAttempt(tenantAdmin, walletId, consumption);
+    expect(result.charged).toBe(true);
+    expect(tx.commerceCreditWallet.updateMany).toHaveBeenCalledOnce();
   });
 
   it("cannot consume into a negative wallet balance", async () => {
