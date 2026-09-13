@@ -1,4 +1,4 @@
-import { apiRequest } from "./api";
+import { API_BASE_URL, apiRequest } from "./api";
 
 export type AssessmentAssignmentStatus = "ACTIVE" | "CANCELLED" | "EXPIRED";
 export type AssessmentAttemptStatus = "IN_PROGRESS" | "SUBMITTED" | "ABANDONED";
@@ -158,4 +158,8 @@ export type CandidateAssessmentReport =
 
 export function getCandidateReport(attemptId: string): Promise<CandidateAssessmentReport> {
   return apiRequest<CandidateAssessmentReport>(`/assessments/attempts/${attemptId}/report`);
+}
+
+export function getCandidateReportPdfUrl(attemptId: string): string {
+  return `${API_BASE_URL}/assessments/attempts/${attemptId}/report/pdf`;
 }

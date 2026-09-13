@@ -1,53 +1,32 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { AssessmentReportReleaseStatus, type PrismaClient } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
-
-/**
- * Shape written by AssessmentReportDataService.createSnapshot. Only the fields the
- * candidate-facing summary reads are declared here.
- */
-interface AssessmentReportSnapshotPayload {
-  assessment: {
-    title: string;
-    edition: string;
-    form: string;
-    language: string;
-  };
-  scoring: {
-    constructs: Array<{
-      assessmentConstructId: string;
-      code: string;
-      name: string;
-    }>;
-  };
-  interpretation: {
-    applications: Array<{
-      assessmentConstructId: string;
-      ruleCode: string;
-      outputData: unknown;
-    }>;
-  };
-}
+import {
+  summarizeReportPayload,
+  type AssessmentReleasedReportSummary,
+  type AssessmentReportSnapshotPayload,
+} from "./assessment-report-payload";
 
 export type AssessmentReportView =
   | { status: "PENDING" }
   | { status: "WITHDRAWN" }
-  | {
+  | ({
       status: "RELEASED";
       releasedAt: Date | null;
-      assessment: {
-        title: string;
-        edition: string;
-        form: string;
-        language: string;
-      };
-      results: Array<{
-        constructCode: string | null;
-        constructName: string | null;
-        outputData: unknown;
-      }>;
-    };
+    } & AssessmentReleasedReportSummary);
+
+export interface AssessmentReleasedReportPdfSource extends AssessmentReleasedReportSummary {
+  releasedAt: Date | null;
+  candidateName: string;
+  organizationName: string;
+}
 
 /**
  * Candidate self-service report view. Only ever returns the student-friendly summary
@@ -111,28 +90,90 @@ export class AssessmentReportViewService {
     const payload = release.reportDataSnapshot
       .payload as unknown as AssessmentReportSnapshotPayload;
 
-    const constructsById = new Map(
-      payload.scoring.constructs.map((construct) => [construct.assessmentConstructId, construct]),
-    );
-
     return {
       status: "RELEASED",
       releasedAt: release.releasedAt,
-      assessment: {
-        title: payload.assessment.title,
-        edition: payload.assessment.edition,
-        form: payload.assessment.form,
-        language: payload.assessment.language,
-      },
-      results: payload.interpretation.applications.map((application) => {
-        const construct = constructsById.get(application.assessmentConstructId);
+      ...summarizeReportPayload(payload),
+    };
+  }
 
-        return {
-          constructCode: construct?.code ?? null,
-          constructName: construct?.name ?? null,
-          outputData: application.outputData,
-        };
-      }),
+  /**
+   * Same RELEASED-only gate as getMyReport, but throws instead of returning a
+   * PENDING/WITHDRAWN shape (there is no useful PDF for those), and additionally
+   * resolves the candidate and organization names for the document header.
+   */
+  public async getReleasedReportForPdf(
+    context: AuthContext,
+    attemptId: string,
+  ): Promise<AssessmentReleasedReportPdfSource> {
+    const organizationId = this.requireOrganization(context);
+
+    const attempt = await this.prisma.assessmentAttempt.findFirst({
+      where: {
+        id: attemptId,
+        assignment: {
+          organizationId,
+          userId: context.userId,
+        },
+      },
+      select: {
+        assignment: {
+          select: {
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+            organization: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!attempt) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_ATTEMPT_NOT_FOUND",
+        message: "Assessment attempt not found.",
+      });
+    }
+
+    const release = await this.prisma.assessmentReportRelease.findUnique({
+      where: {
+        attemptId,
+      },
+      select: {
+        status: true,
+        releasedAt: true,
+        reportDataSnapshot: {
+          select: {
+            payload: true,
+          },
+        },
+      },
+    });
+
+    if (!release || release.status !== AssessmentReportReleaseStatus.RELEASED) {
+      throw new ConflictException({
+        code: "ASSESSMENT_REPORT_NOT_RELEASED",
+        message: "This report has not been released yet.",
+      });
+    }
+
+    const payload = release.reportDataSnapshot
+      .payload as unknown as AssessmentReportSnapshotPayload;
+
+    const { user, organization } = attempt.assignment;
+
+    return {
+      releasedAt: release.releasedAt,
+      candidateName: `${user.firstName} ${user.lastName}`,
+      organizationName: organization.name,
+      ...summarizeReportPayload(payload),
     };
   }
 

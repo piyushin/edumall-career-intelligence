@@ -7,6 +7,7 @@ import { ApiError } from "../../../../lib/api";
 import {
   getCandidateAttempt,
   getCandidateReport,
+  getCandidateReportPdfUrl,
   saveCandidateResponse,
   submitCandidateAttempt,
   type CandidateAssessmentItem,
@@ -99,6 +100,14 @@ function SubmittedReportPanel({
                 </li>
               ))}
             </ul>
+            <a
+              href={getCandidateReportPdfUrl(attemptId)}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-5 inline-flex items-center rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600"
+            >
+              Download PDF
+            </a>
           </div>
         ) : report?.status === "WITHDRAWN" ? (
           <p className="mt-4 text-sm leading-6 text-slate-500">

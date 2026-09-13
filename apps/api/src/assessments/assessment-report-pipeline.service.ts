@@ -2,6 +2,7 @@ import { ConflictException, Inject, Injectable } from "@nestjs/common";
 import {
   AssessmentInterpretationSetStatus,
   AssessmentNormSetStatus,
+  Prisma,
   type PrismaClient,
 } from "@prisma/client";
 import { DATABASE_PRISMA } from "../database/database.tokens";
@@ -157,6 +158,15 @@ export class AssessmentReportPipelineService {
       interpretationSet.id,
     );
 
+    const existingRelease = await this.prisma.assessmentReportRelease.findUnique({
+      where: {
+        attemptId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
     const release = await this.prisma.assessmentReportRelease.upsert({
       where: {
         attemptId,
@@ -172,11 +182,36 @@ export class AssessmentReportPipelineService {
       },
     });
 
+    if (!existingRelease) {
+      await this.recordAudit(release.id, organizationId, { attemptId });
+    }
+
     return {
       generated: true,
       scoringRunId: scoringRun.id,
       snapshotId: snapshot.id,
       releaseId: release.id,
     };
+  }
+
+  private async recordAudit(
+    releaseId: string,
+    organizationId: string,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          action: "report.generated",
+          actorUserId: null,
+          entityType: "AssessmentReportRelease",
+          entityId: releaseId,
+          organizationId,
+          metadata: metadata as Prisma.InputJsonValue,
+        },
+      });
+    } catch {
+      // Audit availability must not alter report generation.
+    }
   }
 }

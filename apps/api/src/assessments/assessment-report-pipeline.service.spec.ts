@@ -41,7 +41,11 @@ function createPrisma() {
       findMany: vi.fn().mockResolvedValue([{ id: interpretationSetId }]),
     },
     assessmentReportRelease: {
+      findUnique: vi.fn().mockResolvedValue(null),
       upsert: vi.fn().mockResolvedValue({ id: releaseId }),
+    },
+    auditLog: {
+      create: vi.fn().mockResolvedValue({}),
     },
   };
 }
@@ -112,6 +116,24 @@ describe("AssessmentReportPipelineService", () => {
         update: {},
       }),
     );
+
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "report.generated",
+          entityId: releaseId,
+          organizationId,
+        }),
+      }),
+    );
+  });
+
+  it("does not re-audit-log a report that was already generated", async () => {
+    prisma.assessmentReportRelease.findUnique.mockResolvedValue({ id: releaseId });
+
+    await service.generateReportIfReady(attemptId);
+
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
 
   it("is not ready when no norm set exists for the pinned norm version", async () => {

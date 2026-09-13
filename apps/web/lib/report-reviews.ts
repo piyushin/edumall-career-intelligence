@@ -1,4 +1,4 @@
-import { apiRequest } from "./api";
+import { API_BASE_URL, apiRequest } from "./api";
 
 export type ReportReleaseStatus = "PENDING_REVIEW" | "RELEASED" | "WITHDRAWN";
 
@@ -131,4 +131,8 @@ export function addCounsellorNote(attemptId: string, body: string): Promise<Repo
     method: "POST",
     body: JSON.stringify({ body }),
   });
+}
+
+export function getReportReviewPdfUrl(attemptId: string): string {
+  return `${API_BASE_URL}/report-reviews/${attemptId}/pdf`;
 }

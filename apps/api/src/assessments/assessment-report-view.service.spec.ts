@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { AssessmentReportReleaseStatus, MembershipRole, type PrismaClient } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../auth/auth.types";
@@ -143,6 +143,93 @@ describe("AssessmentReportViewService", () => {
           outputData: { band: "Strong" },
         },
       ],
+    });
+  });
+
+  describe("getReleasedReportForPdf", () => {
+    it("rejects a report that has not been released", async () => {
+      prisma.assessmentAttempt.findFirst.mockResolvedValue({
+        assignment: {
+          user: { firstName: "Asha", lastName: "Patel" },
+          organization: { name: "Gandhinagar Model School" },
+        },
+      });
+      prisma.assessmentReportRelease.findUnique.mockResolvedValue({
+        status: AssessmentReportReleaseStatus.PENDING_REVIEW,
+        releasedAt: null,
+        reportDataSnapshot: { payload: {} },
+      });
+
+      await expect(service.getReleasedReportForPdf(context, attemptId)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it("does not find another candidate's attempt", async () => {
+      prisma.assessmentAttempt.findFirst.mockResolvedValue(null);
+
+      await expect(service.getReleasedReportForPdf(context, attemptId)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it("resolves candidate and organization names alongside the summary", async () => {
+      prisma.assessmentAttempt.findFirst.mockResolvedValue({
+        assignment: {
+          user: { firstName: "Asha", lastName: "Patel" },
+          organization: { name: "Gandhinagar Model School" },
+        },
+      });
+
+      const releasedAt = new Date("2026-01-02T00:00:00Z");
+
+      prisma.assessmentReportRelease.findUnique.mockResolvedValue({
+        status: AssessmentReportReleaseStatus.RELEASED,
+        releasedAt,
+        reportDataSnapshot: {
+          payload: {
+            assessment: {
+              title: "Career Aptitude Assessment",
+              edition: "2026",
+              form: "A",
+              language: "en",
+            },
+            scoring: {
+              constructs: [{ assessmentConstructId: constructId, code: "logic", name: "Logic" }],
+            },
+            interpretation: {
+              applications: [
+                {
+                  assessmentConstructId: constructId,
+                  ruleCode: "logic-high",
+                  outputData: { band: "Strong" },
+                },
+              ],
+            },
+          },
+        },
+      });
+
+      const result = await service.getReleasedReportForPdf(context, attemptId);
+
+      expect(result).toEqual({
+        releasedAt,
+        candidateName: "Asha Patel",
+        organizationName: "Gandhinagar Model School",
+        assessment: {
+          title: "Career Aptitude Assessment",
+          edition: "2026",
+          form: "A",
+          language: "en",
+        },
+        results: [
+          {
+            constructCode: "logic",
+            constructName: "Logic",
+            outputData: { band: "Strong" },
+          },
+        ],
+      });
     });
   });
 });

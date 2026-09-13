@@ -46,6 +46,9 @@ function createPrisma() {
       findMany: vi.fn(),
       create: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn().mockResolvedValue({}),
+    },
   };
 }
 
@@ -126,6 +129,18 @@ describe("AssessmentReportReviewService", () => {
           }),
         }),
       );
+
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: "report.released",
+            actorUserId: counsellorUserId,
+            entityType: "AssessmentReportRelease",
+            entityId: releaseId,
+            organizationId,
+          }),
+        }),
+      );
     });
 
     it("rejects releasing a report that is not pending review", async () => {
@@ -194,6 +209,17 @@ describe("AssessmentReportReviewService", () => {
           }),
         }),
       );
+
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: "report.withdrawn",
+            entityType: "AssessmentReportRelease",
+            entityId: releaseId,
+            metadata: { attemptId, reason: "Data quality concern" },
+          }),
+        }),
+      );
     });
 
     it("rejects withdrawing a report that has not been released", async () => {
@@ -216,7 +242,9 @@ describe("AssessmentReportReviewService", () => {
         status: AssessmentReportReleaseStatus.PENDING_REVIEW,
         organizationId,
       });
-      prisma.assessmentCounsellorNote.create.mockResolvedValue({});
+      const noteId = "99999999-9999-4999-8999-999999999999";
+
+      prisma.assessmentCounsellorNote.create.mockResolvedValue({ id: noteId });
 
       await service.addNote(counsellorContext, attemptId, "Strong analytical aptitude.");
 
@@ -230,6 +258,21 @@ describe("AssessmentReportReviewService", () => {
           },
         }),
       );
+
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: "report.note_added",
+            entityType: "AssessmentCounsellorNote",
+            entityId: noteId,
+            organizationId,
+          }),
+        }),
+      );
+
+      const auditedMetadata = prisma.auditLog.create.mock.calls[0]?.[0]?.data.metadata;
+
+      expect(auditedMetadata).not.toHaveProperty("body");
     });
 
     it("lists notes only after confirming scope", async () => {
@@ -247,6 +290,63 @@ describe("AssessmentReportReviewService", () => {
         expect.objectContaining({
           where: { attemptId },
         }),
+      );
+    });
+  });
+
+  describe("getReleaseForPdf", () => {
+    it("resolves the PDF source for a release in any status", async () => {
+      prisma.assessmentReportRelease.findFirst.mockResolvedValue({
+        id: releaseId,
+        status: AssessmentReportReleaseStatus.PENDING_REVIEW,
+        organizationId,
+      });
+
+      const releasedAt = new Date("2026-01-02T00:00:00Z");
+
+      prisma.assessmentReportRelease.findUniqueOrThrow.mockResolvedValue({
+        releasedAt,
+        attempt: {
+          assignment: {
+            user: { firstName: "Asha", lastName: "Patel" },
+            organization: { name: "Gandhinagar Model School" },
+          },
+        },
+        reportDataSnapshot: {
+          payload: {
+            assessment: {
+              title: "Career Aptitude Assessment",
+              edition: "2026",
+              form: "A",
+              language: "en",
+            },
+            scoring: { constructs: [] },
+            interpretation: { applications: [] },
+          },
+        },
+      });
+
+      const result = await service.getReleaseForPdf(counsellorContext, attemptId);
+
+      expect(result).toEqual({
+        releasedAt,
+        candidateName: "Asha Patel",
+        organizationName: "Gandhinagar Model School",
+        assessment: {
+          title: "Career Aptitude Assessment",
+          edition: "2026",
+          form: "A",
+          language: "en",
+        },
+        results: [],
+      });
+    });
+
+    it("does not find a release outside the caller's organization", async () => {
+      prisma.assessmentReportRelease.findFirst.mockResolvedValue(null);
+
+      await expect(service.getReleaseForPdf(counsellorContext, attemptId)).rejects.toBeInstanceOf(
+        NotFoundException,
       );
     });
   });

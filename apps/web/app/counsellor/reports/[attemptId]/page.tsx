@@ -9,6 +9,7 @@ import { getSession, type AuthSession } from "../../../../lib/auth";
 import {
   addCounsellorNote,
   getReportReleaseDetail,
+  getReportReviewPdfUrl,
   releaseReport,
   withdrawReport,
   type ReportReleaseDetail,
@@ -204,21 +205,28 @@ export default function CounsellorReportDetailPage() {
           </div>
         ) : null}
 
-        {canAct ? (
-          <div className="mt-4 flex flex-wrap gap-3">
-            {detail.status === "PENDING_REVIEW" ? (
-              <Button onClick={handleRelease} disabled={acting}>
-                {acting ? "Releasing..." : "Release to candidate"}
-              </Button>
-            ) : null}
+        <div className="mt-4 flex flex-wrap gap-3">
+          <a
+            href={getReportReviewPdfUrl(attemptId)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+          >
+            Preview PDF
+          </a>
 
-            {detail.status === "RELEASED" && !showWithdrawForm ? (
-              <Button variant="secondary" onClick={() => setShowWithdrawForm(true)}>
-                Withdraw report
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
+          {canAct && detail.status === "PENDING_REVIEW" ? (
+            <Button onClick={handleRelease} disabled={acting}>
+              {acting ? "Releasing..." : "Release to candidate"}
+            </Button>
+          ) : null}
+
+          {canAct && detail.status === "RELEASED" && !showWithdrawForm ? (
+            <Button variant="secondary" onClick={() => setShowWithdrawForm(true)}>
+              Withdraw report
+            </Button>
+          ) : null}
+        </div>
 
         {showWithdrawForm ? (
           <form

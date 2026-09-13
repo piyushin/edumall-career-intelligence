@@ -10,10 +10,16 @@ import {
   AssessmentReportReleaseStatus,
   MembershipRole,
   OrganizationStatus,
+  Prisma,
   type PrismaClient,
 } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
 import { DATABASE_PRISMA } from "../database/database.tokens";
+import {
+  summarizeReportPayload,
+  type AssessmentReportSnapshotPayload,
+} from "./assessment-report-payload";
+import type { AssessmentReleasedReportPdfSource } from "./assessment-report-view.service";
 
 const releaseListSelect = {
   id: true,
@@ -35,6 +41,11 @@ const releaseListSelect = {
               email: true,
               firstName: true,
               lastName: true,
+            },
+          },
+          organization: {
+            select: {
+              name: true,
             },
           },
           assessmentVersion: {
@@ -125,6 +136,62 @@ export class AssessmentReportReviewService {
     return { ...release, notes };
   }
 
+  /**
+   * Lets a counsellor preview the exact candidate-facing PDF before releasing it (or
+   * re-check it after release/withdrawal). Available for a release in any status, unlike
+   * the candidate's own endpoint which only ever serves a RELEASED report.
+   */
+  public async getReleaseForPdf(
+    context: AuthContext,
+    attemptId: string,
+  ): Promise<AssessmentReleasedReportPdfSource> {
+    const scope = await this.findReleaseInScope(context, attemptId);
+
+    const release = await this.prisma.assessmentReportRelease.findUniqueOrThrow({
+      where: {
+        id: scope.id,
+      },
+      select: {
+        releasedAt: true,
+        attempt: {
+          select: {
+            assignment: {
+              select: {
+                user: {
+                  select: {
+                    firstName: true,
+                    lastName: true,
+                  },
+                },
+                organization: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        reportDataSnapshot: {
+          select: {
+            payload: true,
+          },
+        },
+      },
+    });
+
+    const payload = release.reportDataSnapshot
+      .payload as unknown as AssessmentReportSnapshotPayload;
+    const { user, organization } = release.attempt.assignment;
+
+    return {
+      releasedAt: release.releasedAt,
+      candidateName: `${user.firstName} ${user.lastName}`,
+      organizationName: organization.name,
+      ...summarizeReportPayload(payload),
+    };
+  }
+
   public async release(context: AuthContext, attemptId: string) {
     const release = await this.findReleaseInScope(context, attemptId);
 
@@ -137,7 +204,7 @@ export class AssessmentReportReviewService {
 
     const now = new Date();
 
-    return this.prisma.assessmentReportRelease.update({
+    const updated = await this.prisma.assessmentReportRelease.update({
       where: {
         id: release.id,
       },
@@ -149,6 +216,17 @@ export class AssessmentReportReviewService {
       },
       select: releaseListSelect,
     });
+
+    await this.recordAudit(
+      context,
+      "report.released",
+      "AssessmentReportRelease",
+      release.id,
+      release.organizationId,
+      { attemptId },
+    );
+
+    return updated;
   }
 
   public async withdraw(context: AuthContext, attemptId: string, reason: string) {
@@ -161,7 +239,7 @@ export class AssessmentReportReviewService {
       });
     }
 
-    return this.prisma.assessmentReportRelease.update({
+    const updated = await this.prisma.assessmentReportRelease.update({
       where: {
         id: release.id,
       },
@@ -172,6 +250,17 @@ export class AssessmentReportReviewService {
       },
       select: releaseListSelect,
     });
+
+    await this.recordAudit(
+      context,
+      "report.withdrawn",
+      "AssessmentReportRelease",
+      release.id,
+      release.organizationId,
+      { attemptId, reason },
+    );
+
+    return updated;
   }
 
   public async listNotes(context: AuthContext, attemptId: string) {
@@ -204,7 +293,7 @@ export class AssessmentReportReviewService {
   public async addNote(context: AuthContext, attemptId: string, body: string) {
     const release = await this.findReleaseInScope(context, attemptId);
 
-    return this.prisma.assessmentCounsellorNote.create({
+    const note = await this.prisma.assessmentCounsellorNote.create({
       data: {
         attemptId,
         organizationId: release.organizationId,
@@ -226,6 +315,19 @@ export class AssessmentReportReviewService {
         },
       },
     });
+
+    // The note body itself is private counsellor content (D-010, D-012) and is
+    // never written to the audit trail — only the fact that a note was added.
+    await this.recordAudit(
+      context,
+      "report.note_added",
+      "AssessmentCounsellorNote",
+      note.id,
+      release.organizationId,
+      { attemptId },
+    );
+
+    return note;
   }
 
   private async findReleaseInScope(context: AuthContext, attemptId: string) {
@@ -316,5 +418,29 @@ export class AssessmentReportReviewService {
     }
 
     return context.organizationId;
+  }
+
+  private async recordAudit(
+    context: AuthContext,
+    action: string,
+    entityType: "AssessmentReportRelease" | "AssessmentCounsellorNote",
+    entityId: string,
+    organizationId: string,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          action,
+          actorUserId: context.userId,
+          entityType,
+          entityId,
+          organizationId,
+          metadata: metadata as Prisma.InputJsonValue,
+        },
+      });
+    } catch {
+      // Audit availability must not alter the report-review response.
+    }
   }
 }
