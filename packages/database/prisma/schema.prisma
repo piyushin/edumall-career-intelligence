@@ -836,7 +836,12 @@ model UserConsentRecord {
   user                 User                @relation(fields: [userId], references: [id], onDelete: Restrict)
   consentDocument      ConsentDocument     @relation(fields: [consentDocumentId], references: [id], onDelete: Restrict)
 
-  @@unique([userId, consentDocumentId])
+  /// A minor's flow requires two *different-role* acceptances (GUARDIAN and
+  /// STUDENT_ASSENT) against the very same ASSESSMENT_DATA_PROCESSING document,
+  /// so the natural key must include the role — (userId, consentDocumentId) alone
+  /// would let the second acceptance collide with the first and silently never
+  /// record, leaving a minor's consent permanently incomplete.
+  @@unique([userId, consentDocumentId, acceptedByRole])
   @@index([userId])
   @@index([consentDocumentId])
   @@map("user_consent_records")

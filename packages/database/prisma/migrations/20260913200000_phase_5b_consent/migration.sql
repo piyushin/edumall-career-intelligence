@@ -122,11 +122,16 @@ CREATE UNIQUE INDEX
 ON "consent_documents"("type")
 WHERE "status" = 'PUBLISHED';
 
+-- A minor's flow needs two different-role acceptances (GUARDIAN and
+-- STUDENT_ASSENT) against the same document, so the role is part of the key --
+-- (user_id, consent_document_id) alone would let the second acceptance collide
+-- with the first and never actually get recorded.
 CREATE UNIQUE INDEX
-    "user_consent_records_user_id_consent_document_id_key"
+    "user_consent_records_user_id_consent_document_id_accepted_by_role_key"
 ON "user_consent_records"(
     "user_id",
-    "consent_document_id"
+    "consent_document_id",
+    "accepted_by_role"
 );
 
 CREATE INDEX

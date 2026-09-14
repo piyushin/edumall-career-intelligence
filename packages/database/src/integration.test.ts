@@ -1010,4 +1010,84 @@ describe.skipIf(!runIntegrationTests)("Phase 2 assessment database integration",
       }),
     ).rejects.toThrow(/Retired consent documents are immutable/);
   });
+
+  it("lets a minor's guardian and the minor themselves both accept the same document (Phase 5B)", async () => {
+    const suffix = randomUUID();
+
+    const candidate = await prisma.user.create({
+      data: {
+        email: `phase-5b-minor-${suffix}@example.test`,
+        normalizedEmail: `phase-5b-minor-${suffix}@example.test`,
+        firstName: "Minor",
+        lastName: "Candidate",
+        status: UserStatus.ACTIVE,
+      },
+    });
+
+    await prisma.consentDocument.updateMany({
+      where: {
+        type: ConsentDocumentType.ASSESSMENT_DATA_PROCESSING,
+        status: ConsentDocumentStatus.PUBLISHED,
+      },
+      data: {
+        status: ConsentDocumentStatus.RETIRED,
+        retiredAt: new Date(),
+      },
+    });
+
+    const document = await prisma.consentDocument.create({
+      data: {
+        type: ConsentDocumentType.ASSESSMENT_DATA_PROCESSING,
+        version: `v1-${suffix}`,
+        title: "Assessment Data Processing",
+        bodyText: "Placeholder text pending legal review.",
+        status: ConsentDocumentStatus.PUBLISHED,
+        publishedAt: new Date(),
+      },
+    });
+
+    // A minor's flow requires both a GUARDIAN acceptance and the candidate's own
+    // STUDENT_ASSENT acceptance against this exact same document. If the unique
+    // constraint were (userId, consentDocumentId) alone, the second insert would
+    // collide with the first and the minor's consent could never be completed.
+    const guardianRecord = await prisma.userConsentRecord.create({
+      data: {
+        userId: candidate.id,
+        consentDocumentId: document.id,
+        acceptedByRole: ConsentAcceptorRole.GUARDIAN,
+        guardianName: "Priya Shah",
+        guardianEmail: `guardian-${suffix}@example.test`,
+        guardianRelationship: "Mother",
+      },
+    });
+
+    const studentAssentRecord = await prisma.userConsentRecord.create({
+      data: {
+        userId: candidate.id,
+        consentDocumentId: document.id,
+        acceptedByRole: ConsentAcceptorRole.STUDENT_ASSENT,
+      },
+    });
+
+    expect(guardianRecord.acceptedByRole).toBe(ConsentAcceptorRole.GUARDIAN);
+    expect(studentAssentRecord.acceptedByRole).toBe(ConsentAcceptorRole.STUDENT_ASSENT);
+
+    const records = await prisma.userConsentRecord.findMany({
+      where: { userId: candidate.id, consentDocumentId: document.id },
+    });
+
+    expect(records).toHaveLength(2);
+
+    // Accepting the very same role twice for the same document is still a genuine
+    // duplicate and must be rejected.
+    await expect(
+      prisma.userConsentRecord.create({
+        data: {
+          userId: candidate.id,
+          consentDocumentId: document.id,
+          acceptedByRole: ConsentAcceptorRole.STUDENT_ASSENT,
+        },
+      }),
+    ).rejects.toThrow(/Unique constraint failed/);
+  });
 });

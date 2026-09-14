@@ -277,5 +277,85 @@ describe("ConsentService", () => {
         }),
       ).resolves.toBeUndefined();
     });
+
+    it("completes a minor's requirements once the guardian and the candidate have both accepted the shared document", async () => {
+      // Regression test for a real bug: GUARDIAN and STUDENT_ASSENT acceptances
+      // land against the very same ASSESSMENT_DATA_PROCESSING document. If the
+      // unique constraint the create() below simulates were keyed on
+      // (userId, consentDocumentId) alone rather than including the role, the
+      // second create would collide with the first and never be persisted,
+      // leaving a minor's consent permanently incomplete. Prisma-level
+      // enforcement of this is covered by the real-Postgres integration test;
+      // this documents the service-level acceptance flow it depends on.
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
+        dateOfBirth: new Date("2015-01-01T00:00:00Z"),
+      });
+      prisma.consentDocument.findMany.mockResolvedValue([
+        {
+          id: privacyDocumentId,
+          type: ConsentDocumentType.PRIVACY_NOTICE,
+          version: "v1",
+          title: "Privacy Notice",
+          bodyText: "...",
+        },
+        {
+          id: assessmentDocumentId,
+          type: ConsentDocumentType.ASSESSMENT_DATA_PROCESSING,
+          version: "v1",
+          title: "Assessment Data Processing",
+          bodyText: "...",
+        },
+      ]);
+
+      const created: Array<{ consentDocumentId: string; acceptedByRole: ConsentAcceptorRole }> = [];
+      prisma.userConsentRecord.findMany.mockImplementation(() => Promise.resolve(created));
+      prisma.userConsentRecord.create.mockImplementation(
+        ({
+          data,
+        }: {
+          data: { consentDocumentId: string; acceptedByRole: ConsentAcceptorRole };
+        }) => {
+          created.push({
+            consentDocumentId: data.consentDocumentId,
+            acceptedByRole: data.acceptedByRole,
+          });
+          return Promise.resolve({});
+        },
+      );
+
+      await service.acceptConsentDocument(userId, {
+        consentDocumentId: privacyDocumentId,
+        acceptedByRole: ConsentAcceptorRole.GUARDIAN,
+        guardianName: "Priya Shah",
+        guardianEmail: "guardian@example.test",
+        guardianRelationship: "Mother",
+      });
+
+      await service.acceptConsentDocument(userId, {
+        consentDocumentId: assessmentDocumentId,
+        acceptedByRole: ConsentAcceptorRole.GUARDIAN,
+        guardianName: "Priya Shah",
+        guardianEmail: "guardian@example.test",
+        guardianRelationship: "Mother",
+      });
+
+      await service.acceptConsentDocument(userId, {
+        consentDocumentId: assessmentDocumentId,
+        acceptedByRole: ConsentAcceptorRole.STUDENT_ASSENT,
+      });
+
+      expect(created).toContainEqual({
+        consentDocumentId: assessmentDocumentId,
+        acceptedByRole: ConsentAcceptorRole.GUARDIAN,
+      });
+      expect(created).toContainEqual({
+        consentDocumentId: assessmentDocumentId,
+        acceptedByRole: ConsentAcceptorRole.STUDENT_ASSENT,
+      });
+
+      const result = await service.getRequirements(userId);
+
+      expect(result.complete).toBe(true);
+    });
   });
 });

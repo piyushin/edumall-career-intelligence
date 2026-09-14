@@ -24,12 +24,14 @@ describe("Phase 5B consent schema", () => {
     expect(Object.values(ConsentAcceptorRole)).toEqual(["SELF", "GUARDIAN", "STUDENT_ASSENT"]);
   });
 
-  it("adds date of birth to users and keeps one acceptance per user per document", () => {
+  it("adds date of birth to users and keeps one acceptance per user per document per role", () => {
     const user = Prisma.dmmf.datamodel.models.find((model) => model.name === "User");
     const record = Prisma.dmmf.datamodel.models.find((model) => model.name === "UserConsentRecord");
 
     expect(user?.fields.some((field) => field.name === "dateOfBirth")).toBe(true);
-    expect(record?.uniqueFields).toContainEqual(["userId", "consentDocumentId"]);
+    // Role is part of the natural key: a minor's flow needs both a GUARDIAN and a
+    // STUDENT_ASSENT acceptance against the very same document.
+    expect(record?.uniqueFields).toContainEqual(["userId", "consentDocumentId", "acceptedByRole"]);
   });
 
   it("ships lifecycle, one-published-per-type, guardian-field, and immutability guards without seeding legal text", () => {
