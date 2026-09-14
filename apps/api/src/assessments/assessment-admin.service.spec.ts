@@ -45,6 +45,7 @@ function createPrisma() {
     assessmentConstruct: {
       create: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
     assessmentItem: {
       create: vi.fn(),
@@ -403,6 +404,50 @@ describe("AssessmentAdminService", () => {
     ).rejects.toBeInstanceOf(NotFoundException);
 
     expect(prisma.assessmentVersion.update).not.toHaveBeenCalled();
+  });
+
+  it("lists constructs for a published version without requiring DRAFT status", async () => {
+    const definitionId = "23232323-2323-4232-8232-232323232323";
+    const versionId = "24242424-2424-4242-8242-242424242424";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.PUBLISHED,
+      assessmentDefinition: {
+        organizationId,
+      },
+    });
+    prisma.assessmentConstruct.findMany.mockResolvedValue([
+      { id: "construct-1", code: "APT", name: "Aptitude", orderIndex: 0 },
+    ]);
+
+    const constructs = await service.listConstructs(organizationContext, definitionId, versionId);
+
+    expect(constructs).toHaveLength(1);
+    expect(prisma.assessmentConstruct.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { assessmentVersionId: versionId } }),
+    );
+  });
+
+  it("rejects listing constructs for a version outside the caller's organization", async () => {
+    const definitionId = "d1d1d1d1-2323-4232-8232-232323232323";
+    const versionId = "d2d2d2d2-2424-4242-8242-242424242424";
+
+    prisma.assessmentVersion.findUnique.mockResolvedValue({
+      id: versionId,
+      assessmentDefinitionId: definitionId,
+      status: AssessmentVersionStatus.PUBLISHED,
+      assessmentDefinition: {
+        organizationId: "some-other-org",
+      },
+    });
+
+    await expect(
+      service.listConstructs(organizationContext, definitionId, versionId),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.assessmentConstruct.findMany).not.toHaveBeenCalled();
   });
 
   it("creates a construct only inside an owned DRAFT version", async () => {

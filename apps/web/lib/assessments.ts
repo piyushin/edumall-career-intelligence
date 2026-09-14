@@ -146,6 +146,20 @@ export async function getAssessmentVersionContent(
   );
 }
 
+/**
+ * Construct list for a version of any status. Unlike getAssessmentVersionContent (which
+ * the API rejects for a non-DRAFT version), this works for a published version too --
+ * norm sets and interpretation sets are commonly authored once item content is final.
+ */
+export async function listAssessmentConstructs(
+  definitionId: string,
+  versionId: string,
+): Promise<AssessmentConstruct[]> {
+  return apiRequest<AssessmentConstruct[]>(
+    `/admin/assessments/${definitionId}/versions/${versionId}/constructs`,
+  );
+}
+
 export async function createAssessmentConstruct(
   definitionId: string,
   versionId: string,
