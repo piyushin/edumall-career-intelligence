@@ -311,7 +311,11 @@ function NormSetsSection({
     } finally {
       setLoading(false);
     }
-  }, [definitionId, versionId]);
+    // selectedId is read only to decide whether the current selection survived this
+    // reload; omitting it would leave this callback closed over a stale selectedId,
+    // wrongly resetting the admin's selection back to the first norm set after every
+    // create/publish/retire action once there is more than one norm set.
+  }, [definitionId, versionId, selectedId]);
 
   useEffect(() => {
     void load();
@@ -784,7 +788,10 @@ function InterpretationSetsSection({
     } finally {
       setLoading(false);
     }
-  }, [definitionId, versionId]);
+    // See the matching comment in NormSetsSection.load: selectedId must be a dependency
+    // or this callback stays closed over a stale value and silently resets the admin's
+    // selection to the first interpretation set after every action.
+  }, [definitionId, versionId, selectedId]);
 
   useEffect(() => {
     void load();

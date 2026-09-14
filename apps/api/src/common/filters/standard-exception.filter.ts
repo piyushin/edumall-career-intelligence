@@ -1,4 +1,11 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from "@nestjs/common";
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from "@nestjs/common";
 import type { AppConfig } from "@edumall/config";
 import type { StandardErrorBody } from "@edumall/shared-types";
 import type { Request, Response } from "express";
@@ -13,6 +20,8 @@ interface ExceptionResponse {
 
 @Catch()
 export class StandardExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(StandardExceptionFilter.name);
+
   public constructor(private readonly config: AppConfig) {}
 
   public catch(exception: unknown, host: ArgumentsHost): void {
@@ -24,6 +33,21 @@ export class StandardExceptionFilter implements ExceptionFilter {
     const exceptionResponse = getExceptionResponse(exception);
     const message = getSafeMessage(statusCode, exceptionResponse, this.config.isProduction);
     const code = exceptionResponse.code ?? getDefaultCode(statusCode);
+
+    // A 5xx response always means an unexpected/unhandled failure (any known,
+    // intentional error path throws an HttpException with a 4xx status), so it is
+    // always worth full server-side detail regardless of environment -- the client
+    // response is deliberately still sanitized by getSafeMessage above. Without this,
+    // an unexpected error is otherwise completely invisible: no other part of the
+    // request pipeline logs it.
+    if (statusCode >= 500) {
+      this.logger.error(
+        `${request.method} ${request.originalUrl} -> ${statusCode} ${code}: ${
+          exception instanceof Error ? exception.message : String(exception)
+        }`,
+        exception instanceof Error ? exception.stack : undefined,
+      );
+    }
 
     const errorBody: StandardErrorBody["error"] = {
       code,

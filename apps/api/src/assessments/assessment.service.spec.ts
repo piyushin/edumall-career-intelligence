@@ -48,6 +48,9 @@ function createPrisma() {
       deleteMany: vi.fn(),
       createMany: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn(),
+    },
     $transaction: vi.fn(),
   };
 
@@ -331,5 +334,61 @@ describe("AssessmentService", () => {
 
     expect(result.status).toBe("submitted");
     expect(reportPipeline.generateReportIfReady).toHaveBeenCalledWith(attemptId);
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "report.generation_failed",
+          entityType: "AssessmentAttempt",
+          entityId: attemptId,
+          organizationId,
+          metadata: { reason: "norm set not published" },
+        }),
+      }),
+    );
+  });
+
+  it("does not let an audit-log write failure surface to the candidate", async () => {
+    const reportPipeline = {
+      generateReportIfReady: vi.fn().mockRejectedValue(new Error("norm set not published")),
+    } as unknown as AssessmentReportPipelineService;
+
+    service = new AssessmentService(
+      prisma as unknown as PrismaClient,
+      reportPipeline,
+      consent as unknown as ConsentService,
+    );
+
+    prisma.auditLog.create.mockRejectedValue(new Error("audit store unavailable"));
+
+    prisma.assessmentAttempt.findFirst.mockResolvedValue({
+      id: attemptId,
+      status: AssessmentAttemptStatus.IN_PROGRESS,
+      submittedAt: null,
+      assignment: {
+        assessmentVersion: {
+          items: [
+            {
+              id: itemId,
+              type: AssessmentItemType.BOOLEAN,
+            },
+          ],
+        },
+      },
+      responses: [
+        {
+          itemId,
+          textValue: null,
+          numericValue: null,
+          booleanValue: false,
+          selections: [],
+        },
+      ],
+    });
+
+    prisma.assessmentAttempt.update.mockResolvedValue({});
+
+    const result = await service.submitAttempt(context, attemptId);
+
+    expect(result.status).toBe("submitted");
   });
 });

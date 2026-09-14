@@ -62,13 +62,26 @@ export class AssessmentNormAdminService {
     versionId: string,
     body: CreateAssessmentNormSetDto,
   ) {
-    await this.requireVersionInScope(context, definitionId, versionId);
+    const version = await this.requireVersionInScope(context, definitionId, versionId);
+    const normVersion = body.normVersion.trim();
+
+    // The DB's assessment_norm_set_version_guard trigger enforces this same rule (a
+    // norm set is only ever picked up by AssessmentReportPipelineService when its
+    // normVersion matches the assessment version's own normVersion field exactly), but
+    // it raises a bare Postgres exception with no error code the client can act on --
+    // checking it here turns a would-be 500 into a clear, actionable 409.
+    if (normVersion !== version.normVersion) {
+      throw new ConflictException({
+        code: "ASSESSMENT_NORM_SET_VERSION_MISMATCH",
+        message: `normVersion must equal this assessment version's norm version identifier ("${version.normVersion}").`,
+      });
+    }
 
     try {
       return await this.prisma.assessmentNormSet.create({
         data: {
           assessmentVersionId: versionId,
-          normVersion: body.normVersion.trim(),
+          normVersion,
           name: body.name.trim(),
           description: body.description?.trim() || null,
           sourceReference: body.sourceReference?.trim() || null,
@@ -515,6 +528,7 @@ export class AssessmentNormAdminService {
       select: {
         id: true,
         assessmentDefinitionId: true,
+        normVersion: true,
         assessmentDefinition: { select: { organizationId: true } },
       },
     });

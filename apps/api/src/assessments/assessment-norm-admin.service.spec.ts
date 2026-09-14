@@ -70,6 +70,7 @@ function ownedVersion(orgId: string | null = organizationId) {
   return {
     id: versionId,
     assessmentDefinitionId: definitionId,
+    normVersion: "v1",
     assessmentDefinition: { organizationId: orgId },
   };
 }
@@ -155,6 +156,28 @@ describe("AssessmentNormAdminService", () => {
         }),
       }),
     );
+  });
+
+  it("rejects a norm set whose normVersion does not match the assessment version's", async () => {
+    // Regression test: this is exactly what the DB's assessment_norm_set_version_guard
+    // trigger enforces (a norm set is only ever picked up by
+    // AssessmentReportPipelineService when its normVersion matches the assessment
+    // version's own normVersion field), but the trigger raises a bare Postgres
+    // exception with no error code -- letting it reach the database produced an
+    // unhandled PrismaClientUnknownRequestError and a 500 for the caller instead of a
+    // clear validation error. Confirmed live: creating a norm set with a normVersion
+    // that didn't match the assessment version's normVersion field threw exactly this
+    // through the real API.
+    prisma.assessmentVersion.findUnique.mockResolvedValue(ownedVersion());
+
+    await expect(
+      service.createNormSet(organizationContext, definitionId, versionId, {
+        normVersion: "v2-does-not-match",
+        name: "Mismatched norms",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.assessmentNormSet.create).not.toHaveBeenCalled();
   });
 
   it("translates a duplicate norm version into a conflict", async () => {
