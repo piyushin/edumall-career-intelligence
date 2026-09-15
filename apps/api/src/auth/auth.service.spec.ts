@@ -184,6 +184,74 @@ describe("AuthService", () => {
     });
   });
 
+  it("locks the account once failed logins reach the configured threshold", async () => {
+    // Regression test: AuthService.login already rejects login while lockedUntil is in
+    // the future, but nothing previously ever set lockedUntil -- a failed login was
+    // only ever audit-logged, never counted against the account. This simulates the
+    // Nth failure (N = the configured threshold) by having the atomic increment return
+    // the post-increment count, matching how Prisma's `{ increment: 1 }` behaves.
+    vi.mocked(verifyUserPassword).mockResolvedValueOnce(false);
+    prisma.user.update.mockResolvedValueOnce({ failedLoginCount: config.authLockoutThreshold });
+
+    await expect(service.login("user@example.com", "bad-password")).rejects.toMatchObject({
+      code: AuthenticationErrorCode.INVALID_CREDENTIALS,
+    });
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: userId },
+      data: { failedLoginCount: { increment: 1 } },
+      select: { failedLoginCount: true },
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: userId },
+      data: { lockedUntil: expect.any(Date) },
+    });
+
+    const lockCall = prisma.user.update.mock.calls.find(
+      ([args]) => (args as { data?: { lockedUntil?: unknown } }).data?.lockedUntil,
+    );
+    const lockedUntil = (lockCall?.[0] as { data: { lockedUntil: Date } } | undefined)?.data
+      .lockedUntil;
+    expect(lockedUntil?.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("does not lock the account before the failure threshold is reached", async () => {
+    vi.mocked(verifyUserPassword).mockResolvedValueOnce(false);
+    prisma.user.update.mockResolvedValueOnce({
+      failedLoginCount: config.authLockoutThreshold - 1,
+    });
+
+    await expect(service.login("user@example.com", "bad-password")).rejects.toMatchObject({
+      code: AuthenticationErrorCode.INVALID_CREDENTIALS,
+    });
+
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(prisma.user.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ lockedUntil: expect.anything() }),
+      }),
+    );
+  });
+
+  it("does not attempt lockout bookkeeping for an email that matches no account", async () => {
+    prisma.user.findUnique.mockResolvedValueOnce(null);
+
+    await expect(service.login("missing@example.com", "password")).rejects.toMatchObject({
+      code: AuthenticationErrorCode.INVALID_CREDENTIALS,
+    });
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("clears failedLoginCount and lockedUntil on a successful login", async () => {
+    await service.login("user@example.com", "password", organizationId);
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: userId },
+      data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: expect.any(Date) },
+    });
+  });
+
   it("does not reveal an inactive membership", async () => {
     vi.mocked(requireActiveOrganizationMembership).mockRejectedValueOnce(
       new AuthenticationError(AuthenticationErrorCode.INACTIVE_MEMBERSHIP),
