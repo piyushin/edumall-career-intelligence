@@ -4,7 +4,11 @@ import {
   AssessmentInterpretationMetric,
   AssessmentInterpretationSetStatus,
   AssessmentNormSetStatus,
+  AssessmentReportReleaseStatus,
   AssessmentVersionStatus,
+  ConsentAcceptorRole,
+  ConsentDocumentStatus,
+  ConsentDocumentType,
   MembershipRole,
   MembershipStatus,
   OrganizationType,
@@ -514,5 +518,576 @@ describe.skipIf(!runIntegrationTests)("Phase 2 assessment database integration",
         },
       }),
     ).rejects.toThrow(/Assessment interpretation and report-data history is immutable/);
+  });
+
+  it("enforces report release scope, lifecycle, and counsellor note guards (Phase 5A)", async () => {
+    const suffix = randomUUID();
+
+    const organization = await prisma.organization.create({
+      data: {
+        name: `Phase 5A Integration ${suffix}`,
+        slug: `phase-5a-${suffix}`,
+        type: OrganizationType.SCHOOL,
+      },
+    });
+
+    const otherOrganization = await prisma.organization.create({
+      data: {
+        name: `Phase 5A Other ${suffix}`,
+        slug: `phase-5a-other-${suffix}`,
+        type: OrganizationType.SCHOOL,
+      },
+    });
+
+    const candidate = await prisma.user.create({
+      data: {
+        email: `phase-5a-candidate-${suffix}@example.test`,
+        normalizedEmail: `phase-5a-candidate-${suffix}@example.test`,
+        firstName: "Phase",
+        lastName: "Candidate",
+        status: UserStatus.ACTIVE,
+      },
+    });
+
+    const counsellor = await prisma.user.create({
+      data: {
+        email: `phase-5a-counsellor-${suffix}@example.test`,
+        normalizedEmail: `phase-5a-counsellor-${suffix}@example.test`,
+        firstName: "Phase",
+        lastName: "Counsellor",
+        status: UserStatus.ACTIVE,
+      },
+    });
+
+    const definition = await prisma.assessmentDefinition.create({
+      data: {
+        organizationId: organization.id,
+        code: `phase-5a-${suffix}`,
+        createdByUserId: candidate.id,
+      },
+    });
+
+    const version = await prisma.assessmentVersion.create({
+      data: {
+        assessmentDefinitionId: definition.id,
+        versionNumber: 1,
+        title: "Phase 5A Integration Assessment",
+        edition: "2026",
+        form: "A",
+        language: "en",
+        scoringVersion: "score-v1",
+        normVersion: "norm-v1",
+        reportVersion: "report-v1",
+        createdByUserId: candidate.id,
+      },
+    });
+
+    const construct = await prisma.assessmentConstruct.create({
+      data: {
+        assessmentVersionId: version.id,
+        code: "construct-1",
+        name: "Integration Construct",
+        orderIndex: 1,
+      },
+    });
+
+    await prisma.assessmentVersion.update({
+      where: { id: version.id },
+      data: {
+        status: AssessmentVersionStatus.PUBLISHED,
+        publishedAt: new Date(),
+        publishedByUserId: candidate.id,
+      },
+    });
+
+    const assignment = await prisma.assessmentAssignment.create({
+      data: {
+        organizationId: organization.id,
+        assessmentVersionId: version.id,
+        userId: candidate.id,
+        assignedByUserId: candidate.id,
+        maxAttempts: 1,
+      },
+    });
+
+    const attempt = await prisma.assessmentAttempt.create({
+      data: {
+        assignmentId: assignment.id,
+        attemptNumber: 1,
+        status: AssessmentAttemptStatus.SUBMITTED,
+        submittedAt: new Date(),
+      },
+    });
+
+    const scoringRun = await prisma.assessmentScoringRun.create({
+      data: {
+        attemptId: attempt.id,
+        scoringVersion: "score-v1",
+        algorithmVersion: "integration-v1",
+        inputHash: "6".repeat(64),
+      },
+    });
+
+    await prisma.assessmentConstructScore.create({
+      data: {
+        scoringRunId: scoringRun.id,
+        assessmentConstructId: construct.id,
+        rawScore: new Prisma.Decimal("12"),
+        answeredItemCount: 3,
+        contributionCount: 3,
+      },
+    });
+
+    const normSet = await prisma.assessmentNormSet.create({
+      data: {
+        assessmentVersionId: version.id,
+        normVersion: "norm-v1",
+        name: "Integration Norm Set",
+      },
+    });
+
+    const normGroup = await prisma.assessmentNormGroup.create({
+      data: {
+        normSetId: normSet.id,
+        code: "integration-group",
+        name: "Integration Group",
+      },
+    });
+
+    const normTable = await prisma.assessmentConstructNormTable.create({
+      data: {
+        normGroupId: normGroup.id,
+        assessmentConstructId: construct.id,
+      },
+    });
+
+    const lookupRow = await prisma.assessmentNormLookupRow.create({
+      data: {
+        constructNormTableId: normTable.id,
+        rawScoreMin: new Prisma.Decimal("10"),
+        rawScoreMax: new Prisma.Decimal("15"),
+        standardizedScore: new Prisma.Decimal("55"),
+        percentile: new Prisma.Decimal("72.5"),
+      },
+    });
+
+    await prisma.assessmentNormSet.update({
+      where: { id: normSet.id },
+      data: {
+        status: AssessmentNormSetStatus.PUBLISHED,
+        publishedAt: new Date(),
+      },
+    });
+
+    const normApplication = await prisma.assessmentNormApplication.create({
+      data: {
+        scoringRunId: scoringRun.id,
+        assessmentConstructId: construct.id,
+        normSetId: normSet.id,
+        normGroupId: normGroup.id,
+        constructNormTableId: normTable.id,
+        normLookupRowId: lookupRow.id,
+        rawScore: new Prisma.Decimal("12"),
+        standardizedScore: new Prisma.Decimal("55"),
+        percentile: new Prisma.Decimal("72.5"),
+      },
+    });
+
+    const interpretationSet = await prisma.assessmentInterpretationSet.create({
+      data: {
+        assessmentVersionId: version.id,
+        version: "interpret-v1",
+        name: "Integration Interpretation Set",
+      },
+    });
+
+    const interpretationRule = await prisma.assessmentInterpretationRule.create({
+      data: {
+        interpretationSetId: interpretationSet.id,
+        assessmentConstructId: construct.id,
+        code: "integration-rule",
+        metric: AssessmentInterpretationMetric.PERCENTILE,
+        lowerBound: new Prisma.Decimal("70"),
+        upperBound: new Prisma.Decimal("80"),
+        priority: 10,
+        outputData: {
+          band: "integration-band",
+        },
+      },
+    });
+
+    await prisma.assessmentInterpretationSet.update({
+      where: { id: interpretationSet.id },
+      data: {
+        status: AssessmentInterpretationSetStatus.PUBLISHED,
+        publishedAt: new Date(),
+      },
+    });
+
+    await prisma.assessmentInterpretationApplication.create({
+      data: {
+        normApplicationId: normApplication.id,
+        interpretationRuleId: interpretationRule.id,
+        metricValue: new Prisma.Decimal("72.5"),
+        outputData: {
+          band: "integration-band",
+        },
+      },
+    });
+
+    const reportSnapshot = await prisma.assessmentReportDataSnapshot.create({
+      data: {
+        scoringRunId: scoringRun.id,
+        assessmentVersionId: version.id,
+        interpretationSetId: interpretationSet.id,
+        reportVersion: "report-v1",
+        inputHash: "7".repeat(64),
+        payload: {
+          schemaVersion: "integration-v1",
+        },
+      },
+    });
+
+    await expect(
+      prisma.assessmentReportRelease.create({
+        data: {
+          attemptId: attempt.id,
+          organizationId: otherOrganization.id,
+          reportDataSnapshotId: reportSnapshot.id,
+        },
+      }),
+    ).rejects.toThrow(/Report release organization must match the attempt tenant/);
+
+    const release = await prisma.assessmentReportRelease.create({
+      data: {
+        attemptId: attempt.id,
+        organizationId: organization.id,
+        reportDataSnapshotId: reportSnapshot.id,
+      },
+    });
+
+    expect(release.status).toBe(AssessmentReportReleaseStatus.PENDING_REVIEW);
+    expect(release.reviewedByUserId).toBeNull();
+
+    await expect(
+      prisma.assessmentReportRelease.update({
+        where: { id: release.id },
+        data: {
+          status: AssessmentReportReleaseStatus.WITHDRAWN,
+        },
+      }),
+    ).rejects.toThrow(
+      /Report release status may only move PENDING_REVIEW -> RELEASED -> WITHDRAWN/,
+    );
+
+    await expect(
+      prisma.assessmentReportRelease.update({
+        where: { id: release.id },
+        data: {
+          attemptId: randomUUID(),
+        },
+      }),
+    ).rejects.toThrow(/Report release identity fields are immutable/);
+
+    await expect(
+      prisma.assessmentReportRelease.update({
+        where: { id: release.id },
+        data: {
+          status: AssessmentReportReleaseStatus.RELEASED,
+        },
+      }),
+    ).rejects.toThrow(/assessment_report_releases_lifecycle_check/);
+
+    const releasedAt = new Date();
+
+    const released = await prisma.assessmentReportRelease.update({
+      where: { id: release.id },
+      data: {
+        status: AssessmentReportReleaseStatus.RELEASED,
+        reviewedByUserId: counsellor.id,
+        reviewedAt: releasedAt,
+        releasedAt,
+      },
+    });
+
+    expect(released.status).toBe(AssessmentReportReleaseStatus.RELEASED);
+
+    await expect(
+      prisma.assessmentReportRelease.update({
+        where: { id: release.id },
+        data: {
+          status: AssessmentReportReleaseStatus.PENDING_REVIEW,
+        },
+      }),
+    ).rejects.toThrow(
+      /Report release status may only move PENDING_REVIEW -> RELEASED -> WITHDRAWN/,
+    );
+
+    const withdrawn = await prisma.assessmentReportRelease.update({
+      where: { id: release.id },
+      data: {
+        status: AssessmentReportReleaseStatus.WITHDRAWN,
+        withdrawnAt: new Date(),
+        withdrawnReason: "Integration test withdrawal",
+      },
+    });
+
+    expect(withdrawn.status).toBe(AssessmentReportReleaseStatus.WITHDRAWN);
+
+    await expect(
+      prisma.assessmentCounsellorNote.create({
+        data: {
+          attemptId: attempt.id,
+          organizationId: otherOrganization.id,
+          authorUserId: counsellor.id,
+          body: "Mismatched organization note",
+        },
+      }),
+    ).rejects.toThrow(/Counsellor note organization must match the attempt tenant/);
+
+    const note = await prisma.assessmentCounsellorNote.create({
+      data: {
+        attemptId: attempt.id,
+        organizationId: organization.id,
+        authorUserId: counsellor.id,
+        body: "Candidate shows strong analytical aptitude.",
+      },
+    });
+
+    const updatedNote = await prisma.assessmentCounsellorNote.update({
+      where: { id: note.id },
+      data: {
+        body: "Candidate shows strong analytical aptitude; recommend follow-up.",
+      },
+    });
+
+    expect(updatedNote.body).toContain("recommend follow-up");
+
+    await expect(
+      prisma.assessmentCounsellorNote.update({
+        where: { id: note.id },
+        data: {
+          authorUserId: candidate.id,
+        },
+      }),
+    ).rejects.toThrow(/Counsellor note identity fields are immutable/);
+  });
+
+  it("enforces consent document lifecycle and acceptance-record guards (Phase 5B)", async () => {
+    const suffix = randomUUID();
+
+    const candidate = await prisma.user.create({
+      data: {
+        email: `phase-5b-candidate-${suffix}@example.test`,
+        normalizedEmail: `phase-5b-candidate-${suffix}@example.test`,
+        firstName: "Phase",
+        lastName: "Candidate",
+        status: UserStatus.ACTIVE,
+      },
+    });
+
+    await expect(
+      prisma.user.update({
+        where: { id: candidate.id },
+        data: { dateOfBirth: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+      }),
+    ).rejects.toThrow(/users_date_of_birth_not_future_check/);
+
+    // The "one published per type" index is a global singleton, not scoped to this
+    // test's suffix — retire any document a previous run left published so this run
+    // starts from a clean slate.
+    await prisma.consentDocument.updateMany({
+      where: {
+        type: ConsentDocumentType.PRIVACY_NOTICE,
+        status: ConsentDocumentStatus.PUBLISHED,
+      },
+      data: {
+        status: ConsentDocumentStatus.RETIRED,
+        retiredAt: new Date(),
+      },
+    });
+
+    const document = await prisma.consentDocument.create({
+      data: {
+        type: ConsentDocumentType.PRIVACY_NOTICE,
+        version: `v1-${suffix}`,
+        title: "Privacy Notice",
+        bodyText: "Placeholder privacy notice text pending legal review.",
+      },
+    });
+
+    await expect(
+      prisma.userConsentRecord.create({
+        data: {
+          userId: candidate.id,
+          consentDocumentId: document.id,
+          acceptedByRole: ConsentAcceptorRole.SELF,
+        },
+      }),
+    ).rejects.toThrow(/Only a published consent document may be accepted/);
+
+    await prisma.consentDocument.update({
+      where: { id: document.id },
+      data: {
+        status: ConsentDocumentStatus.PUBLISHED,
+        publishedAt: new Date(),
+      },
+    });
+
+    await expect(
+      prisma.consentDocument.create({
+        data: {
+          type: ConsentDocumentType.PRIVACY_NOTICE,
+          version: `v2-${suffix}`,
+          title: "Privacy Notice v2",
+          bodyText: "A second version.",
+          status: ConsentDocumentStatus.PUBLISHED,
+          publishedAt: new Date(),
+        },
+      }),
+    ).rejects.toThrow(/Unique constraint failed/);
+
+    await expect(
+      prisma.consentDocument.update({
+        where: { id: document.id },
+        data: { title: "Mutated title" },
+      }),
+    ).rejects.toThrow(/Published consent documents may only transition to retired/);
+
+    await expect(
+      prisma.userConsentRecord.create({
+        data: {
+          userId: candidate.id,
+          consentDocumentId: document.id,
+          acceptedByRole: ConsentAcceptorRole.GUARDIAN,
+        },
+      }),
+    ).rejects.toThrow(/user_consent_records_guardian_fields_check/);
+
+    const record = await prisma.userConsentRecord.create({
+      data: {
+        userId: candidate.id,
+        consentDocumentId: document.id,
+        acceptedByRole: ConsentAcceptorRole.GUARDIAN,
+        guardianName: "Priya Shah",
+        guardianEmail: `guardian-${suffix}@example.test`,
+        guardianRelationship: "Mother",
+      },
+    });
+
+    expect(record.acceptedByRole).toBe(ConsentAcceptorRole.GUARDIAN);
+
+    await expect(
+      prisma.userConsentRecord.update({
+        where: { id: record.id },
+        data: { guardianName: "Someone else" },
+      }),
+    ).rejects.toThrow(/Consent acceptance records are immutable/);
+
+    await expect(
+      prisma.consentDocument.update({
+        where: { id: document.id },
+        data: {
+          status: ConsentDocumentStatus.RETIRED,
+          retiredAt: new Date(),
+          title: "Mutated on retire",
+        },
+      }),
+    ).rejects.toThrow(/Published consent document content is immutable/);
+
+    await prisma.consentDocument.update({
+      where: { id: document.id },
+      data: {
+        status: ConsentDocumentStatus.RETIRED,
+        retiredAt: new Date(),
+      },
+    });
+
+    await expect(
+      prisma.consentDocument.update({
+        where: { id: document.id },
+        data: { status: ConsentDocumentStatus.PUBLISHED },
+      }),
+    ).rejects.toThrow(/Retired consent documents are immutable/);
+  });
+
+  it("lets a minor's guardian and the minor themselves both accept the same document (Phase 5B)", async () => {
+    const suffix = randomUUID();
+
+    const candidate = await prisma.user.create({
+      data: {
+        email: `phase-5b-minor-${suffix}@example.test`,
+        normalizedEmail: `phase-5b-minor-${suffix}@example.test`,
+        firstName: "Minor",
+        lastName: "Candidate",
+        status: UserStatus.ACTIVE,
+      },
+    });
+
+    await prisma.consentDocument.updateMany({
+      where: {
+        type: ConsentDocumentType.ASSESSMENT_DATA_PROCESSING,
+        status: ConsentDocumentStatus.PUBLISHED,
+      },
+      data: {
+        status: ConsentDocumentStatus.RETIRED,
+        retiredAt: new Date(),
+      },
+    });
+
+    const document = await prisma.consentDocument.create({
+      data: {
+        type: ConsentDocumentType.ASSESSMENT_DATA_PROCESSING,
+        version: `v1-${suffix}`,
+        title: "Assessment Data Processing",
+        bodyText: "Placeholder text pending legal review.",
+        status: ConsentDocumentStatus.PUBLISHED,
+        publishedAt: new Date(),
+      },
+    });
+
+    // A minor's flow requires both a GUARDIAN acceptance and the candidate's own
+    // STUDENT_ASSENT acceptance against this exact same document. If the unique
+    // constraint were (userId, consentDocumentId) alone, the second insert would
+    // collide with the first and the minor's consent could never be completed.
+    const guardianRecord = await prisma.userConsentRecord.create({
+      data: {
+        userId: candidate.id,
+        consentDocumentId: document.id,
+        acceptedByRole: ConsentAcceptorRole.GUARDIAN,
+        guardianName: "Priya Shah",
+        guardianEmail: `guardian-${suffix}@example.test`,
+        guardianRelationship: "Mother",
+      },
+    });
+
+    const studentAssentRecord = await prisma.userConsentRecord.create({
+      data: {
+        userId: candidate.id,
+        consentDocumentId: document.id,
+        acceptedByRole: ConsentAcceptorRole.STUDENT_ASSENT,
+      },
+    });
+
+    expect(guardianRecord.acceptedByRole).toBe(ConsentAcceptorRole.GUARDIAN);
+    expect(studentAssentRecord.acceptedByRole).toBe(ConsentAcceptorRole.STUDENT_ASSENT);
+
+    const records = await prisma.userConsentRecord.findMany({
+      where: { userId: candidate.id, consentDocumentId: document.id },
+    });
+
+    expect(records).toHaveLength(2);
+
+    // Accepting the very same role twice for the same document is still a genuine
+    // duplicate and must be rejected.
+    await expect(
+      prisma.userConsentRecord.create({
+        data: {
+          userId: candidate.id,
+          consentDocumentId: document.id,
+          acceptedByRole: ConsentAcceptorRole.STUDENT_ASSENT,
+        },
+      }),
+    ).rejects.toThrow(/Unique constraint failed/);
   });
 });

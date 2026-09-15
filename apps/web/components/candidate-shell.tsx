@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { ApiError } from "../lib/api";
 import { getSession, logout, type AuthSession } from "../lib/auth";
+import { getConsentRequirements } from "../lib/consent";
 
 type CandidateShellState =
   | { status: "loading" }
@@ -32,6 +33,24 @@ export function CandidateShell({ children }: { children: ReactNode }) {
         if (session.session.role !== "STUDENT" && session.session.role !== "EMPLOYEE") {
           setState({ status: "forbidden" });
           return;
+        }
+
+        if (pathname !== "/candidate/consent") {
+          try {
+            const consent = await getConsentRequirements();
+
+            if (!active) {
+              return;
+            }
+
+            if (!consent.complete) {
+              router.replace("/candidate/consent");
+              return;
+            }
+          } catch {
+            // Consent status could not be checked; let the page load and rely on the
+            // API's own CONSENT_REQUIRED gate when the candidate tries to start an attempt.
+          }
         }
 
         setState({ status: "ready", session });

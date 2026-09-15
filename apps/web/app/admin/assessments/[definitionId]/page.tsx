@@ -162,6 +162,12 @@ export default function AssessmentWorkspacePage() {
               {definition.code}
             </h1>
             <p className="mt-2 text-sm text-slate-600">Definition status: {definition.status}</p>
+            <Link
+              href={`/admin/assessments/${definitionId}/scoring`}
+              className="mt-3 inline-flex text-sm font-medium text-blue-700 hover:text-blue-800"
+            >
+              Norms &amp; interpretation rules →
+            </Link>
           </div>
 
           <div className="min-w-64">

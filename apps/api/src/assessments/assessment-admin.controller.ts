@@ -94,6 +94,16 @@ export class AssessmentAdminController {
     return this.assessments.getVersionContent(context, definitionId, versionId);
   }
 
+  @Get(":definitionId/versions/:versionId/constructs")
+  @Header("cache-control", "no-store")
+  public listConstructs(
+    @CurrentAuthContext() context: AuthContext,
+    @Param("definitionId", new ParseUUIDPipe()) definitionId: string,
+    @Param("versionId", new ParseUUIDPipe()) versionId: string,
+  ) {
+    return this.assessments.listConstructs(context, definitionId, versionId);
+  }
+
   @Post(":definitionId/versions/:versionId/constructs")
   @Header("cache-control", "no-store")
   @UseGuards(CsrfGuard)

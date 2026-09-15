@@ -8,7 +8,8 @@ import {
 } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../auth/auth.types";
-import type { AssessmentScoringService } from "./assessment-scoring.service";
+import type { ConsentService } from "../consent/consent.service";
+import type { AssessmentReportPipelineService } from "./assessment-report-pipeline.service";
 import { AssessmentService } from "./assessment.service";
 
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -47,6 +48,9 @@ function createPrisma() {
       deleteMany: vi.fn(),
       createMany: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn(),
+    },
     $transaction: vi.fn(),
   };
 
@@ -57,18 +61,27 @@ function createPrisma() {
   return prisma;
 }
 
+function createConsentService(complete = true) {
+  return {
+    getRequirements: vi.fn().mockResolvedValue({ complete }),
+  };
+}
+
 describe("AssessmentService", () => {
   let prisma: ReturnType<typeof createPrisma>;
+  let consent: ReturnType<typeof createConsentService>;
   let service: AssessmentService;
 
   beforeEach(() => {
     vi.clearAllMocks();
     prisma = createPrisma();
+    consent = createConsentService();
     service = new AssessmentService(
       prisma as unknown as PrismaClient,
       {
-        scoreSubmittedAttempt: vi.fn().mockResolvedValue({}),
-      } as unknown as AssessmentScoringService,
+        generateReportIfReady: vi.fn().mockResolvedValue({ generated: false }),
+      } as unknown as AssessmentReportPipelineService,
+      consent as unknown as ConsentService,
     );
   });
 
@@ -119,6 +132,16 @@ describe("AssessmentService", () => {
 
     expect(result.id).toBe(attemptId);
     expect(prisma.assessmentAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it("blocks starting an attempt until consent is complete", async () => {
+    consent.getRequirements.mockResolvedValue({ complete: false });
+
+    await expect(service.startOrResumeAttempt(context, assignmentId)).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "CONSENT_REQUIRED" }),
+    });
+
+    expect(prisma.assessmentAssignment.findFirst).not.toHaveBeenCalled();
   });
 
   it("rejects attempts beyond the assignment limit", async () => {
@@ -267,5 +290,105 @@ describe("AssessmentService", () => {
         }),
       }),
     );
+  });
+
+  it("still confirms submission when report generation fails", async () => {
+    const reportPipeline = {
+      generateReportIfReady: vi.fn().mockRejectedValue(new Error("norm set not published")),
+    } as unknown as AssessmentReportPipelineService;
+
+    service = new AssessmentService(
+      prisma as unknown as PrismaClient,
+      reportPipeline,
+      consent as unknown as ConsentService,
+    );
+
+    prisma.assessmentAttempt.findFirst.mockResolvedValue({
+      id: attemptId,
+      status: AssessmentAttemptStatus.IN_PROGRESS,
+      submittedAt: null,
+      assignment: {
+        assessmentVersion: {
+          items: [
+            {
+              id: itemId,
+              type: AssessmentItemType.BOOLEAN,
+            },
+          ],
+        },
+      },
+      responses: [
+        {
+          itemId,
+          textValue: null,
+          numericValue: null,
+          booleanValue: false,
+          selections: [],
+        },
+      ],
+    });
+
+    prisma.assessmentAttempt.update.mockResolvedValue({});
+
+    const result = await service.submitAttempt(context, attemptId);
+
+    expect(result.status).toBe("submitted");
+    expect(reportPipeline.generateReportIfReady).toHaveBeenCalledWith(attemptId);
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "report.generation_failed",
+          entityType: "AssessmentAttempt",
+          entityId: attemptId,
+          organizationId,
+          metadata: { reason: "norm set not published" },
+        }),
+      }),
+    );
+  });
+
+  it("does not let an audit-log write failure surface to the candidate", async () => {
+    const reportPipeline = {
+      generateReportIfReady: vi.fn().mockRejectedValue(new Error("norm set not published")),
+    } as unknown as AssessmentReportPipelineService;
+
+    service = new AssessmentService(
+      prisma as unknown as PrismaClient,
+      reportPipeline,
+      consent as unknown as ConsentService,
+    );
+
+    prisma.auditLog.create.mockRejectedValue(new Error("audit store unavailable"));
+
+    prisma.assessmentAttempt.findFirst.mockResolvedValue({
+      id: attemptId,
+      status: AssessmentAttemptStatus.IN_PROGRESS,
+      submittedAt: null,
+      assignment: {
+        assessmentVersion: {
+          items: [
+            {
+              id: itemId,
+              type: AssessmentItemType.BOOLEAN,
+            },
+          ],
+        },
+      },
+      responses: [
+        {
+          itemId,
+          textValue: null,
+          numericValue: null,
+          booleanValue: false,
+          selections: [],
+        },
+      ],
+    });
+
+    prisma.assessmentAttempt.update.mockResolvedValue({});
+
+    const result = await service.submitAttempt(context, attemptId);
+
+    expect(result.status).toBe("submitted");
   });
 });

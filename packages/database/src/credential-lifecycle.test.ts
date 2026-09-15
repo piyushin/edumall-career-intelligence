@@ -27,6 +27,7 @@ function user(overrides: Partial<User> = {}): User {
     passwordHash: null,
     firstName: "Invited",
     lastName: "User",
+    dateOfBirth: null,
     status: UserStatus.INVITED,
     emailVerifiedAt: null,
     lastLoginAt: null,

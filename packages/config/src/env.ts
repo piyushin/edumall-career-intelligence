@@ -22,6 +22,8 @@ export interface AppConfig {
   authCookieSecure: boolean;
   authLoginRateLimit: number;
   authLoginRateWindowSeconds: number;
+  authLockoutThreshold: number;
+  authLockoutDurationSeconds: number;
   authCsrfSecret: string;
   authCsrfCookieName: string;
 }
@@ -60,6 +62,11 @@ const rawEnvSchema = z
     AUTH_COOKIE_SECURE: z.enum(["true", "false"]).optional(),
     AUTH_LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(5),
     AUTH_LOGIN_RATE_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+    // Per-account brute-force lockout, independent of AUTH_LOGIN_RATE_LIMIT (which
+    // throttles by source IP and does nothing to stop a distributed attack against one
+    // specific account). Defaults: lock for 15 minutes after 10 consecutive failures.
+    AUTH_LOCKOUT_THRESHOLD: z.coerce.number().int().positive().default(10),
+    AUTH_LOCKOUT_DURATION_SECONDS: z.coerce.number().int().positive().default(900),
     AUTH_CSRF_SECRET: z.string().min(32).default(DEVELOPMENT_CSRF_SECRET),
     AUTH_CSRF_COOKIE_NAME: z
       .string()
@@ -133,6 +140,8 @@ export function loadConfig(source: NodeJS.ProcessEnv, options: LoadConfigOptions
         : value.AUTH_COOKIE_SECURE === "true",
     authLoginRateLimit: value.AUTH_LOGIN_RATE_LIMIT,
     authLoginRateWindowSeconds: value.AUTH_LOGIN_RATE_WINDOW_SECONDS,
+    authLockoutThreshold: value.AUTH_LOCKOUT_THRESHOLD,
+    authLockoutDurationSeconds: value.AUTH_LOCKOUT_DURATION_SECONDS,
     authCsrfSecret: value.AUTH_CSRF_SECRET,
     authCsrfCookieName: value.AUTH_CSRF_COOKIE_NAME,
   };

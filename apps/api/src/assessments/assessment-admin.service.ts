@@ -372,6 +372,39 @@ export class AssessmentAdminService {
     });
   }
 
+  /**
+   * Read-only construct list for a version regardless of its DRAFT/PUBLISHED/RETIRED
+   * status. Unlike getVersionContent (which requireWritableDraftVersion locks to DRAFT
+   * only, since it backs the item-authoring flow), norm-set and interpretation-set
+   * authoring must be able to see a version's constructs after it has published --
+   * norms and interpretation rules are commonly authored once item content is final.
+   */
+  public async listConstructs(context: AuthContext, definitionId: string, versionId: string) {
+    const version = await this.prisma.assessmentVersion.findUnique({
+      where: { id: versionId },
+      select: {
+        id: true,
+        assessmentDefinitionId: true,
+        assessmentDefinition: { select: { organizationId: true } },
+      },
+    });
+
+    if (!version || version.assessmentDefinitionId !== definitionId) {
+      throw new NotFoundException({
+        code: "ASSESSMENT_VERSION_NOT_FOUND",
+        message: "Assessment version not found.",
+      });
+    }
+
+    this.assertWriteAccess(context, version.assessmentDefinition.organizationId);
+
+    return this.prisma.assessmentConstruct.findMany({
+      where: { assessmentVersionId: versionId },
+      orderBy: { orderIndex: "asc" },
+      select: { id: true, code: true, name: true, orderIndex: true },
+    });
+  }
+
   public async createConstruct(
     context: AuthContext,
     definitionId: string,

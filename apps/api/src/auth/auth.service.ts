@@ -243,6 +243,34 @@ export class AuthService {
     } catch {
       // Audit availability must not alter the authentication response.
     }
+
+    // Per-account brute-force lockout. AUTH_LOGIN_RATE_LIMIT (ThrottlerGuard on the
+    // login route) buckets by source IP and does nothing to stop a distributed attack
+    // -- many source IPs, each individually under the per-IP limit -- against one
+    // specific account. There is no userId (and so nothing to lock) when the email
+    // itself didn't match a real user.
+    if (!userId) {
+      return;
+    }
+
+    try {
+      const updated = await this.prisma.user.update({
+        where: { id: userId },
+        data: { failedLoginCount: { increment: 1 } },
+        select: { failedLoginCount: true },
+      });
+
+      if (updated.failedLoginCount >= this.config.authLockoutThreshold) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: {
+            lockedUntil: new Date(Date.now() + this.config.authLockoutDurationSeconds * 1000),
+          },
+        });
+      }
+    } catch {
+      // Lockout bookkeeping must not alter the authentication response either.
+    }
   }
 
   private async recordSuccess(
@@ -253,7 +281,7 @@ export class AuthService {
     try {
       await this.prisma.user.update({
         where: { id: userId },
-        data: { failedLoginCount: 0, lastLoginAt: new Date() },
+        data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() },
       });
     } catch {
       // Authentication has succeeded; activity metadata is best effort.

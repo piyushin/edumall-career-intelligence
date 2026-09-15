@@ -6,13 +6,132 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "../../../../lib/api";
 import {
   getCandidateAttempt,
+  getCandidateReport,
+  getCandidateReportPdfUrl,
   saveCandidateResponse,
   submitCandidateAttempt,
   type CandidateAssessmentItem,
+  type CandidateAssessmentReport,
   type CandidateAssessmentResponse,
   type CandidateAttempt,
   type SaveCandidateResponse,
 } from "../../../../lib/candidate-assessments";
+
+function formatOutputData(value: unknown): string {
+  if (value && typeof value === "object" && "band" in value) {
+    const band = (value as { band?: unknown }).band;
+
+    if (typeof band === "string") {
+      return band;
+    }
+  }
+
+  return JSON.stringify(value);
+}
+
+function SubmittedReportPanel({
+  attemptId,
+  versionTitle,
+}: {
+  attemptId: string;
+  versionTitle: string;
+}) {
+  const router = useRouter();
+  const [report, setReport] = useState<CandidateAssessmentReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    getCandidateReport(attemptId)
+      .then((result) => {
+        if (active) {
+          setReport(result);
+        }
+      })
+      .catch((caught: unknown) => {
+        if (active) {
+          setError(caught instanceof ApiError ? caught.message : "Unable to load your report.");
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [attemptId]);
+
+  return (
+    <main className="mx-auto max-w-4xl px-6 py-12">
+      <div className="rounded-3xl border border-emerald-200 bg-white p-8 shadow-sm sm:p-10">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-xl text-emerald-700">
+          ✓
+        </div>
+        <h1 className="mt-6 text-3xl font-semibold text-slate-950">Assessment submitted</h1>
+        <p className="mt-3 text-base leading-7 text-slate-600">
+          Your responses for <strong>{versionTitle}</strong> have been submitted successfully.
+        </p>
+
+        {loading ? (
+          <p className="mt-4 text-sm leading-6 text-slate-500">Checking your report status...</p>
+        ) : error ? (
+          <p className="mt-4 text-sm leading-6 text-red-600">{error}</p>
+        ) : report?.status === "RELEASED" ? (
+          <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 p-6">
+            <h2 className="text-lg font-semibold text-slate-950">Your results</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              {report.assessment.title} · {report.assessment.edition} ({report.assessment.form})
+            </p>
+            <ul className="mt-4 space-y-3">
+              {report.results.map((result) => (
+                <li
+                  key={result.constructCode ?? result.constructName ?? Math.random()}
+                  className="rounded-lg border border-blue-100 bg-white p-3"
+                >
+                  <p className="text-sm font-semibold text-slate-900">{result.constructName}</p>
+                  <p className="mt-1 text-sm text-slate-700">
+                    {formatOutputData(result.outputData)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            <a
+              href={getCandidateReportPdfUrl(attemptId)}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-5 inline-flex items-center rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600"
+            >
+              Download PDF
+            </a>
+          </div>
+        ) : report?.status === "WITHDRAWN" ? (
+          <p className="mt-4 text-sm leading-6 text-slate-500">
+            This report was withdrawn by your counsellor for review. Please contact your counsellor
+            or organization for details.
+          </p>
+        ) : (
+          <p className="mt-4 text-sm leading-6 text-slate-500">
+            Scoring and report processing occur through the secured assessment pipeline. Your result
+            will appear here once your counsellor releases it.
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => router.push("/candidate/assessments")}
+          className="mt-8 rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-600"
+        >
+          Back to My Assessments
+        </button>
+      </div>
+    </main>
+  );
+}
 
 function responseForItem(
   responses: CandidateAssessmentResponse[],
@@ -46,7 +165,6 @@ function isAnswered(
 
 export default function CandidateAttemptPage() {
   const params = useParams<{ attemptId: string }>();
-  const router = useRouter();
   const attemptId = params.attemptId;
 
   const [attempt, setAttempt] = useState<CandidateAttempt | null>(null);
@@ -196,30 +314,7 @@ export default function CandidateAttemptPage() {
   const progress = items.length > 0 ? Math.round((answeredCount / items.length) * 100) : 0;
 
   if (attempt.status === "SUBMITTED") {
-    return (
-      <main className="mx-auto max-w-4xl px-6 py-12">
-        <div className="rounded-3xl border border-emerald-200 bg-white p-8 shadow-sm sm:p-10">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-xl text-emerald-700">
-            ✓
-          </div>
-          <h1 className="mt-6 text-3xl font-semibold text-slate-950">Assessment submitted</h1>
-          <p className="mt-3 text-base leading-7 text-slate-600">
-            Your responses for <strong>{version.title}</strong> have been submitted successfully.
-          </p>
-          <p className="mt-4 text-sm leading-6 text-slate-500">
-            Scoring and report processing occur through the secured assessment pipeline. Candidate
-            result presentation will only display approved report information when available.
-          </p>
-          <button
-            type="button"
-            onClick={() => router.push("/candidate/assessments")}
-            className="mt-8 rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-600"
-          >
-            Back to My Assessments
-          </button>
-        </div>
-      </main>
-    );
+    return <SubmittedReportPanel attemptId={attemptId} versionTitle={version.title} />;
   }
 
   return (

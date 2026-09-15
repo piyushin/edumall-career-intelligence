@@ -258,7 +258,7 @@ nano .env.production
 
 Replace every placeholder. Never commit `.env.production`.
 
-Generate `SESSION_SECRET` on the server or an approved secret workstation:
+Generate `AUTH_CSRF_SECRET` on the server or an approved secret workstation:
 
 ```bash
 openssl rand -hex 32

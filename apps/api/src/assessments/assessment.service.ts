@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -14,17 +15,22 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import type { AuthContext } from "../auth/auth.types";
+import { ConsentService } from "../consent/consent.service";
 import { DATABASE_PRISMA } from "../database/database.tokens";
-import { AssessmentScoringService } from "./assessment-scoring.service";
+import { AssessmentReportPipelineService } from "./assessment-report-pipeline.service";
 import type { SaveAssessmentResponseDto } from "./assessment.types";
 
 @Injectable()
 export class AssessmentService {
+  private readonly logger = new Logger(AssessmentService.name);
+
   public constructor(
     @Inject(DATABASE_PRISMA)
     private readonly prisma: PrismaClient,
-    @Inject(AssessmentScoringService)
-    private readonly scoring: AssessmentScoringService,
+    @Inject(AssessmentReportPipelineService)
+    private readonly reportPipeline: AssessmentReportPipelineService,
+    @Inject(ConsentService)
+    private readonly consent: ConsentService,
   ) {}
 
   public async listAssignments(context: AuthContext) {
@@ -77,6 +83,8 @@ export class AssessmentService {
 
   public async startOrResumeAttempt(context: AuthContext, assignmentId: string) {
     const organizationId = this.requireOrganization(context);
+
+    await this.requireConsent(context.userId);
 
     try {
       return await this.prisma.$transaction(
@@ -507,7 +515,35 @@ export class AssessmentService {
       };
     });
 
-    await this.scoring.scoreSubmittedAttempt(attemptId);
+    try {
+      await this.reportPipeline.generateReportIfReady(attemptId);
+    } catch (error) {
+      // Report generation problems (unpublished norm/interpretation content, an
+      // authoring ambiguity) must never fail the candidate's submission. The
+      // attempt stays SUBMITTED and the report simply remains pending; the
+      // failure is logged and audited (report.generation_failed) so a stuck attempt is
+      // discoverable rather than silent; there is no admin re-run endpoint yet, so
+      // recovery today still requires a developer manually invoking the pipeline.
+      const reason = error instanceof Error ? error.message : String(error);
+
+      this.logger.error(`Report generation failed for attempt ${attemptId}: ${reason}`);
+
+      try {
+        await this.prisma.auditLog.create({
+          data: {
+            action: "report.generation_failed",
+            actorUserId: null,
+            entityType: "AssessmentAttempt",
+            entityId: attemptId,
+            organizationId,
+            metadata: { reason } as Prisma.InputJsonValue,
+          },
+        });
+      } catch {
+        // Audit availability must not alter submission -- the error is already logged
+        // above, and an audit-write failure here must not surface to the candidate.
+      }
+    }
 
     return submission;
   }
@@ -521,6 +557,18 @@ export class AssessmentService {
     }
 
     return context.organizationId;
+  }
+
+  /** D-013: no attempt may start until the candidate's consent record is complete. */
+  private async requireConsent(userId: string): Promise<void> {
+    const requirements = await this.consent.getRequirements(userId);
+
+    if (!requirements.complete) {
+      throw new ForbiddenException({
+        code: "CONSENT_REQUIRED",
+        message: "Required consent has not been completed for this account.",
+      });
+    }
   }
 
   private assertAssignmentAvailable(assignment: {

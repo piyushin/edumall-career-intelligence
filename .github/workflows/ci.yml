@@ -84,3 +84,35 @@ jobs:
           POSTGRES_USER: edumall
           POSTGRES_PASSWORD: ci-placeholder
           POSTGRES_DB: edumall_ci
+
+      # Actually builds the production images (api/web/worker) with the same
+      # Dockerfiles and compose file scripts/deploy-production.sh uses, so a break in
+      # the deploy path (a missing env var the app now requires, a Dockerfile that no
+      # longer builds, a Next.js build failure) is caught on every PR -- not only when
+      # someone runs a real production deploy. Every value below is a placeholder; none
+      # of it is used at runtime, only to satisfy each Dockerfile's build-time checks.
+      - name: Build production Docker images
+        run: >
+          docker compose -f infrastructure/docker/docker-compose.production.yml
+          build api web worker
+        env:
+          NODE_ENV: production
+          APP_ENV: production
+          APP_VERSION: ${{ github.sha }}
+          LOG_LEVEL: info
+          CORS_ALLOWED_ORIGINS: https://ci-placeholder.example.com
+          DATABASE_URL: postgresql://ci-placeholder:ci-placeholder@postgres:5432/ci_placeholder?schema=public
+          REDIS_URL: redis://redis:6379
+          AUTH_CSRF_SECRET: ci-placeholder-csrf-secret-at-least-32-characters-long
+          PILOT_MODE: "true"
+          PUBLIC_REGISTRATION_ENABLED: "false"
+          ASSESSMENT_DELIVERY_ENABLED: "false"
+          REPORT_WORKER_CONCURRENCY: "1"
+          PUBLIC_API_URL: https://ci-placeholder.example.com/api
+          # Unused at build time (postgres/redis aren't in the `build` service list
+          # above), but docker-compose.production.yml's `:?required` interpolation is
+          # resolved for every service while parsing the file, regardless of which
+          # services are actually being built.
+          POSTGRES_DB: ci_placeholder
+          POSTGRES_USER: ci-placeholder
+          POSTGRES_PASSWORD: ci-placeholder

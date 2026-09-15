@@ -1,4 +1,4 @@
-import { apiRequest } from "./api";
+import { API_BASE_URL, apiRequest } from "./api";
 
 export type AssessmentAssignmentStatus = "ACTIVE" | "CANCELLED" | "EXPIRED";
 export type AssessmentAttemptStatus = "IN_PROGRESS" | "SUBMITTED" | "ABANDONED";
@@ -135,4 +135,31 @@ export function submitCandidateAttempt(
       method: "POST",
     },
   );
+}
+
+export type CandidateAssessmentReport =
+  | { status: "PENDING" }
+  | { status: "WITHDRAWN" }
+  | {
+      status: "RELEASED";
+      releasedAt: string | null;
+      assessment: {
+        title: string;
+        edition: string;
+        form: string;
+        language: string;
+      };
+      results: Array<{
+        constructCode: string | null;
+        constructName: string | null;
+        outputData: unknown;
+      }>;
+    };
+
+export function getCandidateReport(attemptId: string): Promise<CandidateAssessmentReport> {
+  return apiRequest<CandidateAssessmentReport>(`/assessments/attempts/${attemptId}/report`);
+}
+
+export function getCandidateReportPdfUrl(attemptId: string): string {
+  return `${API_BASE_URL}/assessments/attempts/${attemptId}/report/pdf`;
 }

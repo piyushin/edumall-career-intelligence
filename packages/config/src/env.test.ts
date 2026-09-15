@@ -20,6 +20,21 @@ describe("loadConfig", () => {
     expect(config.corsAllowedOrigins).toEqual(["http://localhost:3000", "http://localhost:3001"]);
   });
 
+  it("defaults account lockout to 10 failures / 15 minutes and honors overrides", () => {
+    const defaultConfig = loadConfig(validEnv, { serviceName: "api" });
+
+    expect(defaultConfig.authLockoutThreshold).toBe(10);
+    expect(defaultConfig.authLockoutDurationSeconds).toBe(900);
+
+    const overriddenConfig = loadConfig(
+      { ...validEnv, AUTH_LOCKOUT_THRESHOLD: "3", AUTH_LOCKOUT_DURATION_SECONDS: "60" },
+      { serviceName: "api" },
+    );
+
+    expect(overriddenConfig.authLockoutThreshold).toBe(3);
+    expect(overriddenConfig.authLockoutDurationSeconds).toBe(60);
+  });
+
   it("rejects missing required variables", () => {
     const { DATABASE_URL: _databaseUrl, ...envWithoutDatabase } = validEnv;
 
